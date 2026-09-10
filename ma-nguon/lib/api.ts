@@ -42,14 +42,16 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   };
 
   async function session(req: Request) {
-    const token = req.headers.get('cookie')?.match(/(?:^|;\s*)sgc_session=([a-f0-9]{64})(?:;|$)/)?.[1];
+    const token = req.headers.get('cookie')?.match(/(?:^|;\s*)sgc_session=([a-f0-9]{64})(?:;|$)/)?.[1]
+      || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim()
+      || req.headers.get('x-admin-token')?.trim();
     if (!token) return null;
     const hash = await digest(token);
     const row = await db.prepare('SELECT hash, csrf, expires FROM admin_sessions WHERE hash = ? AND expires > ?').bind(hash, Date.now()).first<{ hash: string; csrf: string; expires: number }>();
     return row;
   }
 
-  const cookie = (req: Request, value: string, max = 28800) => `sgc_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${max}${new URL(req.url).protocol === 'https:' ? '; Secure' : ''}`;
+  const cookie = (req: Request, value: string, max = 28800) => `sgc_session=${value}; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=${max}`;
 
   return async function handle(req: Request, ip = 'unknown'): Promise<Response> {
     let action = ''; let authorized = false; try {
@@ -250,7 +252,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         if (b.username !== c.username || !ok) return json({ error: 'Tên đăng nhập hoặc mật khẩu không đúng.' }, 401);
         const token = random(), csrf = random();
         await db.batch([db.prepare('DELETE FROM admin_sessions WHERE expires < ?').bind(now), db.prepare('DELETE FROM auth_attempts WHERE key = ?').bind(k), db.prepare('INSERT INTO admin_sessions (hash,csrf,expires) VALUES (?,?,?)').bind(await digest(token), csrf, now + 28800000)]);
-        return json({ admin: true, csrf, message: 'Đăng nhập thành công.' }, 200, { 'Set-Cookie': cookie(req, token) });
+        return json({ admin: true, token, csrf, message: 'Đăng nhập thành công.' }, 200, { 'Set-Cookie': cookie(req, token) });
       }
 
       const s = await session(req);

@@ -388,13 +388,13 @@ function createApi(db2, sourceParam = {}) {
     return r.results.map((x) => ({ ...JSON.parse(x.payload), published: !!x.published }));
   };
   async function session(req) {
-    const token = req.headers.get("cookie")?.match(/(?:^|;\s*)sgc_session=([a-f0-9]{64})(?:;|$)/)?.[1];
+    const token = req.headers.get("cookie")?.match(/(?:^|;\s*)sgc_session=([a-f0-9]{64})(?:;|$)/)?.[1] || req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || req.headers.get("x-admin-token")?.trim();
     if (!token) return null;
     const hash = await digest(token);
     const row = await db2.prepare("SELECT hash, csrf, expires FROM admin_sessions WHERE hash = ? AND expires > ?").bind(hash, Date.now()).first();
     return row;
   }
-  const cookie = (req, value, max = 28800) => `sgc_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${max}${new URL(req.url).protocol === "https:" ? "; Secure" : ""}`;
+  const cookie = (req, value, max = 28800) => `sgc_session=${value}; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=${max}`;
   return async function handle(req, ip = "unknown") {
     let action = "";
     let authorized = false;
@@ -581,7 +581,7 @@ function createApi(db2, sourceParam = {}) {
         if (!ok) return json({ error: "T\xEAn \u0111\u0103ng nh\u1EADp ho\u1EB7c m\u1EADt kh\u1EA9u kh\xF4ng \u0111\xFAng." }, 401);
         const token = random(), csrf = random();
         await db2.batch([db2.prepare("DELETE FROM admin_sessions WHERE expires < ?").bind(now), db2.prepare("DELETE FROM auth_attempts WHERE key = ?").bind(k), db2.prepare("INSERT INTO admin_sessions (hash,csrf,expires) VALUES (?,?,?)").bind(await digest(token), csrf, now + 288e5)]);
-        return json({ admin: true, csrf, message: "\u0110\u0103ng nh\u1EADp th\xE0nh c\xF4ng." }, 200, { "Set-Cookie": cookie(req, token) });
+        return json({ admin: true, token, csrf, message: "\u0110\u0103ng nh\u1EADp th\xE0nh c\xF4ng." }, 200, { "Set-Cookie": cookie(req, token) });
       }
       const s = await session(req);
       if (!s) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401);

@@ -149,7 +149,14 @@ export default function Admin({ onChanged }: AdminProps) {
 
   async function load() {
     try {
-      const r = await fetch(getApiUrl('/api/admin'), { credentials: 'include' });
+      const savedToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
+      const headers: Record<string, string> = {};
+      if (savedToken) headers['Authorization'] = `Bearer ${savedToken}`;
+
+      const r = await fetch(getApiUrl('/api/admin'), {
+        credentials: 'include',
+        headers
+      });
       const d = (await r.json()) as AdminState & { error?: string };
       if (!r.ok) throw Error(d.error || 'Lỗi tải trang quản trị');
       setState(d);
@@ -174,10 +181,17 @@ export default function Admin({ onChanged }: AdminProps) {
     }
 
     try {
+      const savedToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {}),
+        ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
+      };
+
       const r = await fetch(getApiUrl(type === 'login' ? '/api/auth/login' : type === 'logout' ? '/api/auth/logout' : '/api/admin'), {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {}) },
+        headers,
         body: JSON.stringify(type === 'login' ? { username, password } : { action: type, url, group, name, ...extra })
       });
       const d = (await r.json()) as {
@@ -186,10 +200,14 @@ export default function Admin({ onChanged }: AdminProps) {
         detected?: DetectedInfo;
         tournament?: Tournament;
         token?: string;
+        csrf?: string;
       };
 
       if (!r.ok) {
-        if (r.status === 401 && type !== 'login') setState({ admin: false });
+        if (r.status === 401 && type !== 'login') {
+          if (typeof window !== 'undefined') localStorage.removeItem('admin_token');
+          setState({ admin: false });
+        }
         throw Error(d.error || 'Thao tác thất bại');
       }
 
@@ -222,8 +240,17 @@ export default function Admin({ onChanged }: AdminProps) {
           setName('');
           setGroup('');
         }
-        if (type === 'login') setPassword('');
+        if (type === 'login') {
+          if (d.token && typeof window !== 'undefined') {
+            localStorage.setItem('admin_token', d.token);
+          }
+          setPassword('');
+          if (typeof window !== 'undefined' && location.pathname !== '/admin') {
+            history.pushState({}, '', '/admin');
+          }
+        }
         if (type === 'logout') {
+          if (typeof window !== 'undefined') localStorage.removeItem('admin_token');
           setState({ admin: false });
           setEdit(null);
           setRemove(null);
