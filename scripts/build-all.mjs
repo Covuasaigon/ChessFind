@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { mkdirSync, cpSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,7 +22,13 @@ run('npm', ['run', 'build'], resolve(root, 'backend'));
 // 2. Build frontend production bundle
 run('npx', ['vite', 'build'], resolve(root, 'frontend'));
 
-// 3. Build legacy ma-nguon portable bundle
-run('npm', ['run', 'build:portable'], resolve(root, 'ma-nguon'));
+// 3. Build ma-nguon bundle
+run('npm', ['run', 'build'], resolve(root, 'ma-nguon'));
+
+// 4. Populate root dist/ for root Vercel static deployment
+mkdirSync(resolve(root, 'dist'), { recursive: true });
+if (existsSync(resolve(root, 'frontend/dist'))) {
+  cpSync(resolve(root, 'frontend/dist'), resolve(root, 'dist'), { recursive: true });
+}
 
 console.log('\n✅ ALL PRODUCTION BUILDS COMPLETED WITH 0 ERRORS!');
