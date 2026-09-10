@@ -38,11 +38,12 @@ function getCorsHeaders(reqOrigin?: string | null): Record<string, string> {
     process.env.FRONTEND_URL,
     process.env.PUBLIC_ORIGIN,
     process.env.API_URL,
+    'https://chess-find-m38a.vercel.app',
     'http://localhost:5173',
     'http://localhost:3000'
   ].filter(Boolean) as string[];
 
-  let allowOrigin = reqOrigin || '*';
+  let allowOrigin = reqOrigin || process.env.FRONTEND_URL || 'https://chess-find-m38a.vercel.app';
   if (reqOrigin) {
     if (
       allowedOrigins.includes(reqOrigin) ||
@@ -52,8 +53,6 @@ function getCorsHeaders(reqOrigin?: string | null): Record<string, string> {
     ) {
       allowOrigin = reqOrigin;
     }
-  } else if (process.env.FRONTEND_URL) {
-    allowOrigin = process.env.FRONTEND_URL;
   }
 
   return {
@@ -115,6 +114,9 @@ const server = createServer(async (req, res) => {
         new Request(url, { method: req.method, headers, body: body as any }),
         req.socket.remoteAddress || 'unknown'
       );
+      const outgoing: Record<string, string | string[]> = {};
+      r.headers.forEach((v, k) => { outgoing[k] = v; });
+      Object.assign(outgoing, security);
 
       const setCookies = r.headers.get('set-cookie');
       if (setCookies) outgoing['set-cookie'] = setCookies;
