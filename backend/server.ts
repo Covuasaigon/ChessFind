@@ -109,9 +109,9 @@ const server = createServer(async (req, res) => {
         req.socket.remoteAddress || 'unknown'
       );
 
-      const outgoing: Record<string, string | string[]> = { ...security };
-      r.headers.forEach((v, k) => { outgoing[k] = v; });
-      if (r.headers.getSetCookie().length) outgoing['set-cookie'] = r.headers.getSetCookie();
+      const getSetCookieFn = (r.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
+      const setCookies = typeof getSetCookieFn === 'function' ? getSetCookieFn.call(r.headers) : r.headers.get('set-cookie');
+      if (setCookies && (Array.isArray(setCookies) ? setCookies.length : true)) outgoing['set-cookie'] = setCookies;
 
       res.writeHead(r.status, outgoing);
       res.end(Buffer.from(await r.arrayBuffer()));
