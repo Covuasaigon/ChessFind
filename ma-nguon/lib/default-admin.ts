@@ -1,2 +1,2 @@
 // Server-side initial credential; never import this module from the frontend.
-export const DEFAULT_ADMIN = {"username": "admin", "salt": "2d209bf10193e598d0e0a653dc02236a3ddeda337fc13222", "hash": "5d3abb8f5c24981fd5c8893aeb1d1414ea8d25a9172a2b4928c54b2acfd57543", "iterations": 100000};
+export const DEFAULT_ADMIN = {"username": "admin", "salt": "edd812c082e94ee178697eb85216b90335f20eb48a823d55", "hash": "bbdb86f851c40bbe3a9cf297d250250bc1f944083de61f1f405517261e81982b", "iterations": 100000};
