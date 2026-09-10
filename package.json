@@ -4,11 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-all.mjs",
-    "build:frontend": "npm --prefix frontend run build",
-    "build:backend": "npm --prefix backend run build",
-    "start": "npm --prefix backend run start",
-    "dev": "npm --prefix backend run dev"
+    "dev": "npm --prefix ma-nguon run dev",
+    "build": "npm --prefix ma-nguon run build",
+    "start": "npm --prefix ma-nguon run start",
+    "lint": "npm --prefix ma-nguon run lint"
   },
   "engines": {
     "node": ">=22.0.0"
