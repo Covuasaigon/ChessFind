@@ -31,6 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogFooter } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { normalize, fmt, type Tournament, type Player } from '@/lib/chess';
+import { getApiUrl, getImageUrl } from '@/lib/api-client';
 
 export interface AdminLog {
   id: string;

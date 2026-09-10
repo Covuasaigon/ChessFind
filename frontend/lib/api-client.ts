@@ -1,6 +1,6 @@
-// Frontend API client configuration for connecting Vercel frontend to Railway backend
+// Frontend API client configuration for connecting Vercel frontend to Render backend
 
-export const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+export const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 export function getApiUrl(path: string): string {
   if (!path) return '';
@@ -8,18 +8,16 @@ export function getApiUrl(path: string): string {
     return path;
   }
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE}${cleanPath}`;
+  return `${API_URL}${cleanPath}`;
 }
 
 export function getImageUrl(path: string): string {
-  if (!path) return '/company-logo.png';
+  if (!path) return '';
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
     return path;
   }
-  if (path.startsWith('/uploads/') && API_BASE) {
-    return `${API_BASE}${path}`;
-  }
-  return path;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return API_URL ? `${API_URL}${cleanPath}` : cleanPath;
 }
 
 export async function fetchWithCredentials(input: string | Request | URL, init?: RequestInit): Promise<Response> {

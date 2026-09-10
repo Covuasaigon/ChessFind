@@ -37,12 +37,19 @@ function getCorsHeaders(reqOrigin?: string | null): Record<string, string> {
   const allowedOrigins = [
     process.env.FRONTEND_URL,
     process.env.PUBLIC_ORIGIN,
-    process.env.API_URL
+    process.env.API_URL,
+    'http://localhost:5173',
+    'http://localhost:3000'
   ].filter(Boolean) as string[];
 
   let allowOrigin = reqOrigin || '*';
-  if (reqOrigin && allowedOrigins.length > 0) {
-    if (allowedOrigins.includes(reqOrigin) || process.env.NODE_ENV !== 'production') {
+  if (reqOrigin) {
+    if (
+      allowedOrigins.includes(reqOrigin) ||
+      reqOrigin.endsWith('.vercel.app') ||
+      reqOrigin.includes('localhost') ||
+      process.env.NODE_ENV !== 'production'
+    ) {
       allowOrigin = reqOrigin;
     }
   } else if (process.env.FRONTEND_URL) {
