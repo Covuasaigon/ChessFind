@@ -1,6 +1,6 @@
-import type { Tournament, Player } from './chess.ts';
-import { importTournament, importPlayer, validateSource, detectCategories, type CategoryDetectResult } from './chess-source.ts';
-import { DEFAULT_ADMIN } from './default-admin.ts';
+import type { Tournament, Player } from './chess';
+import { importTournament, importPlayer, validateSource, detectCategories, type CategoryDetectResult } from './chess-source';
+import { DEFAULT_ADMIN } from './default-admin';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 

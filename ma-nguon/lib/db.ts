@@ -1,7 +1,7 @@
-import { openDatabase } from '../portable/database.ts';
+import { openDatabase } from '../portable/database';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
-import type { Database } from './api.ts';
+import type { Database } from './api';
 
 let dbInstance: (Database & { close(): void }) | null = null;
 

@@ -1,5 +1,5 @@
-import { createApi, json } from './api.ts';
-import { getDb } from './db.ts';
+import { createApi, json } from './api';
+import { getDb } from './db';
 
 export async function handleRequest(req: Request) {
   try {
