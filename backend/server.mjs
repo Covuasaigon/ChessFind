@@ -1004,8 +1004,8 @@ var server = createServer(async (req, res) => {
       r.headers.forEach((v, k) => {
         outgoing[k] = v;
       });
-      const setCookies = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : r.headers.get("set-cookie");
-      if (setCookies && (Array.isArray(setCookies) ? setCookies.length : true)) outgoing["set-cookie"] = setCookies;
+      const setCookies = r.headers.get("set-cookie");
+      if (setCookies) outgoing["set-cookie"] = setCookies;
       res.writeHead(r.status, outgoing);
       res.end(Buffer.from(await r.arrayBuffer()));
       return;
