@@ -18,7 +18,11 @@ const unhex = (s: string) => Uint8Array.from(s.match(/.{2}/g)!.map(x => parseInt
 const random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
 const digest = async (s: string) => hex(await crypto.subtle.digest('SHA-256', enc.encode(s)));
 function getCorsHeaders(req?: Request): Record<string, string> {
-  const reqOrigin = req?.headers.get('origin');
+  let reqOrigin = req?.headers.get('origin');
+  if (!reqOrigin && req?.headers.get('referer')) {
+    try { reqOrigin = new URL(req.headers.get('referer')!).origin; } catch {}
+  }
+
   const allowedEnv = [
     process.env.FRONTEND_URL,
     process.env.PUBLIC_ORIGIN,
@@ -28,11 +32,7 @@ function getCorsHeaders(req?: Request): Record<string, string> {
 
   let allowOrigin = '*';
   if (reqOrigin) {
-    if (allowedEnv.includes(reqOrigin) || reqOrigin.endsWith('.vercel.app') || process.env.NODE_ENV !== 'production' || allowedEnv.includes('*')) {
-      allowOrigin = reqOrigin;
-    } else {
-      allowOrigin = reqOrigin;
-    }
+    allowOrigin = reqOrigin;
   }
 
   return {
@@ -150,25 +150,25 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
   return async function handle(req: Request, ip = 'unknown'): Promise<Response> {
     let action = ''; let authorized = false; try {
-      const u = new URL(req.url); const path = u.pathname;
+      const u = new URL(req.url); const path = u.pathname.replace(/\/+$/, '') || '/';
       if (req.method === 'GET') {
-        if (path === '/api/tournaments') return json({ tournaments: await list() });
+        if (path === '/api/tournaments') return json({ tournaments: await list() }, 200, {}, req);
         if (path === '/api/banners') {
           try {
             const r = await db.prepare('SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC').all();
-            return json({ banners: r.results });
+            return json({ banners: r.results }, 200, {}, req);
           } catch {
-            return json({ banners: [] });
+            return json({ banners: [] }, 200, {}, req);
           }
         }
         if (path === '/api/admin') {
           const s = await session(req);
-          if (!s) return json({ admin: false });
+          if (!s) return json({ admin: false }, 200, {}, req);
           let bannersList: any[] = [];
           try {
             bannersList = (await db.prepare('SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC').all()).results;
           } catch {}
-          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results });
+          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
         }
         if (path === '/api/player') {
           const id = u.searchParams.get('t') || '', pid = u.searchParams.get('p') || '';
