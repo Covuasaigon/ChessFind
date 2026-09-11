@@ -51,6 +51,35 @@ export function json(data: unknown, status = 200, headers: Record<string, string
   });
 }
 function message(e: unknown) { const m = e instanceof Error ? e.message : ''; return /SQL|D1|binding|syntax|database|fetch failed/i.test(m) ? 'Kho dữ liệu tạm thời không sẵn sàng. Vui lòng thử lại.' : m || 'Có lỗi xảy ra. Vui lòng thử lại.' }
+
+async function ensureSlidesTableSchema(db: Database) {
+  try {
+    const row = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='tournament_slides'").first<{ sql: string }>();
+    if (row?.sql && (row.sql.includes('FOREIGN KEY') || row.sql.includes('`tournament_id` text NOT NULL') || row.sql.includes('tournament_id TEXT NOT NULL'))) {
+      await db.prepare('PRAGMA foreign_keys=OFF;').run();
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS tournament_slides_fix (
+          id TEXT PRIMARY KEY NOT NULL,
+          tournament_id TEXT,
+          title TEXT NOT NULL,
+          slide_type TEXT NOT NULL,
+          image_url TEXT NOT NULL,
+          display_order INTEGER DEFAULT 0 NOT NULL,
+          status TEXT DEFAULT 'active' NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `).run();
+      await db.prepare('INSERT OR IGNORE INTO tournament_slides_fix SELECT id, tournament_id, title, slide_type, image_url, display_order, status, created_at, updated_at FROM tournament_slides;').run();
+      await db.prepare('DROP TABLE tournament_slides;').run();
+      await db.prepare('ALTER TABLE tournament_slides_fix RENAME TO tournament_slides;').run();
+      await db.prepare('CREATE INDEX IF NOT EXISTS idx_tournament_slides_tournament ON tournament_slides (tournament_id);').run();
+      await db.prepare('PRAGMA foreign_keys=ON;').run();
+    }
+  } catch (e) {
+    console.error('Error healing tournament_slides schema:', e);
+  }
+}
 async function passwordOK(password: string, c: typeof DEFAULT_ADMIN) { const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']); const actual = hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(c.salt), iterations: c.iterations }, key, 256)); let diff = actual.length ^ c.hash.length; for (let i = 0; i < actual.length; i++)diff |= actual.charCodeAt(i) ^ (c.hash.charCodeAt(i) || 0); return diff === 0 }
 
 async function uploadToSupabaseStorage(fileBuffer: Uint8Array, filename: string, mimeType: string): Promise<string | null> {
@@ -185,6 +214,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
         }
         if (path === '/api/slides' || path === '/api/slides/home' || path === '/api/home/slides') {
+          await ensureSlidesTableSchema(db);
           const tid = u.searchParams.get('tournament_id') || u.searchParams.get('t') || '';
           try {
             const tList = await list(true);
@@ -214,6 +244,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           }
         }
         if (path === '/api/admin/slides') {
+          await ensureSlidesTableSchema(db);
           const s = await session(req);
           if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn.' }, 401, {}, req);
           try {
@@ -500,6 +531,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       authorized = true;
 
       if (path === '/api/admin/slides' || path.startsWith('/api/admin/slides/')) {
+        await ensureSlidesTableSchema(db);
         const slideId = path.replace(/^\/api\/admin\/slides\/?/, '');
 
         if (req.method === 'DELETE' || b.action === 'slide_delete') {
@@ -510,11 +542,12 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           return json({ message: 'Đã xóa slide giải đấu thành công.' }, 200, {}, req);
         }
 
-        const tournament_id = String(b.tournament_id || b.tournamentId || 'global').trim() || 'global';
+        const rawTid = b.tournament_id || b.tournamentId;
+        const tournament_id = rawTid && String(rawTid).trim() !== 'global' ? String(rawTid).trim() : null;
         const title = String(b.title || '').trim();
-        const slide_type = String(b.slide_type || b.slideType || 'Điều lệ giải đấu').trim();
-        const image_url = String(b.image_url || b.imageUrl || '').trim();
-        const display_order = Number(b.display_order ?? b.displayOrder ?? 0);
+        const slide_type = String(b.slide_type || b.slideType || b.type || 'Điều lệ giải đấu').trim();
+        const image_url = String(b.image || b.image_url || b.imageUrl || '').trim();
+        const display_order = Number(b.sort_order ?? b.sortOrder ?? b.display_order ?? b.displayOrder ?? 0);
         const status = (b.status === 'hidden' || b.status === 0 || b.status === false) ? 'hidden' : 'active';
         const now = new Date().toISOString();
 

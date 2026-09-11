@@ -542,6 +542,34 @@ function message(e) {
   const m = e instanceof Error ? e.message : "";
   return /SQL|D1|binding|syntax|database|fetch failed/i.test(m) ? "Kho d\u1EEF li\u1EC7u t\u1EA1m th\u1EDDi kh\xF4ng s\u1EB5n s\xE0ng. Vui l\xF2ng th\u1EED l\u1EA1i." : m || "C\xF3 l\u1ED7i x\u1EA3y ra. Vui l\xF2ng th\u1EED l\u1EA1i.";
 }
+async function ensureSlidesTableSchema(db2) {
+  try {
+    const row = await db2.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='tournament_slides'").first();
+    if (row?.sql && (row.sql.includes("FOREIGN KEY") || row.sql.includes("`tournament_id` text NOT NULL") || row.sql.includes("tournament_id TEXT NOT NULL"))) {
+      await db2.prepare("PRAGMA foreign_keys=OFF;").run();
+      await db2.prepare(`
+        CREATE TABLE IF NOT EXISTS tournament_slides_fix (
+          id TEXT PRIMARY KEY NOT NULL,
+          tournament_id TEXT,
+          title TEXT NOT NULL,
+          slide_type TEXT NOT NULL,
+          image_url TEXT NOT NULL,
+          display_order INTEGER DEFAULT 0 NOT NULL,
+          status TEXT DEFAULT 'active' NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `).run();
+      await db2.prepare("INSERT OR IGNORE INTO tournament_slides_fix SELECT id, tournament_id, title, slide_type, image_url, display_order, status, created_at, updated_at FROM tournament_slides;").run();
+      await db2.prepare("DROP TABLE tournament_slides;").run();
+      await db2.prepare("ALTER TABLE tournament_slides_fix RENAME TO tournament_slides;").run();
+      await db2.prepare("CREATE INDEX IF NOT EXISTS idx_tournament_slides_tournament ON tournament_slides (tournament_id);").run();
+      await db2.prepare("PRAGMA foreign_keys=ON;").run();
+    }
+  } catch (e) {
+    console.error("Error healing tournament_slides schema:", e);
+  }
+}
 async function passwordOK(password, c) {
   const key2 = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
   const actual = hex(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: unhex(c.salt), iterations: c.iterations }, key2, 256));
@@ -678,6 +706,7 @@ function createApi(db2, sourceParam = {}) {
           return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
         }
         if (path === "/api/slides" || path === "/api/slides/home" || path === "/api/home/slides") {
+          await ensureSlidesTableSchema(db2);
           const tid = u.searchParams.get("tournament_id") || u.searchParams.get("t") || "";
           try {
             const tList = await list(true);
@@ -707,6 +736,7 @@ function createApi(db2, sourceParam = {}) {
           }
         }
         if (path === "/api/admin/slides") {
+          await ensureSlidesTableSchema(db2);
           const s2 = await session(req);
           if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n." }, 401, {}, req);
           try {
@@ -959,6 +989,7 @@ function createApi(db2, sourceParam = {}) {
       if (req.headers.get("x-csrf-token") !== s.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
       authorized = true;
       if (path === "/api/admin/slides" || path.startsWith("/api/admin/slides/")) {
+        await ensureSlidesTableSchema(db2);
         const slideId = path.replace(/^\/api\/admin\/slides\/?/, "");
         if (req.method === "DELETE" || b.action === "slide_delete") {
           const targetId = slideId || String(b.id || "");
@@ -967,11 +998,12 @@ function createApi(db2, sourceParam = {}) {
           await log(true, `\u0110\xE3 x\xF3a slide id: ${targetId}`);
           return json({ message: "\u0110\xE3 x\xF3a slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng." }, 200, {}, req);
         }
-        const tournament_id = String(b.tournament_id || b.tournamentId || "global").trim() || "global";
+        const rawTid = b.tournament_id || b.tournamentId;
+        const tournament_id = rawTid && String(rawTid).trim() !== "global" ? String(rawTid).trim() : null;
         const title = String(b.title || "").trim();
-        const slide_type = String(b.slide_type || b.slideType || "\u0110i\u1EC1u l\u1EC7 gi\u1EA3i \u0111\u1EA5u").trim();
-        const image_url = String(b.image_url || b.imageUrl || "").trim();
-        const display_order = Number(b.display_order ?? b.displayOrder ?? 0);
+        const slide_type = String(b.slide_type || b.slideType || b.type || "\u0110i\u1EC1u l\u1EC7 gi\u1EA3i \u0111\u1EA5u").trim();
+        const image_url = String(b.image || b.image_url || b.imageUrl || "").trim();
+        const display_order = Number(b.sort_order ?? b.sortOrder ?? b.display_order ?? b.displayOrder ?? 0);
         const status = b.status === "hidden" || b.status === 0 || b.status === false ? "hidden" : "active";
         const now = (/* @__PURE__ */ new Date()).toISOString();
         if (!title) return json({ error: "Vui l\xF2ng nh\u1EADp Ti\xEAu \u0111\u1EC1 slide." }, 400, {}, req);

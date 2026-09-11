@@ -207,10 +207,11 @@ export default function Admin({ onChanged }: AdminProps) {
           ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
         },
         body: JSON.stringify({
-          tournament_id: slideForm.tournament_id || 'global',
           title: slideForm.title.trim(),
           slide_type: slideForm.slide_type,
+          image: slideForm.image_url.trim(),
           image_url: slideForm.image_url.trim(),
+          sort_order: Number(slideForm.display_order || 0),
           display_order: Number(slideForm.display_order || 0),
           status: slideForm.status
         })
@@ -220,7 +221,7 @@ export default function Admin({ onChanged }: AdminProps) {
       toast.success(d.message || (isEdit ? 'Đã cập nhật slide thành công!' : 'Đã tạo slide mới thành công!'));
       setSlideForm({
         id: '',
-        tournament_id: 'global',
+        tournament_id: '',
         title: '',
         slide_type: 'Điều lệ giải đấu',
         image_url: '',
