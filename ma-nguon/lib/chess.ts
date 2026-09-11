@@ -70,10 +70,14 @@ export type TournamentInfo = {
 
 export type PrizeRule = {
   id?: string;
-  group: string;
-  rank: number;
-  prizeName: string;
-  medal?: 'gold' | 'silver' | 'bronze' | 'top' | 'custom';
+  group?: string;
+  rank?: number;
+  rankFrom?: number;
+  rankTo?: number;
+  prizeName?: string;
+  medal?: 'gold' | 'silver' | 'bronze' | 'consolation' | 'none' | 'top' | 'custom' | string;
+  gift?: string;
+  description?: string;
 };
 
 export type Tournament = {
@@ -163,10 +167,21 @@ export function stats(p: Player) {
 export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule[]): { medal: string; label: string } | null {
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
-    const match = prizes.find(p => p.rank === rank && (!group || normalize(p.group) === 'tat ca' || normalize(p.group) === normalize(group)));
+    const match = prizes.find(p => {
+      const rankMatches = p.rank === rank || (p.rankFrom != null && p.rankTo != null && rank >= p.rankFrom && rank <= p.rankTo);
+      if (!rankMatches) return false;
+      if (!group || !p.group) return true;
+      const pGroupNorm = normalize(p.group);
+      return pGroupNorm === 'tat ca' || pGroupNorm === normalize(group);
+    });
     if (match) {
-      const medalIcon = match.medal === 'gold' || rank === 1 ? '🥇' : match.medal === 'silver' || rank === 2 ? '🥈' : match.medal === 'bronze' || rank === 3 ? '🥉' : '🏆';
-      return { medal: medalIcon, label: match.prizeName };
+      const label = match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
+      let medalIcon = '🏆';
+      if (match.medal === 'gold' || rank === 1) medalIcon = '🥇';
+      else if (match.medal === 'silver' || rank === 2) medalIcon = '🥈';
+      else if (match.medal === 'bronze' || rank === 3) medalIcon = '🥉';
+      else if (match.medal === 'consolation') medalIcon = '🎖️';
+      return { medal: medalIcon, label };
     }
   }
   if (rank === 1) return { medal: '🥇', label: 'Huy chương Vàng' };

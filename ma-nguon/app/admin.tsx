@@ -808,52 +808,57 @@ export default function Admin({ onChanged }: AdminProps) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                   <div>
                     <span style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', display: 'block' }}>🏆 Cơ Cấu Giải Thưởng & Huy Chương Từng Bảng Đấu</span>
-                    <span style={{ fontSize: 12, color: '#64748B' }}>Thiết lập huy chương (🥇 Vàng, 🥈 Bạc, 🥉 Đồng, 🏆 Khuyến khích) cho từng bảng đấu.</span>
+                    <span style={{ fontSize: 12, color: '#64748B' }}>Thiết lập huy chương (🥇 Vàng, 🥈 Bạc, 🥉 Đồng, 🏆 Khuyến khích) và phần thưởng từ Hạng đến Hạng cho từng bảng đấu.</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button type="button" className="outline" style={{ height: 32, padding: '0 10px', fontSize: 11, fontWeight: 700 }} onClick={() => {
                       const grp = infoModal.group || 'Tất cả';
                       const defaultPrizes = [
-                        { group: grp, rank: 1, prizeName: 'Cúp & Huy chương Vàng', medal: 'gold' as const },
-                        { group: grp, rank: 2, prizeName: 'Huy chương Bạc', medal: 'silver' as const },
-                        { group: grp, rank: 3, prizeName: 'Huy chương Đồng', medal: 'bronze' as const },
-                        { group: grp, rank: 4, prizeName: 'Giải Khuyến Khích (Top 4)', medal: 'top' as const }
+                        { group: grp, rankFrom: 1, rankTo: 1, prizeName: 'Huy chương Vàng & Cúp', medal: 'gold' as const, gift: 'Cúp Vô Địch' },
+                        { group: grp, rankFrom: 2, rankTo: 2, prizeName: 'Huy chương Bạc', medal: 'silver' as const, gift: 'Cờ lưu niệm' },
+                        { group: grp, rankFrom: 3, rankTo: 3, prizeName: 'Huy chương Đồng', medal: 'bronze' as const, gift: 'Cờ lưu niệm' },
+                        { group: grp, rankFrom: 4, rankTo: 10, prizeName: 'Giải Khuyến Khích (Top 4-10)', medal: 'top' as const, gift: 'Phần quà từ Ban Tổ Chức' }
                       ];
                       setInfoModal({ ...infoModal, prizes: [...(infoModal.prizes || []), ...defaultPrizes] });
                     }}>
-                      ⚡ Khởi tạo nhanh Top 4
+                      ⚡ Khởi tạo nhanh Top 10
                     </button>
                     <button type="button" className="saas-btn-gold" style={{ height: 32, padding: '0 12px', fontSize: 12 }} onClick={() => {
                       const currentPrizes = infoModal.prizes || [];
                       setInfoModal({
                         ...infoModal,
-                        prizes: [...currentPrizes, { group: infoModal.group || 'U08', rank: currentPrizes.length + 1, prizeName: 'Huy chương Vàng', medal: 'gold' }]
+                        prizes: [...currentPrizes, { group: infoModal.group || 'Tất cả', rankFrom: currentPrizes.length + 1, rankTo: currentPrizes.length + 1, prizeName: 'Huy chương Vàng', medal: 'gold' }]
                       });
                     }}>
-                      + Thêm Hạng Giải
+                      + Thêm Khung Giải
                     </button>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {(infoModal.prizes || []).map((pz, idx) => (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 75px 1.5fr 120px auto', gap: 6, alignItems: 'center', background: '#F8FAFC', padding: 8, borderRadius: 8, border: '1px solid #E2E8F0' }}>
-                      <input className="saas-input" style={{ paddingLeft: 8, height: 36, fontSize: 13 }} placeholder="Bảng (U08, U10...)" value={pz.group} onChange={(e) => {
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 70px 70px 1.2fr 110px 1fr auto', gap: 6, alignItems: 'center', background: '#F8FAFC', padding: 10, borderRadius: 10, border: '1px solid #E2E8F0' }}>
+                      <input className="saas-input" style={{ paddingLeft: 8, height: 36, fontSize: 12 }} placeholder="Bảng (U08/Tất cả)" value={pz.group} onChange={(e) => {
                         const next = [...(infoModal.prizes || [])];
                         next[idx].group = e.target.value;
                         setInfoModal({ ...infoModal, prizes: next });
                       }} />
-                      <input className="saas-input" type="number" style={{ paddingLeft: 8, height: 36, fontSize: 13 }} placeholder="Hạng" value={pz.rank} onChange={(e) => {
+                      <input className="saas-input" type="number" min={1} style={{ paddingLeft: 6, height: 36, fontSize: 12 }} placeholder="Từ hạng" value={pz.rankFrom ?? pz.rank ?? 1} onChange={(e) => {
                         const next = [...(infoModal.prizes || [])];
-                        next[idx].rank = Number(e.target.value);
+                        next[idx].rankFrom = Number(e.target.value);
                         setInfoModal({ ...infoModal, prizes: next });
                       }} />
-                      <input className="saas-input" style={{ paddingLeft: 8, height: 36, fontSize: 13 }} placeholder="Tên giải thưởng" value={pz.prizeName} onChange={(e) => {
+                      <input className="saas-input" type="number" min={1} style={{ paddingLeft: 6, height: 36, fontSize: 12 }} placeholder="Đến hạng" value={pz.rankTo ?? pz.rankFrom ?? pz.rank ?? 1} onChange={(e) => {
+                        const next = [...(infoModal.prizes || [])];
+                        next[idx].rankTo = Number(e.target.value);
+                        setInfoModal({ ...infoModal, prizes: next });
+                      }} />
+                      <input className="saas-input" style={{ paddingLeft: 8, height: 36, fontSize: 12 }} placeholder="Tên giải thưởng" value={pz.prizeName} onChange={(e) => {
                         const next = [...(infoModal.prizes || [])];
                         next[idx].prizeName = e.target.value;
                         setInfoModal({ ...infoModal, prizes: next });
                       }} />
-                      <select className="saas-input" style={{ paddingLeft: 6, height: 36, fontSize: 12 }} value={pz.medal || 'custom'} onChange={(e) => {
+                      <select className="saas-input" style={{ paddingLeft: 4, height: 36, fontSize: 12 }} value={pz.medal || 'custom'} onChange={(e) => {
                         const next = [...(infoModal.prizes || [])];
                         next[idx].medal = e.target.value as any;
                         setInfoModal({ ...infoModal, prizes: next });
@@ -863,6 +868,11 @@ export default function Admin({ onChanged }: AdminProps) {
                         <option value="bronze">🥉 HC Đồng</option>
                         <option value="top">🏆 Khuyến khích</option>
                       </select>
+                      <input className="saas-input" style={{ paddingLeft: 8, height: 36, fontSize: 12 }} placeholder="Quà tặng kèm (nếu có)" value={pz.gift || ''} onChange={(e) => {
+                        const next = [...(infoModal.prizes || [])];
+                        next[idx].gift = e.target.value;
+                        setInfoModal({ ...infoModal, prizes: next });
+                      }} />
                       <button type="button" className="outline danger-btn" style={{ padding: '6px 8px', fontSize: 12, borderRadius: 6 }} onClick={() => {
                         const next = (infoModal.prizes || []).filter((_, i) => i !== idx);
                         setInfoModal({ ...infoModal, prizes: next });
@@ -872,7 +882,7 @@ export default function Admin({ onChanged }: AdminProps) {
                     </div>
                   ))}
                   {!infoModal.prizes?.length && (
-                    <p style={{ fontSize: 12, color: '#64748B', fontStyle: 'italic', margin: 0 }}>Chưa có cơ cấu giải thưởng thủ công. Hệ thống sẽ tự động dùng xếp hạng mặc định: Hạng 1 (🥇 Vàng), Hạng 2 (🥈 Bạc), Hạng 3 (🥉 Đồng).</p>
+                    <p style={{ fontSize: 12, color: '#64748B', fontStyle: 'italic', margin: 0 }}>Chưa có cơ cấu giải thưởng thủ công. Hệ thống tự động tính mặc định: Hạng 1 (🥇 Vàng), Hạng 2 (🥈 Bạc), Hạng 3 (🥉 Đồng), Top 4 (🏆 Khuyến khích).</p>
                   )}
                 </div>
               </div>
