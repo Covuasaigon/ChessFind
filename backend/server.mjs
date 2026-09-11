@@ -616,11 +616,38 @@ function createApi(db2, sourceParam = {}) {
           const s2 = await session(req);
           if (!s2) return json({ admin: false }, 200, {}, req);
           let bannersList = [];
+          let prizesList = [];
           try {
             bannersList = (await db2.prepare("SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC").all()).results;
           } catch {
           }
-          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            const r = await db2.prepare("SELECT * FROM prizes ORDER BY created_at DESC").all();
+            prizesList = (r.results || []).map((p) => ({
+              ...p,
+              tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
+            }));
+          } catch {
+          }
+          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
+        }
+        if (path === "/api/admin/prizes") {
+          const s2 = await session(req);
+          if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n." }, 401, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            const r = await db2.prepare("SELECT * FROM prizes ORDER BY created_at DESC").all();
+            const prizes = (r.results || []).map((p) => ({
+              ...p,
+              tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
+            }));
+            return json({ prizes }, 200, {}, req);
+          } catch {
+            return json({ prizes: [] }, 200, {}, req);
+          }
         }
         if (path === "/api/player") {
           const id = u.searchParams.get("t") || "", pid = u.searchParams.get("p") || "";
@@ -701,7 +728,7 @@ function createApi(db2, sourceParam = {}) {
       if (req.method === "OPTIONS") {
         return new Response(null, { status: 204, headers: getCorsHeaders(req) });
       }
-      if (req.method !== "POST") return json({ error: "Ph\u01B0\u01A1ng th\u1EE9c kh\xF4ng h\u1EE3p l\u1EC7." }, 405, {}, req);
+      if (!["POST", "PUT", "DELETE"].includes(req.method)) return json({ error: "Ph\u01B0\u01A1ng th\u1EE9c kh\xF4ng h\u1EE3p l\u1EC7." }, 405, {}, req);
       const reqOrigin = req.headers.get("origin");
       if (reqOrigin && process.env.NODE_ENV === "production" && path !== "/api/auth/login") {
         const allowedSet = /* @__PURE__ */ new Set([
@@ -805,11 +832,13 @@ function createApi(db2, sourceParam = {}) {
       if (Number(req.headers.get("content-length") || 0) > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413, {}, req);
       const raw = await req.text();
       if (raw.length > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413, {}, req);
-      let b;
-      try {
-        b = JSON.parse(raw);
-      } catch {
-        return json({ error: "D\u1EEF li\u1EC7u kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+      let b = {};
+      if (raw && raw.trim()) {
+        try {
+          b = JSON.parse(raw);
+        } catch {
+          return json({ error: "D\u1EEF li\u1EC7u kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+        }
       }
       if (path === "/api/auth/login") {
         const k = "login:" + await digest(ip), now = Date.now();
@@ -832,6 +861,51 @@ function createApi(db2, sourceParam = {}) {
       if (!s) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401, {}, req);
       if (req.headers.get("x-csrf-token") !== s.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
       authorized = true;
+      if (path === "/api/admin/prizes" || path.startsWith("/api/admin/prizes/")) {
+        const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, "");
+        if (req.method === "DELETE" || b.action === "prize_delete") {
+          const targetId = prizeId || String(b.id || "");
+          if (!targetId) return json({ error: "M\xE3 gi\u1EA3i th\u01B0\u1EDFng kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+          await db2.prepare("DELETE FROM prizes WHERE id = ?").bind(targetId).run();
+          await log(true, `\u0110\xE3 x\xF3a c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng id: ${targetId}`);
+          return json({ message: "\u0110\xE3 x\xF3a quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng." }, 200, {}, req);
+        }
+        const tournament_id = String(b.tournament_id || b.tournamentId || "").trim();
+        const group_name = String(b.group_name || b.groupName || b.group || "").trim();
+        const rank_from = Number(b.rank_from ?? b.rankFrom ?? 1);
+        const rank_to = Number(b.rank_to ?? b.rankTo ?? 1);
+        const medal = String(b.medal || "").trim();
+        const prize_name = String(b.prize_name || b.prizeName || "").trim();
+        const description = String(b.description || "").trim();
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        if (!tournament_id) return json({ error: "Vui l\xF2ng ch\u1ECDn Gi\u1EA3i \u0111\u1EA5u (tournament required)." }, 400, {}, req);
+        if (!group_name) return json({ error: "Vui l\xF2ng nh\u1EADp B\u1EA3ng/Nh\xF3m \u0111\u1EA5u (group required)." }, 400, {}, req);
+        if (!prize_name) return json({ error: "Vui l\xF2ng nh\u1EADp T\xEAn gi\u1EA3i th\u01B0\u1EDFng." }, 400, {}, req);
+        if (isNaN(rank_from) || isNaN(rank_to) || rank_from < 1 || rank_to < 1) {
+          return json({ error: "Th\u1EE9 h\u1EA1ng t\u1EEB - \u0111\u1EBFn ph\u1EA3i l\xE0 s\u1ED1 nguy\xEAn d\u01B0\u01A1ng >= 1." }, 400, {}, req);
+        }
+        if (rank_from > rank_to) {
+          return json({ error: "Rank From (h\u1EA1ng t\u1EEB) ph\u1EA3i nh\u1ECF h\u01A1n ho\u1EB7c b\u1EB1ng Rank To (h\u1EA1ng \u0111\u1EBFn)." }, 400, {}, req);
+        }
+        if (req.method === "PUT" || prizeId && prizeId !== "" || b.action === "prize_update") {
+          const targetId = prizeId || String(b.id || "");
+          if (!targetId) return json({ error: "M\xE3 gi\u1EA3i th\u01B0\u1EDFng kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+          await db2.prepare(`
+            UPDATE prizes
+            SET tournament_id = ?, group_name = ?, rank_from = ?, rank_to = ?, medal = ?, prize_name = ?, description = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, now, targetId).run();
+          await log(true, `C\u1EADp nh\u1EADt c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng: ${prize_name}`);
+          return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng." }, 200, {}, req);
+        }
+        const id = crypto.randomUUID();
+        await db2.prepare(`
+          INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, now, now).run();
+        await log(true, `T\u1EA1o c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng m\u1EDBi: ${prize_name}`);
+        return json({ message: "\u0110\xE3 t\u1EA1o quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng.", id }, 200, {}, req);
+      }
       if (path === "/api/auth/logout") {
         await db2.prepare("DELETE FROM admin_sessions WHERE hash = ?").bind(s.hash).run();
         return json({ message: "\u0110\xE3 \u0111\u0103ng xu\u1EA5t." }, 200, { "Set-Cookie": cookie(req, "", 0) }, req);
@@ -1128,10 +1202,12 @@ function openDatabase(file, migrations) {
   sql.exec("CREATE TABLE IF NOT EXISTS sgc_migrations (name TEXT PRIMARY KEY, applied TEXT NOT NULL)");
   if (existsSync(migrations)) {
     for (const name of readdirSync(migrations).filter((n) => n.endsWith(".sql")).sort()) if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
-      sql.exec("BEGIN");
+      sql.exec("BEGIN IMMEDIATE");
       try {
-        sql.exec(readFileSync(resolve2(migrations, name), "utf8"));
-        sql.prepare("INSERT INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
+        if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
+          sql.exec(readFileSync(resolve2(migrations, name), "utf8"));
+          sql.prepare("INSERT OR IGNORE INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
+        }
         sql.exec("COMMIT");
       } catch (e) {
         sql.exec("ROLLBACK");

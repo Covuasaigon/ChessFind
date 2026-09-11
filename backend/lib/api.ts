@@ -159,10 +159,36 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const s = await session(req);
           if (!s) return json({ admin: false }, 200, {}, req);
           let bannersList: any[] = [];
+          let prizesList: any[] = [];
           try {
             bannersList = (await db.prepare('SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC').all()).results;
           } catch {}
-          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const r = await db.prepare('SELECT * FROM prizes ORDER BY created_at DESC').all<any>();
+            prizesList = (r.results || []).map(p => ({
+              ...p,
+              tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
+            }));
+          } catch {}
+          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
+        }
+        if (path === '/api/admin/prizes') {
+          const s = await session(req);
+          if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn.' }, 401, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const r = await db.prepare('SELECT * FROM prizes ORDER BY created_at DESC').all<any>();
+            const prizes = (r.results || []).map(p => ({
+              ...p,
+              tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
+            }));
+            return json({ prizes }, 200, {}, req);
+          } catch {
+            return json({ prizes: [] }, 200, {}, req);
+          }
         }
         if (path === '/api/player') {
           const id = u.searchParams.get('t') || '', pid = u.searchParams.get('p') || '';
@@ -255,7 +281,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: getCorsHeaders(req) });
       }
-      if (req.method !== 'POST') return json({ error: 'Phương thức không hợp lệ.' }, 405, {}, req);
+      if (!['POST', 'PUT', 'DELETE'].includes(req.method)) return json({ error: 'Phương thức không hợp lệ.' }, 405, {}, req);
 
       const reqOrigin = req.headers.get('origin');
       if (reqOrigin && process.env.NODE_ENV === 'production' && path !== '/api/auth/login') {
@@ -383,7 +409,10 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       if (Number(req.headers.get('content-length') || 0) > 6000000) return json({ error: 'Dữ liệu gửi lên quá lớn.' }, 413, {}, req);
       const raw = await req.text();
       if (raw.length > 6000000) return json({ error: 'Dữ liệu gửi lên quá lớn.' }, 413, {}, req);
-      let b: any; try { b = JSON.parse(raw) } catch { return json({ error: 'Dữ liệu không hợp lệ.' }, 400, {}, req) }
+      let b: any = {};
+      if (raw && raw.trim()) {
+        try { b = JSON.parse(raw) } catch { return json({ error: 'Dữ liệu không hợp lệ.' }, 400, {}, req) }
+      }
 
       if (path === '/api/auth/login') {
         const k = 'login:' + await digest(ip), now = Date.now();
@@ -411,6 +440,60 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' }, 401, {}, req);
       if (req.headers.get('x-csrf-token') !== s.csrf) return json({ error: 'Phiên xác thực không hợp lệ. Hãy tải lại trang.' }, 403, {}, req);
       authorized = true;
+
+      if (path === '/api/admin/prizes' || path.startsWith('/api/admin/prizes/')) {
+        const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, '');
+
+        if (req.method === 'DELETE' || b.action === 'prize_delete') {
+          const targetId = prizeId || String(b.id || '');
+          if (!targetId) return json({ error: 'Mã giải thưởng không hợp lệ.' }, 400, {}, req);
+          await db.prepare('DELETE FROM prizes WHERE id = ?').bind(targetId).run();
+          await log(true, `Đã xóa cơ cấu giải thưởng id: ${targetId}`);
+          return json({ message: 'Đã xóa quy tắc giải thưởng thành công.' }, 200, {}, req);
+        }
+
+        const tournament_id = String(b.tournament_id || b.tournamentId || '').trim();
+        const group_name = String(b.group_name || b.groupName || b.group || '').trim();
+        const rank_from = Number(b.rank_from ?? b.rankFrom ?? 1);
+        const rank_to = Number(b.rank_to ?? b.rankTo ?? 1);
+        const medal = String(b.medal || '').trim();
+        const prize_name = String(b.prize_name || b.prizeName || '').trim();
+        const description = String(b.description || '').trim();
+        const now = new Date().toISOString();
+
+        if (!tournament_id) return json({ error: 'Vui lòng chọn Giải đấu (tournament required).' }, 400, {}, req);
+        if (!group_name) return json({ error: 'Vui lòng nhập Bảng/Nhóm đấu (group required).' }, 400, {}, req);
+        if (!prize_name) return json({ error: 'Vui lòng nhập Tên giải thưởng.' }, 400, {}, req);
+        if (isNaN(rank_from) || isNaN(rank_to) || rank_from < 1 || rank_to < 1) {
+          return json({ error: 'Thứ hạng từ - đến phải là số nguyên dương >= 1.' }, 400, {}, req);
+        }
+        if (rank_from > rank_to) {
+          return json({ error: 'Rank From (hạng từ) phải nhỏ hơn hoặc bằng Rank To (hạng đến).' }, 400, {}, req);
+        }
+
+        if (req.method === 'PUT' || (prizeId && prizeId !== '') || b.action === 'prize_update') {
+          const targetId = prizeId || String(b.id || '');
+          if (!targetId) return json({ error: 'Mã giải thưởng không hợp lệ.' }, 400, {}, req);
+          await db.prepare(`
+            UPDATE prizes
+            SET tournament_id = ?, group_name = ?, rank_from = ?, rank_to = ?, medal = ?, prize_name = ?, description = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, now, targetId).run();
+
+          await log(true, `Cập nhật cơ cấu giải thưởng: ${prize_name}`);
+          return json({ message: 'Đã cập nhật quy tắc giải thưởng thành công.' }, 200, {}, req);
+        }
+
+        // POST / Create
+        const id = crypto.randomUUID();
+        await db.prepare(`
+          INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, now, now).run();
+
+        await log(true, `Tạo cơ cấu giải thưởng mới: ${prize_name}`);
+        return json({ message: 'Đã tạo quy tắc giải thưởng thành công.', id }, 200, {}, req);
+      }
 
       if (path === '/api/auth/logout') { await db.prepare('DELETE FROM admin_sessions WHERE hash = ?').bind(s.hash).run(); return json({ message: 'Đã đăng xuất.' }, 200, { 'Set-Cookie': cookie(req, '', 0) }, req) }
       if (path !== '/api/admin') return json({ error: 'Không tìm thấy chức năng.' }, 404, {}, req);

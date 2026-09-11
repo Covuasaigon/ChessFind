@@ -53,12 +53,27 @@ export interface BannerItem {
   updated_at?: string;
 }
 
+export interface PrizeRuleItem {
+  id?: string;
+  tournament_id: string;
+  tournament_name?: string;
+  group_name: string;
+  rank_from: number;
+  rank_to: number;
+  medal: string;
+  prize_name: string;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface AdminState {
   admin: boolean;
   username?: string;
   csrf?: string;
   tournaments?: Tournament[];
   banners?: BannerItem[];
+  prizes?: PrizeRuleItem[];
   logs?: AdminLog[];
 }
 
@@ -109,6 +124,114 @@ export default function Admin({ onChanged }: AdminProps) {
   const [deleteBanner, setDeleteBanner] = useState<BannerItem | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showManualUrl, setShowManualUrl] = useState(false);
+  const [activeTab, setActiveTab] = useState<'tournaments' | 'prizes' | 'banners'>('tournaments');
+  const [prizeForm, setPrizeForm] = useState<{
+    id?: string;
+    tournament_id: string;
+    group_name: string;
+    rank_from: number | string;
+    rank_to: number | string;
+    medal: string;
+    prize_name: string;
+    description: string;
+  }>({
+    id: '',
+    tournament_id: '',
+    group_name: 'Tất cả',
+    rank_from: 1,
+    rank_to: 1,
+    medal: 'Gold Medal',
+    prize_name: '',
+    description: ''
+  });
+
+  async function savePrizeRule() {
+    if (!prizeForm.tournament_id) {
+      toast.error('Vui lòng chọn Giải đấu (tournament required).');
+      return;
+    }
+    if (!prizeForm.group_name.trim()) {
+      toast.error('Vui lòng nhập Bảng/Nhóm đấu (group required).');
+      return;
+    }
+    const rFrom = Number(prizeForm.rank_from);
+    const rTo = Number(prizeForm.rank_to);
+    if (isNaN(rFrom) || isNaN(rTo) || rFrom < 1 || rTo < 1) {
+      toast.error('Thứ hạng từ - đến phải là số nguyên >= 1.');
+      return;
+    }
+    if (rFrom > rTo) {
+      toast.error('Rank From (hạng từ) phải nhỏ hơn hoặc bằng Rank To (hạng đến).');
+      return;
+    }
+    if (!prizeForm.prize_name.trim()) {
+      toast.error('Vui lòng nhập Tên giải thưởng.');
+      return;
+    }
+
+    setBusy('prize_save');
+    try {
+      const isEdit = !!prizeForm.id;
+      const endpoint = isEdit ? `/api/admin/prizes/${prizeForm.id}` : '/api/admin/prizes';
+      const r = await apiFetch(endpoint, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        },
+        body: JSON.stringify({
+          tournament_id: prizeForm.tournament_id,
+          group_name: prizeForm.group_name.trim(),
+          rank_from: rFrom,
+          rank_to: rTo,
+          medal: prizeForm.medal,
+          prize_name: prizeForm.prize_name.trim(),
+          description: prizeForm.description.trim()
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi lưu cơ cấu giải thưởng');
+      toast.success(d.message || (isEdit ? 'Đã cập nhật quy tắc giải thưởng!' : 'Đã tạo quy tắc giải thưởng mới!'));
+      setPrizeForm({
+        id: '',
+        tournament_id: prizeForm.tournament_id,
+        group_name: prizeForm.group_name,
+        rank_from: 1,
+        rank_to: 1,
+        medal: 'Gold Medal',
+        prize_name: '',
+        description: ''
+      });
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function deletePrizeRule(id: string) {
+    if (!confirm('Bạn có chắc chắn muốn xóa quy tắc giải thưởng này?')) return;
+    setBusy('prize_delete');
+    try {
+      const r = await apiFetch(`/api/admin/prizes/${id}`, {
+        method: 'DELETE',
+        headers: {
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        }
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi xóa cơ cấu giải thưởng');
+      toast.success(d.message || 'Đã xóa quy tắc giải thưởng thành công!');
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
 
   async function handleFileUpload(file: File) {
     if (!file) return;
@@ -398,6 +521,80 @@ export default function Admin({ onChanged }: AdminProps) {
         </div>
       </div>
 
+      {/* ADMIN TAB NAVIGATION BAR */}
+      <div className="admin-tab-nav" style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', background: '#FFFFFF', padding: '12px 16px', borderRadius: 16, border: '1px solid #CBD5E1', boxShadow: '0 4px 12px rgba(6,43,79,0.04)' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('tournaments')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 20px',
+            borderRadius: 12,
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: 'pointer',
+            border: activeTab === 'tournaments' ? '1.5px solid #062B4F' : '1px solid #E2E8F0',
+            background: activeTab === 'tournaments' ? '#062B4F' : '#F8FAFC',
+            color: activeTab === 'tournaments' ? '#FFFFFF' : '#475569',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Trophy size={18} className={activeTab === 'tournaments' ? 'text-amber-400' : ''} />
+          <span>🏆 Quản Lý Giải Đấu & Đồng Bộ</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('prizes')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 20px',
+            borderRadius: 12,
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: 'pointer',
+            border: activeTab === 'prizes' ? '1.5px solid #062B4F' : '1px solid #E2E8F0',
+            background: activeTab === 'prizes' ? '#062B4F' : '#F8FAFC',
+            color: activeTab === 'prizes' ? '#FFFFFF' : '#475569',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Sparkles size={18} className={activeTab === 'prizes' ? 'text-amber-400' : ''} />
+          <span>🏆 Cơ cấu giải thưởng</span>
+          {(state?.prizes?.length || 0) > 0 && (
+            <span style={{ background: '#D4AF37', color: '#062B4F', padding: '2px 8px', borderRadius: 99, fontSize: 12, fontWeight: 800 }}>
+              {state?.prizes?.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('banners')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 20px',
+            borderRadius: 12,
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: 'pointer',
+            border: activeTab === 'banners' ? '1.5px solid #062B4F' : '1px solid #E2E8F0',
+            background: activeTab === 'banners' ? '#062B4F' : '#F8FAFC',
+            color: activeTab === 'banners' ? '#FFFFFF' : '#475569',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <ImageIcon size={18} />
+          <span>🖼️ Banner Trang Chủ</span>
+        </button>
+      </div>
+
       {/* 3. CHESS-RESULTS IMPORT MODULE CARD */}
       <section className="admin-card-section">
         <div className="admin-card-title-group">
@@ -634,7 +831,262 @@ export default function Admin({ onChanged }: AdminProps) {
         )}
       </section>
 
-      {/* 5. HERO BANNER MANAGEMENT SECTION */}
+      {/* 5. TOURNAMENT PRIZE MANAGEMENT MODULE */}
+      {(activeTab === 'prizes' || activeTab === 'tournaments') && (
+        <section className="admin-card-section" id="admin-prize-management">
+          <div className="admin-card-title-group">
+            <div>
+              <h2><Sparkles size={22} className="text-amber-500" /> 🏆 Cơ cấu giải thưởng</h2>
+              <p>Quản lý quy tắc trao thưởng, danh hiệu, huy chương, quà tặng cho từng giải đấu & bảng đấu.</p>
+            </div>
+            {(state?.prizes?.length || 0) > 0 && (
+              <span className="soft-badge" style={{ background: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '6px 14px', borderRadius: 99, fontSize: 13, fontWeight: 700 }}>
+                {state?.prizes?.length} quy tắc giải thưởng
+              </span>
+            )}
+          </div>
+
+          {/* Form to create / edit prize rules */}
+          <div style={{ background: '#F8FAFC', padding: 24, borderRadius: 16, border: '1px solid #CBD5E1', marginBottom: 24 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Plus size={18} className="text-amber-500" />
+              {prizeForm.id ? 'Hiệu chỉnh quy tắc giải thưởng' : 'Thêm quy tắc cơ cấu giải thưởng mới'}
+            </h3>
+
+            <form onSubmit={(e) => { e.preventDefault(); savePrizeRule(); }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
+                {/* 1. Tournament */}
+                <label className="saas-label">
+                  Giải đấu (*)
+                  <select
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    value={prizeForm.tournament_id}
+                    onChange={(e) => {
+                      const selectedTourId = e.target.value;
+                      const tour = activeTournaments.find(t => t.id === selectedTourId);
+                      setPrizeForm({
+                        ...prizeForm,
+                        tournament_id: selectedTourId,
+                        group_name: tour?.categories?.[0]?.group || prizeForm.group_name || 'Tất cả'
+                      });
+                    }}
+                  >
+                    <option value="">-- Chọn giải đấu --</option>
+                    {activeTournaments.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* 2. Group/Table */}
+                <label className="saas-label">
+                  Bảng đấu / Nhóm (*)
+                  <input
+                    type="text"
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    placeholder="VD: U7 Nam, U9 Nữ, U11 Nam..."
+                    value={prizeForm.group_name}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, group_name: e.target.value })}
+                  />
+                </label>
+
+                {/* 3. Rank From */}
+                <label className="saas-label">
+                  Hạng từ (Rank From) (*)
+                  <input
+                    type="number"
+                    min={1}
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    value={prizeForm.rank_from}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, rank_from: e.target.value })}
+                  />
+                </label>
+
+                {/* 4. Rank To */}
+                <label className="saas-label">
+                  Hạng đến (Rank To) (*)
+                  <input
+                    type="number"
+                    min={1}
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    value={prizeForm.rank_to}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, rank_to: e.target.value })}
+                  />
+                </label>
+
+                {/* 5. Medal Type */}
+                <label className="saas-label">
+                  Loại huy chương / Danh hiệu
+                  <select
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    value={prizeForm.medal}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, medal: e.target.value })}
+                  >
+                    <option value="Gold Medal">🥇 Gold Medal (Huy chương Vàng)</option>
+                    <option value="Silver Medal">🥈 Silver Medal (Huy chương Bạc)</option>
+                    <option value="Bronze Medal">🥉 Bronze Medal (Huy chương Đồng)</option>
+                    <option value="Certificate">📜 Certificate (Bằng khen)</option>
+                    <option value="Other">🏆 Other (Giải thưởng khác)</option>
+                  </select>
+                </label>
+
+                {/* 6. Prize Name */}
+                <label className="saas-label">
+                  Tên giải thưởng (*)
+                  <input
+                    type="text"
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    placeholder="VD: Cúp vô địch + Huy chương vàng"
+                    value={prizeForm.prize_name}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, prize_name: e.target.value })}
+                  />
+                </label>
+
+                {/* 7. Reward Description */}
+                <label className="saas-label" style={{ gridColumn: 'span 2' }}>
+                  Mô tả phần thưởng / Quà tặng
+                  <input
+                    type="text"
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    placeholder="VD: 500.000 VNĐ + quà tặng tài trợ..."
+                    value={prizeForm.description}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, description: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <button type="submit" className="saas-btn-gold" disabled={!!busy}>
+                  {busy === 'prize_save' ? <RefreshCw size={17} className="spin" /> : <Sparkles size={17} />}
+                  <span>{prizeForm.id ? 'Cập Nhật Quy Tắc Giải Thưởng' : 'Lưu Cơ Cấu Giải Thưởng'}</span>
+                </button>
+
+                {prizeForm.id && (
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => setPrizeForm({
+                      id: '',
+                      tournament_id: activeTournaments[0]?.id || '',
+                      group_name: 'Tất cả',
+                      rank_from: 1,
+                      rank_to: 1,
+                      medal: 'Gold Medal',
+                      prize_name: '',
+                      description: ''
+                    })}
+                  >
+                    Hủy chỉnh sửa
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          {/* Table displaying existing prize rules */}
+          <div className="saas-table-container">
+            <table className="saas-table">
+              <thead>
+                <tr>
+                  <th>Giải đấu (Tournament)</th>
+                  <th>Bảng đấu (Group)</th>
+                  <th style={{ textAlign: 'center' }}>Khung hạng (Rank Range)</th>
+                  <th style={{ textAlign: 'center' }}>Loại danh hiệu (Medal)</th>
+                  <th>Tên giải thưởng (Prize Name) & Mô tả</th>
+                  <th style={{ textAlign: 'right' }}>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(state?.prizes || []).map((pz: PrizeRuleItem) => {
+                  const medalLabel = pz.medal === 'Gold Medal' || pz.medal === 'gold' ? '🥇 Gold Medal'
+                    : pz.medal === 'Silver Medal' || pz.medal === 'silver' ? '🥈 Silver Medal'
+                    : pz.medal === 'Bronze Medal' || pz.medal === 'bronze' ? '🥉 Bronze Medal'
+                    : pz.medal === 'Certificate' ? '📜 Certificate' : '🏆 Other';
+
+                  return (
+                    <tr key={pz.id}>
+                      <td>
+                        <b style={{ color: '#062B4F', fontSize: 14, display: 'block' }}>{pz.tournament_name || pz.tournament_id}</b>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>{pz.group_name}</span>
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, color: '#145DA0' }}>
+                        {pz.rank_from === pz.rank_to ? `Hạng ${pz.rank_from}` : `Hạng ${pz.rank_from} - ${pz.rank_to}`}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className="soft-badge" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', fontWeight: 700 }}>
+                          {medalLabel}
+                        </span>
+                      </td>
+                      <td>
+                        <b style={{ color: '#062B4F', display: 'block', fontSize: 14 }}>{pz.prize_name}</b>
+                        {pz.description && <span style={{ fontSize: 12, color: '#64748B' }}>{pz.description}</span>}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <button
+                            className="outline"
+                            style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
+                            onClick={() => {
+                              setPrizeForm({
+                                id: pz.id,
+                                tournament_id: pz.tournament_id,
+                                group_name: pz.group_name,
+                                rank_from: pz.rank_from,
+                                rank_to: pz.rank_to,
+                                medal: pz.medal || 'Gold Medal',
+                                prize_name: pz.prize_name,
+                                description: pz.description || ''
+                              });
+                              setActiveTab('prizes');
+                              document.getElementById('admin-prize-management')?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            title="Chỉnh sửa quy tắc"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            className="outline danger-btn"
+                            style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
+                            disabled={!!busy}
+                            onClick={() => pz.id && deletePrizeRule(pz.id)}
+                            title="Xóa quy tắc"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {!state?.prizes?.length && (
+                  <tr>
+                    <td colSpan={6} style={{ padding: 24, textAlign: 'center', color: '#64748B', fontStyle: 'italic' }}>
+                      Chưa có quy tắc cơ cấu giải thưởng nào. Hãy sử dụng biểu mẫu phía trên để thêm cơ cấu giải thưởng.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* 6. HERO BANNER MANAGEMENT SECTION */}
       <section className="admin-card-section">
         <div className="admin-card-title-group">
           <div>
