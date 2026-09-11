@@ -892,10 +892,27 @@ function createApi(db2, sourceParam = {}) {
         await log(true, `${action === "edit" ? "S\u1EEDa" : "\u0110\u1ED3ng b\u1ED9"} gi\u1EA3i: ${t.name}`);
         return json({ message: action === "edit" ? "\u0110\xE3 l\u01B0u ch\u1EC9nh s\u1EEDa." : "\u0110\xE3 c\u1EADp nh\u1EADt k\u1EBFt qu\u1EA3 m\u1EDBi nh\u1EA5t." });
       }
+      if (action === "tournament_update_info") {
+        const id = String(b.id || "");
+        if (!id) return json({ error: "M\xE3 gi\u1EA3i \u0111\u1EA5u kh\xF4ng h\u1EE3p l\u1EC7." }, 400);
+        const oldTour = await get(id, true);
+        if (!oldTour) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404);
+        const info = typeof b.info === "object" && b.info ? b.info : {};
+        const prizes = Array.isArray(b.prizes) ? b.prizes : [];
+        const updatedTour = {
+          ...oldTour,
+          info,
+          prizes,
+          updated: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(updatedTour), updatedTour.updated, id).run();
+        await log(true, `C\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng gi\u1EA3i: ${oldTour.name}`);
+        return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng!" });
+      }
       return json({ error: "Thao t\xE1c kh\xF4ng \u0111\u01B0\u1EE3c h\u1ED7 tr\u1EE3." }, 400);
     } catch (e) {
       const m = message(e);
-      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle"].includes(action)) try {
+      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info"].includes(action)) try {
         await log(false, m);
       } catch {
       }

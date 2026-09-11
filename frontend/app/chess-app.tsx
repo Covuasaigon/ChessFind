@@ -452,28 +452,70 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
   if (error) return <p className="notice warning">{error}</p>;
   if (!p.rounds.length) return <p className="empty-text">Chưa có chi tiết từng ván. Điểm và thứ hạng được giữ theo nguồn.</p>;
 
-  return <div className={'round-list ' + (compact ? 'compact' : '')}>
-    <div className="round-head"><span>Vòng & Bàn</span><span>Màu quân</span><span>Đối thủ / Trắng vs Đen</span><span>Kết quả ván</span></div>
-    {p.rounds.map(r =>
-      <div className="round-row" key={r.round}>
-        <span className="round-num">Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
-        <span className={'piece ' + r.color} title={r.color === 'white' ? 'Cầm quân Trắng' : r.color === 'black' ? 'Cầm quân Đen' : 'Chưa có màu quân'}>
-          {r.color === 'white' ? '♙ Trắng' : r.color === 'black' ? '♟ Đen' : '—'}
-        </span>
-        <div className="opponent">
-          {r.opponentId ? <button onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button> : <strong>{r.opponent || 'Chưa có đối thủ'}</strong>}
-          <small style={{ color: '#657b96' }}>
-            {r.playerWhite && r.playerBlack ? `${r.playerWhite} (Trắng) vs ${r.playerBlack} (Đen)` : ''}
-            {r.rating ? ` · Elo ${r.rating}` : r.status === 'bye' ? 'Miễn đấu' : ''}
-          </small>
-        </div>
-        <span className={'round-result ' + (r.status === 'played' ? (r.score === 1 ? 'win' : r.score === 0 ? 'loss' : 'draw') : 'pending')}>
-          <b>{r.score === null ? '—' : (r.score === 1 ? 'Thắng (1 - 0)' : r.score === 0.5 ? 'Hòa (½ - ½)' : 'Thua (0 - 1)')}</b>
-          <small>{r.status === 'played' ? (r.score === 1 ? 'Thắng' : r.score === 0 ? 'Thua' : 'Hòa') : r.status === 'bye' ? 'Bye (Miễn đấu)' : r.status === 'forfeit' ? 'Xử thắng/thua' : r.status === 'pending' ? 'Chờ kết quả' : 'Chưa rõ'}</small>
-        </span>
+  return (
+    <>
+      <div className={'round-list ' + (compact ? 'compact' : '')}>
+        <div className="round-head"><span>Vòng & Bàn</span><span>Màu quân</span><span>Đối thủ / Trắng vs Đen</span><span>Kết quả ván</span></div>
+        {p.rounds.map(r =>
+          <div className="round-row" key={r.round}>
+            <span className="round-num">Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
+            <span className={'piece ' + r.color} title={r.color === 'white' ? 'Cầm quân Trắng' : r.color === 'black' ? 'Cầm quân Đen' : 'Chưa có màu quân'}>
+              {r.color === 'white' ? '♙ Trắng' : r.color === 'black' ? '♟ Đen' : '—'}
+            </span>
+            <div className="opponent">
+              {r.opponentId ? <button onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button> : <strong>{r.opponent || 'Chưa có đối thủ'}</strong>}
+              <small style={{ color: '#657b96' }}>
+                {r.playerWhite && r.playerBlack ? `${r.playerWhite} (Trắng) vs ${r.playerBlack} (Đen)` : ''}
+                {r.rating ? ` · Elo ${r.rating}` : r.status === 'bye' ? 'Miễn đấu' : ''}
+              </small>
+            </div>
+            <span className={'round-result ' + (r.status === 'played' ? (r.score === 1 ? 'win' : r.score === 0 ? 'loss' : 'draw') : 'pending')}>
+              <b>{r.score === null ? '—' : (r.score === 1 ? 'Thắng (1 - 0)' : r.score === 0.5 ? 'Hòa (½ - ½)' : 'Thua (0 - 1)')}</b>
+              <small>{r.status === 'played' ? (r.score === 1 ? 'Thắng' : r.score === 0 ? 'Thua' : 'Hòa') : r.status === 'bye' ? 'Bye (Miễn đấu)' : r.status === 'forfeit' ? 'Xử thắng/thua' : r.status === 'pending' ? 'Chờ kết quả' : 'Chưa rõ'}</small>
+            </span>
+          </div>
+        )}
       </div>
-    )}
-  </div>
+
+      <div className="mobile-match-cards">
+        {p.rounds.map(r => {
+          const isWhite = r.color === 'white';
+          const whiteName = isWhite ? p.name : (r.playerWhite || r.opponent);
+          const blackName = !isWhite ? p.name : (r.playerBlack || r.opponent);
+          const whiteClub = isWhite ? (p.club || 'Chưa rõ CLB') : 'Đối thủ';
+          const blackClub = !isWhite ? (p.club || 'Chưa rõ CLB') : 'Đối thủ';
+
+          return (
+            <div className="mobile-match-card" key={r.round}>
+              <div className="match-card-header">
+                <span className="match-card-round">Vòng {r.round}</span>
+                <span className="match-card-board">{r.board ? `Bàn số ${r.board}` : 'Bàn —'}</span>
+              </div>
+              <div className="match-vs-box">
+                <div className="match-player-side">
+                  <span className="match-player-name">♙ {whiteName}</span>
+                  <span className="match-player-club">{whiteClub}</span>
+                </div>
+                <span className="match-vs-badge">VS</span>
+                <div className="match-player-side right">
+                  <span className="match-player-name">♟ {blackName}</span>
+                  <span className="match-player-club">{blackClub}</span>
+                </div>
+              </div>
+              <div className="match-card-footer">
+                <span className="subtle" style={{ fontSize: 12 }}>
+                  {r.opponentId ? <button style={{ background: 'none', border: 0, padding: 0, color: '#145DA0', fontWeight: 700, cursor: 'pointer' }} onClick={() => onOpponent(r.opponentId!)}>Hồ sơ đối thủ ➔</button> : (r.opponent || 'Chưa có đối thủ')}
+                </span>
+                <span className={'round-result ' + (r.status === 'played' ? (r.score === 1 ? 'win' : r.score === 0 ? 'loss' : 'draw') : 'pending')}>
+                  <b>{r.score === null ? '—' : (r.score === 1 ? '1 - 0' : r.score === 0.5 ? '½ - ½' : '0 - 1')}</b>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
 }
 
 function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onOpen: (p: Player) => void }) {

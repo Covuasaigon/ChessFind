@@ -731,26 +731,29 @@ svg {
     display: inline-block !important;
   }
 
-  /* Compact Mobile Image Container: 160px - 200px height, 20px radius, object-fit contain */
+  /* Mobile Image Container: 100% visible, object-fit contain, no cropping */
   .hero-image-frame, .promo-banner-img-frame {
     width: 100% !important;
     max-width: 100% !important;
-    height: 175px !important;
-    max-height: 195px !important;
-    min-height: 160px !important;
-    padding: 8px !important;
-    border-radius: 20px !important;
-    background: rgba(6, 43, 79, 0.5) !important;
-    box-shadow: 0 8px 24px rgba(6, 43, 79, 0.3) !important;
+    height: 160px !important;
+    max-height: 200px !important;
+    min-height: 140px !important;
+    padding: 6px !important;
+    border-radius: 16px !important;
+    background: rgba(6, 43, 79, 0.4) !important;
+    box-shadow: 0 6px 18px rgba(6, 43, 79, 0.25) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   .hero-king-image, .promo-banner-img {
     width: 100% !important;
     height: 100% !important;
-    max-height: 175px !important;
+    max-height: 190px !important;
     object-fit: contain !important;
     object-position: center !important;
-    border-radius: 14px !important;
+    border-radius: 12px !important;
   }
 }
 
@@ -1552,6 +1555,106 @@ svg {
   align-items: center;
 }
 
+.mobile-match-cards {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .round-list {
+    display: none !important;
+  }
+  .mobile-match-cards {
+    display: flex !important;
+  }
+}
+
+.mobile-match-card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.match-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #F1F5F9;
+  padding-bottom: 6px;
+}
+
+.match-card-round {
+  font-size: 12px;
+  font-weight: 700;
+  color: #145DA0;
+  background: #EEF5FC;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.match-card-board {
+  font-size: 12px;
+  color: #64748B;
+  font-weight: 600;
+}
+
+.match-vs-box {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+  background: #F8FAFC;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.match-player-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.match-player-side.right {
+  text-align: right;
+}
+
+.match-player-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #062B4F;
+  line-height: 1.25;
+}
+
+.match-player-club {
+  font-size: 11px;
+  color: #64748B;
+}
+
+.match-vs-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #D4AF37;
+  background: #062B4F;
+  padding: 3px 8px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.match-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+
 .round-head {
   padding: 12px 12px;
   font-size: 12px;
@@ -2180,15 +2283,27 @@ label .input-wrap {
 
 @media (max-width: 768px) {
   .promo-banner-container {
-    aspect-ratio: 16 / 9;
-    min-height: 150px;
-    max-height: 220px;
-    border-radius: 16px;
-    margin-top: 24px;
+    aspect-ratio: auto !important;
+    min-height: 240px !important;
+    height: auto !important;
+    max-height: none !important;
+    border-radius: 16px !important;
+    margin-top: 18px !important;
+    padding: 16px 14px 24px !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .promo-banner-slide {
-    padding: 16px 16px 22px;
+    position: relative !important;
+    inset: auto !important;
+    height: auto !important;
+    padding: 8px 4px !important;
+  }
+
+  .promo-banner-content-wrapper {
+    flex-direction: column !important;
+    gap: 12px !important;
   }
 
   .banner-side-logo {
@@ -2196,20 +2311,22 @@ label .input-wrap {
   }
 
   .banner-title {
-    font-size: 18px;
+    font-size: 17px !important;
+    line-height: 1.25 !important;
   }
 
   .banner-description {
-    font-size: 12px;
+    font-size: 12.5px !important;
+    line-height: 1.4 !important;
   }
 
   .banner-cta-btn {
-    padding: 7px 14px;
-    font-size: 12px;
+    padding: 6px 14px !important;
+    font-size: 12px !important;
   }
 
   .banner-nav-btn {
-    display: none;
+    display: none !important;
   }
 }
 

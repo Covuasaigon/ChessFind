@@ -49,6 +49,22 @@ export type Category = {
   status?: string;
 };
 
+export type TournamentInfo = {
+  intro?: string;
+  regulations?: string;
+  instructions?: string;
+  location?: string;
+  time?: string;
+};
+
+export type PrizeRule = {
+  id?: string;
+  group: string;
+  rank: number;
+  prizeName: string;
+  medal?: 'gold' | 'silver' | 'bronze' | 'top' | 'custom';
+};
+
 export type Tournament = {
   id: string;
   name: string;
@@ -65,12 +81,36 @@ export type Tournament = {
   rounds: number | null;
   published?: boolean;
   warning?: string;
+  info?: TournamentInfo;
+  prizes?: PrizeRule[];
 };
 
 export const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
 export const num = (s: string): number | null => { const v = s.trim().replace(/½/g, '.5').replace(',', '.'); return v !== '' && /^\d+(?:\.\d+)?$|^\.5$/.test(v) ? Number(v) : null; };
 export const fmt = (n: number | null | undefined) => n == null ? '—' : n.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
 export function stats(p: Player) { const r = p.rounds.filter(x => x.status === 'played' && x.score !== null); const wins = r.filter(x => x.score === 1).length; return { played: r.length, wins, draws: r.filter(x => x.score === 0.5).length, losses: r.filter(x => x.score === 0).length, white: r.filter(x => x.color === 'white').length, black: r.filter(x => x.color === 'black').length, unknown: r.filter(x => x.color === null).length, special: p.rounds.filter(x => ['bye', 'forfeit'].includes(x.status)).length, winRate: r.length ? wins / r.length * 100 : null }; }
+
+export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule[]): { medal: string; label: string } | null {
+  if (!rank || rank <= 0) return null;
+  if (prizes && prizes.length > 0) {
+    const match = prizes.find(p => p.rank === rank && (!group || normalize(p.group) === 'tat ca' || normalize(p.group) === normalize(group)));
+    if (match) {
+      const medalIcon = match.medal === 'gold' || rank === 1 ? '🥇' : match.medal === 'silver' || rank === 2 ? '🥈' : match.medal === 'bronze' || rank === 3 ? '🥉' : '🏆';
+      return { medal: medalIcon, label: match.prizeName };
+    }
+  }
+  if (rank === 1) return { medal: '🥇', label: 'Huy chương Vàng' };
+  if (rank === 2) return { medal: '🥈', label: 'Huy chương Bạc' };
+  if (rank === 3) return { medal: '🥉', label: 'Huy chương Đồng' };
+  return null;
+}
+
+export function getNextMatch(p: Player): Round | null {
+  if (!p.rounds || !p.rounds.length) return null;
+  const pending = p.rounds.find(r => r.status === 'pending');
+  if (pending) return pending;
+  return null;
+}
 
 export function matchPlayer(p: Player, group: string, query: string): boolean {
   if (!query || !query.trim()) return true;

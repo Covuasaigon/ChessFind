@@ -617,10 +617,34 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         return json({ message: action === 'edit' ? 'Đã lưu chỉnh sửa.' : 'Đã cập nhật kết quả mới nhất.' });
       }
 
+      if (action === 'tournament_update_info') {
+        const id = String(b.id || '');
+        if (!id) return json({ error: 'Mã giải đấu không hợp lệ.' }, 400);
+
+        const oldTour = await get(id, true);
+        if (!oldTour) return json({ error: 'Giải đấu không tồn tại.' }, 404);
+
+        const info = typeof b.info === 'object' && b.info ? b.info : {};
+        const prizes = Array.isArray(b.prizes) ? b.prizes : [];
+
+        const updatedTour = {
+          ...oldTour,
+          info,
+          prizes,
+          updated: new Date().toISOString()
+        };
+
+        await db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?')
+          .bind(JSON.stringify(updatedTour), updatedTour.updated, id).run();
+
+        await log(true, `Cập nhật thông tin & cơ cấu giải thưởng giải: ${oldTour.name}`);
+        return json({ message: 'Đã cập nhật thông tin & cơ cấu giải thưởng thành công!' });
+      }
+
       return json({ error: 'Thao tác không được hỗ trợ.' }, 400);
     } catch (e) {
       const m = message(e);
-      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle'].includes(action)) try { await log(false, m) } catch { }
+      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info'].includes(action)) try { await log(false, m) } catch { }
       return json({ error: m }, 502);
     }
   };
