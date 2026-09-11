@@ -1609,6 +1609,15 @@ svg {
   font-weight: 600;
 }
 
+.tournament-info-slider-card {
+  height: 280px;
+}
+@media (max-width: 768px) {
+  .tournament-info-slider-card {
+    height: 200px;
+  }
+}
+
 .match-vs-box {
   display: grid;
   grid-template-columns: 1fr auto 1fr;

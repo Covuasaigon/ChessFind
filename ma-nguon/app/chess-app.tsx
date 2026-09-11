@@ -117,30 +117,26 @@ export default function ChessApp() {
     <main className="app-main">
       {loadError && <div className="notice warning"><Info size={18} /><span>{loadError}</span><button onClick={reload}>Thử lại</button></div>}
 
-      {view === 'home' && (() => {
-        const activeBanner = banners.find(b => b.is_active === 1 && b.image_url && b.image_url !== '/company-logo.png') || banners.find(b => b.is_active === 1);
-        const heroConfig = activeBanner?.image_url ? { heroImage: activeBanner.image_url } : undefined;
-        return (
-          <>
-            <HeroSection q={q} setQ={setQ} onSearch={e => { e.preventDefault(); go('search'); }} config={heroConfig} />
+      {view === 'home' && (
+        <>
+          <HeroSection q={q} setQ={setQ} onSearch={e => { e.preventDefault(); go('search'); }} />
 
-            <DynamicBanner banners={banners} onNavigate={v => go(v as View)} />
+          <section className="section">
+            <div className="section-heading">
+              <div><span className="eyebrow muted">CÙNG CON THEO DÕI</span><h2>Các giải đấu mới nhất</h2></div>
+              <button className="text-btn" onClick={() => go('tournaments')}>Xem tất cả <ArrowUpRight size={17} /></button>
+            </div>
+            <div className="tournament-grid">
+              {all.slice(0, 6).map(t => <TournamentCard key={t.id} t={t} onOpen={() => { setFilter(t.id); setQ(''); go('search') }} />)}
+            </div>
+            {!tourneys.length && !loading && <p className="subtle below">Chưa có giải đấu được công bố. Quản trị viên có thể dán link Chess-Results trong mục Quản trị.</p>}
+          </section>
 
-            <TournamentSlideCarousel />
+          <DynamicBanner banners={banners} onNavigate={v => go(v as View)} />
 
-            <section className="section">
-              <div className="section-heading">
-                <div><span className="eyebrow muted">CÙNG CON THEO DÕI</span><h2>Các giải đấu mới nhất</h2></div>
-                <button className="text-btn" onClick={() => go('tournaments')}>Xem tất cả <ArrowUpRight size={17} /></button>
-              </div>
-              <div className="tournament-grid">
-                {all.slice(0, 6).map(t => <TournamentCard key={t.id} t={t} onOpen={() => { setFilter(t.id); setQ(''); go('search') }} />)}
-              </div>
-              {!tourneys.length && !loading && <p className="subtle below">Chưa có giải đấu được công bố. Quản trị viên có thể dán link Chess-Results trong mục Quản trị.</p>}
-            </section>
-          </>
-        );
-      })()}
+          <TournamentInfoSlider />
+        </>
+      )}
 
       {(view === 'search' || view === 'saved') && <>
         <div className="page-heading">
@@ -1005,7 +1001,7 @@ function TournamentInfoSlides({ tournamentId }: { tournamentId: string }) {
   );
 }
 
-function TournamentSlideCarousel() {
+function TournamentInfoSlider() {
   const [slides, setSlides] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -1073,11 +1069,13 @@ function TournamentSlideCarousel() {
   };
 
   const slideTypeIcons: Record<string, string> = {
-    'Banner chính': '🖼️',
     'Điều lệ giải đấu': '📄',
     'Hướng dẫn thi đấu': '📜',
-    'Cơ cấu giải thưởng': '🎁',
     'Lịch thi đấu': '📅',
+    'Sơ đồ giải': '🗺️',
+    'Cơ cấu giải thưởng': '🎁',
+    'Thông tin giải đấu': 'ℹ️',
+    'Banner chính': '🖼️',
     'Địa điểm tổ chức': '📍',
     'Thông báo quan trọng': '📢',
     'Nhà tài trợ': '🤝',
@@ -1085,18 +1083,18 @@ function TournamentSlideCarousel() {
   };
 
   return (
-    <section className="section" style={{ maxWidth: 1200, margin: '0 auto 28px auto', width: '100%', padding: '0 16px' }}>
-      <div className="section-heading" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+    <section className="section" style={{ maxWidth: 1200, margin: '24px auto 32px auto', width: '100%', padding: '0 16px' }}>
+      <div className="section-heading" style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <span className="eyebrow muted" style={{ letterSpacing: '0.05em', fontSize: 11, fontWeight: 800, color: '#145DA0', display: 'block', marginBottom: 4 }}>
-            THÔNG TIN NỔI BẬT
+            SLIDE THÔNG TIN GIẢI ĐẤU ⭐⭐⭐
           </span>
-          <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#062B4F', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#062B4F', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Info size={22} style={{ color: '#145DA0' }} />
-            <span>Thông tin giải đấu</span>
+            <span>Thông tin & Điều lệ giải đấu</span>
           </h2>
           <p style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 0 }}>
-            Cập nhật điều lệ, hướng dẫn thi đấu, lịch thi đấu và thông tin quan trọng
+            Điều lệ, lịch thi đấu, sơ đồ thi đấu, cơ cấu giải thưởng & hướng dẫn phụ huynh
           </p>
         </div>
         {slides.length > 1 && (
@@ -1105,8 +1103,8 @@ function TournamentSlideCarousel() {
               onClick={handlePrev}
               aria-label="Slide trước"
               style={{
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 borderRadius: '50%',
                 border: '1px solid #CBD5E1',
                 background: '#FFFFFF',
@@ -1119,7 +1117,7 @@ function TournamentSlideCarousel() {
                 transition: 'all 0.2s ease'
               }}
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={18} />
             </button>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#64748B', minWidth: 42, textAlign: 'center' }}>
               {currentIndex + 1} / {slides.length}
@@ -1128,8 +1126,8 @@ function TournamentSlideCarousel() {
               onClick={handleNext}
               aria-label="Slide tiếp theo"
               style={{
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 borderRadius: '50%',
                 border: '1px solid #CBD5E1',
                 background: '#FFFFFF',
@@ -1142,21 +1140,22 @@ function TournamentSlideCarousel() {
                 transition: 'all 0.2s ease'
               }}
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={18} />
             </button>
           </div>
         )}
       </div>
 
       <div
+        className="tournament-info-slider-container"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         style={{
           background: '#FFFFFF',
-          borderRadius: 20,
+          borderRadius: 16,
           border: '1px solid #E2E8F0',
-          boxShadow: '0 4px 20px rgba(6,43,79,0.08)',
+          boxShadow: '0 4px 16px rgba(6,43,79,0.06)',
           overflow: 'hidden',
           position: 'relative',
           width: '100%'
@@ -1164,6 +1163,7 @@ function TournamentSlideCarousel() {
       >
         {/* Slide Image Box */}
         <div
+          className="tournament-info-slider-card"
           onClick={() => setActiveImage({ url: currentSlide.image_url, title: currentSlide.title })}
           style={{
             position: 'relative',
@@ -1173,9 +1173,7 @@ function TournamentSlideCarousel() {
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            aspectRatio: '16 / 9',
-            maxHeight: '520px'
+            justifyContent: 'center'
           }}
         >
           <img
@@ -1190,12 +1188,34 @@ function TournamentSlideCarousel() {
             loading="lazy"
           />
 
+          {/* Overlay badge */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 12,
+              left: 12,
+              background: 'rgba(6, 43, 79, 0.85)',
+              backdropFilter: 'blur(4px)',
+              color: '#FFFFFF',
+              padding: '4px 12px',
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <span>{slideTypeIcons[currentSlide.slide_type] || '📌'}</span>
+            <span>{currentSlide.slide_type || 'Thông tin giải đấu'}</span>
+          </div>
+
           <div
             style={{
               position: 'absolute',
               bottom: 12,
               right: 12,
-              background: 'rgba(6, 43, 79, 0.8)',
+              background: 'rgba(6, 43, 79, 0.85)',
               backdropFilter: 'blur(4px)',
               color: '#FFFFFF',
               padding: '6px 12px',
@@ -1207,41 +1227,78 @@ function TournamentSlideCarousel() {
               gap: 6
             }}
           >
-            <Search size={14} /> Phóng to hình ảnh
+            <Search size={14} /> Phóng to xem chi tiết
           </div>
+
+          {/* Navigation Arrows Overlay */}
+          {slides.length > 1 && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); handlePrev(); }}
+                aria-label="Slide trước"
+                style={{
+                  position: 'absolute',
+                  left: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.85)',
+                  color: '#062B4F',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  zIndex: 2
+                }}
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                aria-label="Slide kế tiếp"
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.85)',
+                  color: '#062B4F',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  zIndex: 2
+                }}
+              >
+                <ChevronRight size={20} />
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Slide Card Info below image */}
-        <div style={{ padding: '16px 20px', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '4px 12px',
-                borderRadius: 8,
-                background: '#EFF6FF',
-                color: '#1D4ED8',
-                fontSize: 12,
-                fontWeight: 700,
-                marginBottom: 6
-              }}
-            >
-              <span>{slideTypeIcons[currentSlide.slide_type] || '📌'}</span>
-              <span>{currentSlide.slide_type || 'Thông tin giải đấu'}</span>
-            </span>
-            <h3 style={{ fontSize: 17, fontWeight: 800, color: '#062B4F', margin: 0, lineHeight: 1.3 }}>
+        {/* Slide Footer Info & Dots */}
+        <div style={{ padding: '12px 18px', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderTop: '1px solid #F1F5F9' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', margin: 0, lineHeight: 1.3 }}>
               {currentSlide.title}
             </h3>
             {currentSlide.tournament_name && (
-              <span style={{ fontSize: 12, color: '#64748B', marginTop: 4, display: 'block' }}>
+              <span style={{ fontSize: 12, color: '#64748B', marginTop: 2, display: 'block' }}>
                 Giải đấu: <strong>{currentSlide.tournament_name}</strong>
               </span>
             )}
           </div>
 
-          {/* Indicators */}
+          {/* Pagination Dots */}
           {slides.length > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {slides.map((_, idx) => (
@@ -1278,37 +1335,50 @@ function TournamentSlideCarousel() {
             bottom: 0,
             zIndex: 99999,
             background: 'rgba(6, 43, 79, 0.94)',
+            backdropFilter: 'blur(8px)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 16,
-            backdropFilter: 'blur(6px)'
+            padding: 16
           }}
         >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ position: 'relative', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+          <button
+            onClick={() => setActiveImage(null)}
+            style={{
+              position: 'absolute',
+              top: 20,
+              right: 20,
+              background: 'rgba(255,255,255,0.2)',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '50%',
+              width: 44,
+              height: 44,
+              fontSize: 22,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+            }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 12, color: '#FFFFFF' }}>
-              <span style={{ fontSize: 16, fontWeight: 800, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '80vw' }}>
-                {activeImage.title}
-              </span>
-              <button
-                type="button"
-                onClick={() => setActiveImage(null)}
-                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#FFFFFF', borderRadius: 99, padding: '6px 16px', cursor: 'pointer', fontWeight: 800, fontSize: 14 }}
-              >
-                ✕ Đóng
-              </button>
-            </div>
-
-            <img
-              src={activeImage.url}
-              alt={activeImage.title}
-              style={{ maxWidth: '94vw', maxHeight: '82vh', objectFit: 'contain', borderRadius: 12, boxShadow: '0 20px 50px rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.2)' }}
-            />
-          </div>
+            ✕
+          </button>
+          <img
+            src={activeImage.url}
+            alt={activeImage.title}
+            style={{
+              maxWidth: '95vw',
+              maxHeight: '85vh',
+              objectFit: 'contain',
+              borderRadius: 8,
+              boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+            }}
+          />
+          <span style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 700, marginTop: 14, textAlign: 'center' }}>
+            {activeImage.title}
+          </span>
         </div>
       )}
     </section>
