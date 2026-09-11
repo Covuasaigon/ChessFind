@@ -504,28 +504,28 @@ function Statistics({ p }: { p: Player }) {
         <h3 style={{ fontSize: 13, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           THỐNG KÊ MÀU QUÂN
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: '#062B4F' }}>⚪ Cầm Trắng</span>
-              <strong style={{ fontSize: 16, fontWeight: 800, color: '#145DA0' }}>{p.detailsLoaded ? `${s.white} ván` : '—'}</strong>
+              <span className="white-piece">⚪ WHITE</span>
+              <strong style={{ fontSize: 16, fontWeight: 800, color: '#145DA0' }}>{p.detailsLoaded ? `${s.white} games` : '—'}</strong>
             </div>
             <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: '#475569', paddingTop: 6, borderTop: '1px dashed #E2E8F0' }}>
-              <span style={{ color: '#166534' }}>Thắng: <b>{s.whiteWins}</b></span>
-              <span style={{ color: '#854D0E' }}>Hòa: <b>{s.whiteDraws}</b></span>
-              <span style={{ color: '#991B1B' }}>Thua: <b>{s.whiteLosses}</b></span>
+              <span style={{ color: '#166534' }}>Wins: <b>{s.whiteWins}</b></span>
+              <span style={{ color: '#854D0E' }}>Draws: <b>{s.whiteDraws}</b></span>
+              <span style={{ color: '#991B1B' }}>Losses: <b>{s.whiteLosses}</b></span>
             </div>
           </div>
 
           <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: '#062B4F' }}>⚫ Cầm Đen</span>
-              <strong style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>{p.detailsLoaded ? `${s.black} ván` : '—'}</strong>
+              <span className="black-piece">⚫ BLACK</span>
+              <strong style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>{p.detailsLoaded ? `${s.black} games` : '—'}</strong>
             </div>
             <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: '#475569', paddingTop: 6, borderTop: '1px dashed #E2E8F0' }}>
-              <span style={{ color: '#166534' }}>Thắng: <b>{s.blackWins}</b></span>
-              <span style={{ color: '#854D0E' }}>Hòa: <b>{s.blackDraws}</b></span>
-              <span style={{ color: '#991B1B' }}>Thua: <b>{s.blackLosses}</b></span>
+              <span style={{ color: '#166534' }}>Wins: <b>{s.blackWins}</b></span>
+              <span style={{ color: '#854D0E' }}>Draws: <b>{s.blackDraws}</b></span>
+              <span style={{ color: '#991B1B' }}>Losses: <b>{s.blackLosses}</b></span>
             </div>
           </div>
         </div>
@@ -607,16 +607,10 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
   return (
     <>
       <div className={'round-list ' + (compact ? 'compact' : '')}>
-        <div className="round-head"><span>Vòng & Bàn</span><span>Màu quân</span><span>Đối thủ / Trắng vs Đen</span><span>Kết quả ván</span></div>
+        <div className="round-head"><span>Vòng & Bàn</span><span>Màu quân</span><span>Đối thủ</span><span>Kết quả ván</span></div>
         {p.rounds.map(r => {
           const isWhite = r.color === 'white' || (r.playerWhite && r.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
           const isBlack = r.color === 'black' || (r.playerBlack && r.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase());
-
-          let wName = isWhite ? p.name : (r.playerWhite && r.playerWhite !== p.name ? r.playerWhite : r.opponent);
-          let bName = isBlack ? p.name : (r.playerBlack && r.playerBlack !== p.name ? r.playerBlack : r.opponent);
-          if (wName && bName && wName.trim() === bName.trim()) {
-            bName = isWhite ? (r.opponent || 'Đối thủ') : p.name;
-          }
 
           let resClass = 'pending';
           let resText = '—';
@@ -633,15 +627,16 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
           return (
             <div className="round-row" key={r.round}>
               <span className="round-num">Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
-              <span className={'piece ' + (isWhite ? 'white' : isBlack ? 'black' : '')} title={isWhite ? 'Cầm quân Trắng' : isBlack ? 'Cầm quân Đen' : 'Chưa có màu quân'}>
-                {isWhite ? '♙ Trắng' : isBlack ? '♟ Đen' : '—'}
+              <span className={isWhite ? 'white-piece' : isBlack ? 'black-piece' : 'subtle'}>
+                {isWhite ? '⚪ Trắng' : isBlack ? '⚫ Đen' : '—'}
               </span>
               <div className="opponent">
-                {r.opponentId ? <button onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button> : <strong>{r.opponent || 'Chưa có đối thủ'}</strong>}
-                <small style={{ color: '#657b96' }}>
-                  {wName && bName ? `⚪ ${wName} vs ⚫ ${bName}` : ''}
-                  {r.rating ? ` · Elo ${r.rating}` : r.status === 'bye' ? 'Miễn đấu' : ''}
-                </small>
+                {r.opponentId ? (
+                  <button onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button>
+                ) : (
+                  <strong>{r.opponent || 'Chưa có đối thủ'}</strong>
+                )}
+                {r.rating && <small style={{ color: '#657b96' }}>Elo {r.rating}</small>}
               </div>
               <div className="round-result">
                 <span className={`result-badge ${resClass}`}>{resText}</span>
@@ -655,12 +650,6 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
         {p.rounds.map(r => {
           const isWhite = r.color === 'white' || (r.playerWhite && r.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
           const isBlack = r.color === 'black' || (r.playerBlack && r.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase());
-
-          let whiteName = isWhite ? p.name : (r.playerWhite && r.playerWhite !== p.name ? r.playerWhite : r.opponent);
-          let blackName = isBlack ? p.name : (r.playerBlack && r.playerBlack !== p.name ? r.playerBlack : r.opponent);
-          if (whiteName && blackName && whiteName.trim() === blackName.trim()) {
-            blackName = isWhite ? (r.opponent || 'Đối thủ') : p.name;
-          }
 
           let resClass = 'pending';
           let resText = '—';
@@ -677,39 +666,29 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
           return (
             <div className="mobile-match-card" key={r.round} style={{ background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', padding: 14, marginBottom: 12, boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
               <div className="match-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #F1F5F9' }}>
-                <span className="match-card-round" style={{ fontSize: 13, fontWeight: 800, color: '#062B4F' }}>Ván {r.round}</span>
-                <span className="match-card-board" style={{ fontSize: 12, fontWeight: 700, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: 6 }}>
-                  {r.board ? `Bàn số ${r.board}` : 'Bàn —'}
+                <span className="match-card-round" style={{ fontSize: 13, fontWeight: 800, color: '#062B4F' }}>
+                  Vòng {r.round} {r.board ? `· Bàn ${r.board}` : ''}
                 </span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: isWhite ? '#1E40AF' : '#0F172A', background: isWhite ? '#EFF6FF' : '#F1F5F9', padding: '2px 8px', borderRadius: 6 }}>
+                <span className={isWhite ? 'white-piece' : isBlack ? 'black-piece' : 'subtle'}>
                   {isWhite ? '⚪ Trắng' : isBlack ? '⚫ Đen' : '—'}
                 </span>
               </div>
 
-              <div className="match-vs-box" style={{ background: '#F8FAFC', padding: 10, borderRadius: 10, border: '1px solid #E2E8F0', marginBottom: 10 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, fontWeight: isWhite ? 800 : 600, color: isWhite ? '#062B4F' : '#334155' }}>
-                    <span>⚪ {whiteName}</span>
-                    <span style={{ fontSize: 11, color: '#64748B' }}>{isWhite ? 'Trắng' : 'Đối thủ'}</span>
-                  </div>
-                  <div style={{ textAlign: 'center', fontSize: 10, fontWeight: 800, color: '#94A3B8', margin: '2px 0' }}>VS</div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, fontWeight: isBlack ? 800 : 600, color: isBlack ? '#062B4F' : '#334155' }}>
-                    <span>⚫ {blackName}</span>
-                    <span style={{ fontSize: 11, color: '#64748B' }}>{isBlack ? 'Đen' : 'Đối thủ'}</span>
-                  </div>
+              <div style={{ marginBottom: 10 }}>
+                <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600, display: 'block', marginBottom: 2 }}>Đối thủ thi đấu:</span>
+                <div className="opponent">
+                  {r.opponentId ? (
+                    <button style={{ fontSize: 15, fontWeight: 800, color: '#145DA0' }} onClick={() => onOpponent(r.opponentId!)}>
+                      {r.opponent} ➔
+                    </button>
+                  ) : (
+                    <strong style={{ fontSize: 15, fontWeight: 800, color: '#062B4F' }}>{r.opponent || 'Chưa có đối thủ'}</strong>
+                  )}
+                  {r.rating && <small style={{ color: '#64748B' }}>Elo: {r.rating}</small>}
                 </div>
               </div>
 
-              <div className="match-card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="subtle" style={{ fontSize: 12 }}>
-                  {r.opponentId ? (
-                    <button style={{ background: 'none', border: 0, padding: 0, color: '#145DA0', fontWeight: 700, cursor: 'pointer' }} onClick={() => onOpponent(r.opponentId!)}>
-                      Hồ sơ đối thủ ➔
-                    </button>
-                  ) : (
-                    <span style={{ color: '#64748B' }}>{r.opponent || 'Chưa có đối thủ'}</span>
-                  )}
-                </span>
+              <div className="match-card-footer" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: 8, borderTop: '1px dashed #F1F5F9' }}>
                 <span className={`result-badge ${resClass}`}>{resText}</span>
               </div>
             </div>

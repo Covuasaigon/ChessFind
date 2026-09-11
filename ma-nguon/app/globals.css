@@ -1797,14 +1797,30 @@ svg {
   font-weight: 600;
 }
 
-.piece {
-  font-size: 32px;
-  line-height: 1.1;
-  font-family: Georgia, serif;
+.white-piece,
+.black-piece {
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.piece.white { color: #5c7491; }
-.piece.black { color: #0B2A4A; }
+.white-piece {
+  color: #1E40AF;
+  background: #EFF6FF;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #DBEAFE;
+}
+
+.black-piece {
+  color: #0F172A;
+  background: #F1F5F9;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+}
 
 .opponent { min-width: 0; }
 
@@ -1860,7 +1876,7 @@ svg {
   font-weight: 800;
   font-size: 13px;
   white-space: nowrap;
-  min-width: 94px;
+  min-width: 90px;
   text-align: center;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   line-height: 1.2;
