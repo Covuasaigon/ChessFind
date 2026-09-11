@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Toaster, toast } from 'sonner';
-import { Tournament, Player, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getNextMatch } from '@/lib/chess';
+import { Tournament, Player, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getNextMatch, formatClubName } from '@/lib/chess';
 import { apiFetch } from '@/lib/api-client';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell } from 'recharts';
 import Admin from './admin';
@@ -219,7 +219,7 @@ export default function ChessApp() {
           <div className="profile-name">
             <span className="eyebrow">Bảng đấu: {player.ageGroup || current.group}</span>
             <h1>{player.name}</h1>
-            <p>{player.club || 'Chưa có thông tin đơn vị'} <span className="desktop-only">· SBD {player.snr}</span> {player.fideId ? `· FIDE ID: ${player.fideId}` : ''}</p>
+            <p>{formatClubName(player.club)} <span className="desktop-only">· SBD {player.snr}</span> {player.fideId ? `· FIDE ID: ${player.fideId}` : ''}</p>
           </div>
           <button className={'save-btn ' + (saved.includes(current.id + ':' + player.id) ? 'saved' : '')} onClick={() => bookmark(current, player)} aria-label="Lưu kỳ thủ">
             <Bookmark size={21} fill={saved.includes(current.id + ':' + player.id) ? 'currentColor' : 'none'} />
@@ -253,7 +253,7 @@ export default function ChessApp() {
                   </div>
                 </div>
                 <span className="soft-badge" style={{ background: 'rgba(212, 175, 55, 0.2)', color: '#D4AF37', border: '1px solid rgba(212, 175, 55, 0.4)', fontWeight: 700 }}>
-                  CLB: {player.club || 'Chưa rõ'}
+                  CLB: {formatClubName(player.club)}
                 </span>
               </div>
 
@@ -280,7 +280,7 @@ export default function ChessApp() {
                 </div>
                 <div className="dash-stat">
                   <span className="dash-stat-label">Đơn vị / CLB</span>
-                  <span className="dash-stat-val" style={{ fontSize: 14, wordBreak: 'break-word' }}>{player.club || 'Chưa rõ'}</span>
+                  <span className="dash-stat-val" style={{ fontSize: 14, wordBreak: 'break-word' }}>{formatClubName(player.club)}</span>
                   <span className="dash-stat-sub">đơn vị đăng ký thi đấu</span>
                 </div>
                 <div className="dash-stat">
@@ -639,25 +639,36 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onO
           <TableHead>Buchholz (BH)</TableHead>
           <TableHead>Sonneborn Berger (SB)</TableHead>
           <TableHead>Performance (RP)</TableHead>
+          <TableHead>Số ván đấu</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {ps.map(p =>
-          <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
-            <TableCell><span className={p.rank && p.rank <= 3 ? 'rank-medal' : 'rank-number'}>{fmt(p.rank)}</span></TableCell>
-            <TableCell>
-              <button className="rank-player" onClick={() => onOpen(p)}>
-                <b>{p.name}</b>
-              </button>
-            </TableCell>
-            <TableCell>{p.snr}</TableCell>
-            <TableCell>{p.club || '—'}</TableCell>
-            <TableCell className="points">{fmt(p.points)}</TableCell>
-            <TableCell>{fmt(p.buchholz ?? p.ties['BH'] ?? p.ties['Buchholz'])}</TableCell>
-            <TableCell>{fmt(p.sonnebornBerger ?? p.ties['SB'])}</TableCell>
-            <TableCell>{fmt(p.performance ?? p.ties['Rp'] ?? p.ties['Performance'])}</TableCell>
-          </TableRow>
-        )}
+        {ps.map((p, idx) => {
+          const rankVal = p.rank ?? (idx + 1);
+          const bhVal = p.buchholz ?? p.ties['BH'] ?? p.ties['Buchholz'] ?? p.ties['BH.'] ?? p.ties['BH-1'] ?? p.ties['TB2'] ?? p.ties['TB1'] ?? null;
+          const sbVal = p.sonnebornBerger ?? p.ties['SB'] ?? p.ties['Sonneborn'] ?? p.ties['SB.'] ?? p.ties['TB3'] ?? p.ties['TB5'] ?? null;
+          const rpVal = p.performance ?? p.ties['Rp'] ?? p.ties['Performance'] ?? p.ties['RP'] ?? null;
+          const gamesCount = p.detailsLoaded ? `${stats(p).played} ván` : (t.rounds ? `${t.rounds} ván` : '—');
+          const clubName = formatClubName(p.club);
+
+          return (
+            <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
+              <TableCell><span className={rankVal <= 3 ? 'rank-medal' : 'rank-number'}>{rankVal}</span></TableCell>
+              <TableCell>
+                <button className="rank-player" onClick={() => onOpen(p)}>
+                  <b>{p.name}</b>
+                </button>
+              </TableCell>
+              <TableCell>{p.snr}</TableCell>
+              <TableCell>{clubName}</TableCell>
+              <TableCell className="points">{fmt(p.points)}</TableCell>
+              <TableCell>{fmt(bhVal)}</TableCell>
+              <TableCell>{fmt(sbVal)}</TableCell>
+              <TableCell>{fmt(rpVal)}</TableCell>
+              <TableCell>{gamesCount}</TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
     {!ps.length && <p className="empty-text">Không có kết quả phù hợp.</p>}

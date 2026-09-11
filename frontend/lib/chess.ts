@@ -84,11 +84,70 @@ export type Tournament = {
   info?: TournamentInfo;
   prizes?: PrizeRule[];
 };
-
 export const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
 export const num = (s: string): number | null => { const v = s.trim().replace(/½/g, '.5').replace(',', '.'); return v !== '' && /^\d+(?:\.\d+)?$|^\.5$/.test(v) ? Number(v) : null; };
 export const fmt = (n: number | null | undefined) => n == null ? '—' : n.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
-export function stats(p: Player) { const r = p.rounds.filter(x => x.status === 'played' && x.score !== null); const wins = r.filter(x => x.score === 1).length; return { played: r.length, wins, draws: r.filter(x => x.score === 0.5).length, losses: r.filter(x => x.score === 0).length, white: r.filter(x => x.color === 'white').length, black: r.filter(x => x.color === 'black').length, unknown: r.filter(x => x.color === null).length, special: p.rounds.filter(x => ['bye', 'forfeit'].includes(x.status)).length, winRate: r.length ? wins / r.length * 100 : null }; }
+
+export const CLUB_MAP: Record<string, string> = {
+  'HDC': 'CLB Cờ Vua HDC',
+  'TPC': 'CLB Cờ Vua TPC (Tân Bình)',
+  'TBC': 'CLB Cờ Vua TBC',
+  'RTC': 'CLB Cờ Vua Rồng Trẻ (RTC)',
+  'BTC': 'CLB Cờ Vua Bến Thành (BTC)',
+  'ONL': 'CLB Cờ Vua Online (ONL)',
+  'DHC': 'CLB Cờ Vua DHC',
+  'KDC': 'CLB Cờ Vua KDC',
+  'Q1': 'Quận 1 - TP.HCM',
+  'Q2': 'Quận 2 - TP.HCM',
+  'Q3': 'Quận 3 - TP.HCM',
+  'Q4': 'Quận 4 - TP.HCM',
+  'Q5': 'Quận 5 - TP.HCM',
+  'Q6': 'Quận 6 - TP.HCM',
+  'Q7': 'Quận 7 - TP.HCM',
+  'Q8': 'Quận 8 - TP.HCM',
+  'Q9': 'Quận 9 - TP.HCM',
+  'Q10': 'Quận 10 - TP.HCM',
+  'Q11': 'Quận 11 - TP.HCM',
+  'Q12': 'Quận 12 - TP.HCM',
+  'TD': 'TP. Thủ Đức',
+  'GV': 'Quận Gò Vấp',
+  'TB': 'Quận Tân Bình',
+  'BT': 'Quận Bình Thạnh',
+  'PN': 'Quận Phú Nhuận',
+  'TP': 'Thành phố Hồ Chí Minh'
+};
+
+export function formatClubName(club: string | null | undefined): string {
+  if (!club || !club.trim()) return 'Tự do / Chưa rõ';
+  const trimmed = club.trim();
+  const upper = trimmed.toUpperCase();
+  if (CLUB_MAP[upper]) return CLUB_MAP[upper];
+  if (CLUB_MAP[trimmed]) return CLUB_MAP[trimmed];
+  return trimmed;
+}
+
+export function stats(p: Player) {
+  const allCompleted = p.rounds.filter(x => x.status !== 'pending' && x.status !== 'unknown');
+  const r = p.rounds.filter(x => x.status === 'played' && x.score !== null);
+  const wins = p.rounds.filter(x => x.score === 1).length;
+  const draws = p.rounds.filter(x => x.score === 0.5).length;
+  const losses = p.rounds.filter(x => x.score === 0).length;
+  const white = p.rounds.filter(x => x.color === 'white').length;
+  const black = p.rounds.filter(x => x.color === 'black').length;
+  const totalPlayed = allCompleted.length > 0 ? allCompleted.length : r.length;
+
+  return {
+    played: totalPlayed,
+    wins,
+    draws,
+    losses,
+    white,
+    black,
+    unknown: r.filter(x => x.color === null).length,
+    special: p.rounds.filter(x => ['bye', 'forfeit'].includes(x.status)).length,
+    winRate: totalPlayed > 0 ? (wins / totalPlayed) * 100 : null
+  };
+}
 
 export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule[]): { medal: string; label: string } | null {
   if (!rank || rank <= 0) return null;

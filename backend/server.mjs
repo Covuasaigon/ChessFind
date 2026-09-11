@@ -83,9 +83,17 @@ function textOf(s) {
     return entities[x] ?? " ";
   }).replace(/\s+/g, " ").trim();
 }
+function cleanCellText(text) {
+  if (!text) return text;
+  if (/Note:\s*To reduce/i.test(text) || /Search for player/i.test(text) || /Final Ranking/i.test(text)) {
+    const match = text.match(/\b(Rk|Rank|St\.?Nr|SNo|No|Name|Tên|Pts|Points|Điểm|BH|SB|Rp|TB\d+)\b\.?$/i) || text.match(/\b(Rk|Rank|St\.?Nr|SNo|No)\b\.?/i);
+    if (match) return match[0];
+  }
+  return text;
+}
 function rowsOf(html) {
   return [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => [...m[1].matchAll(/<t[dh]\b([^>]*)>([\s\S]*?)<\/t[dh]>/gi)].flatMap((c) => {
-    const col = { text: textOf(c[2]), raw: c[2] };
+    const col = { text: cleanCellText(textOf(c[2])), raw: c[2] };
     const span = Math.min(10, Number(c[1].match(/colspan\s*=\s*["']?(\d+)/i)?.[1] || 1));
     return [col, ...Array.from({ length: span - 1 }, () => ({ text: "", raw: "" }))];
   })).filter((x) => x.length);
@@ -107,7 +115,7 @@ function parseRanking(html, source, group) {
   const si = findCol(h, ["sno", "no"]);
   const pi = findCol(h, ["pts", "points"]);
   const rating = findCol(h, ["rtg", "rating", "rtgi", "elo"]);
-  const club = findCol(h, ["club/city", "club", "club/country", "team", "city", "club/city/fed", "federation", "fed"]);
+  const club = findCol(h, ["club/city", "club", "club/country", "team", "city", "club/city/fed", "federation", "fed", "land"]);
   const fideIdCol = findCol(h, ["fideid", "fide", "id", "identnumber", "ident"]);
   const sexCol = findCol(h, ["sex", "gender", "gioitinh"]);
   const typCol = findCol(h, ["typ", "gr", "group", "typgr", "kat", "cat", "category"]);
@@ -123,9 +131,11 @@ function parseRanking(html, source, group) {
     if (seen.has(snr)) continue;
     seen.add(snr);
     const tieValues = Object.fromEntries(ties.map((t) => [t.label, num(row[t.i]?.text || "")]));
-    const bhVal = tieValues["BH"] ?? tieValues["Buchholz"] ?? tieValues["TB1"] ?? tieValues["TB2"] ?? null;
-    const sbVal = tieValues["SB"] ?? tieValues["Sonneborn-Berger"] ?? tieValues["Sonneborn"] ?? null;
-    const rpVal = tieValues["Rp"] ?? tieValues["RP"] ?? tieValues["Performance"] ?? null;
+    const bhVal = tieValues["BH"] ?? tieValues["Buchholz"] ?? tieValues["BH."] ?? tieValues["BH-1"] ?? tieValues["TB2"] ?? tieValues["TB1"] ?? tieValues["TB3"] ?? null;
+    const sbVal = tieValues["SB"] ?? tieValues["Sonneborn-Berger"] ?? tieValues["Sonneborn"] ?? tieValues["SB."] ?? tieValues["TB3"] ?? tieValues["TB5"] ?? null;
+    const rpVal = tieValues["Rp"] ?? tieValues["RP"] ?? tieValues["Performance"] ?? tieValues["Rp."] ?? null;
+    const parsedRank = ri >= 0 ? num(row[ri]?.text || "") : null;
+    const finalRank = parsedRank ?? players.length + 1;
     const rowSex = sexCol >= 0 ? row[sexCol]?.text : "";
     const gender = /f|w|nữ|nu|female/i.test(rowSex) || /nữ/i.test(group) ? "N\u1EEF" : "Nam";
     const rowTyp = typCol >= 0 ? row[typCol]?.text : "";
@@ -137,7 +147,7 @@ function parseRanking(html, source, group) {
       fideId: fideIdCol >= 0 ? row[fideIdCol]?.text || null : null,
       club: club >= 0 ? row[club].text : "",
       rating: rating >= 0 ? num(row[rating].text) : null,
-      rank: ri >= 0 ? num(row[ri].text) : null,
+      rank: finalRank,
       points: pi >= 0 ? num(row[pi].text) : null,
       buchholz: bhVal,
       sonnebornBerger: sbVal,
