@@ -788,6 +788,10 @@ export default function Admin({ onChanged }: AdminProps) {
                 </label>
               </div>
 
+              <label className="saas-label" style={{ marginTop: 8 }}>🖼️ Ảnh Banner Giải Đấu (URL / Data URL)
+                <input className="saas-input" style={{ paddingLeft: 16 }} placeholder="https://... hoặc data:image/... (Banner hiển thị cho giải)" value={infoModal.info?.banner_url || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), banner_url: e.target.value } })} />
+              </label>
+
               <label className="saas-label" style={{ marginTop: 8 }}>📝 Giới thiệu giải đấu
                 <textarea className="saas-input" style={{ padding: 12, height: 75 }} placeholder="Mô tả tóm tắt quy mô, ý nghĩa giải đấu..." value={infoModal.info?.intro || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), intro: e.target.value } })} />
               </label>

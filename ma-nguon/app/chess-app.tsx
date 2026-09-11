@@ -244,17 +244,24 @@ export default function ChessApp() {
             <div className="player-dashboard-card" style={{ marginTop: 16 }}>
               <div className="dashboard-header-row">
                 <div className="dashboard-title-box">
-                  {medal && <span style={{ fontSize: 26 }} title={medal.label}>{medal.medal}</span>}
+                  <span style={{ fontSize: 28 }} title={medal ? medal.label : 'Dự kiến kết quả'}>{medal ? medal.medal : '♟'}</span>
                   <div>
-                    <h2>Player Dashboard · {player.name}</h2>
+                    <h2>Hồ sơ kỳ thủ · {player.name}</h2>
                     <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 600 }}>
-                      SBD: <b>{player.snr}</b> · Bảng: <b>{player.ageGroup || current.group}</b> {medal ? `· ${medal.label}` : ''}
+                      SBD: <b>{player.snr}</b> · Bảng: <b>{player.ageGroup || current.group}</b> · Dự kiến: <b>{medal ? medal.label : 'Chưa có giải thưởng'}</b>
                     </span>
                   </div>
                 </div>
-                <span className="soft-badge" style={{ background: 'rgba(212, 175, 55, 0.2)', color: '#D4AF37', border: '1px solid rgba(212, 175, 55, 0.4)', fontWeight: 700 }}>
-                  CLB/Tỉnh: {player.club || formatClubName(player.federation || '')}
-                </span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {medal && (
+                    <span className="soft-badge" style={{ background: 'rgba(212, 175, 55, 0.25)', color: '#D4AF37', border: '1px solid rgba(212, 175, 55, 0.4)', fontWeight: 800 }}>
+                      {medal.medal} {medal.label}
+                    </span>
+                  )}
+                  <span className="soft-badge" style={{ background: 'rgba(20, 93, 160, 0.15)', color: '#145DA0', border: '1px solid rgba(20, 93, 160, 0.3)', fontWeight: 700 }}>
+                    CLB/Tỉnh: {player.club || formatClubName(player.federation || '')}
+                  </span>
+                </div>
               </div>
 
               <div className="dashboard-grid">
@@ -266,10 +273,10 @@ export default function ChessApp() {
                 <div className="dash-stat">
                   <span className="dash-stat-label">Tổng điểm số</span>
                   <span className="dash-stat-val">{fmt(player.points)} điểm</span>
-                  <span className="dash-stat-sub">điểm tích lũy toàn giải</span>
+                  <span className="dash-stat-sub">tích lũy qua các vòng</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Số ván đã đấu</span>
+                  <span className="dash-stat-label">Số ván thực đấu</span>
                   <span className="dash-stat-val">{s.played} ván</span>
                   <span className="dash-stat-sub">Thắng {s.wins} · Hòa {s.draws} · Thua {s.losses}</span>
                 </div>
@@ -279,14 +286,14 @@ export default function ChessApp() {
                   <span className="dash-stat-sub">thống kê màu quân thực đấu</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Đơn vị / CLB/Tỉnh</span>
-                  <span className="dash-stat-val" style={{ fontSize: 14, wordBreak: 'break-word' }}>{player.club || formatClubName(player.federation || '')}</span>
-                  <span className="dash-stat-sub">đơn vị đăng ký thi đấu</span>
+                  <span className="dash-stat-label">Buchholz (BH)</span>
+                  <span className="dash-stat-val">{fmt(player.buchholz ?? player.ties['BH'] ?? player.ties['Buchholz'])}</span>
+                  <span className="dash-stat-sub">hệ số Buchholz</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Số báo danh (SBD)</span>
-                  <span className="dash-stat-val">SBD {player.snr}</span>
-                  <span className="dash-stat-sub">Bảng {player.ageGroup || current.group}</span>
+                  <span className="dash-stat-label">Sonneborn Berger (SB)</span>
+                  <span className="dash-stat-val">{fmt(player.sonnebornBerger ?? player.ties['SB'])}</span>
+                  <span className="dash-stat-sub">hệ số SB / Rp: {fmt(player.performance ?? player.ties['Rp'])}</span>
                 </div>
               </div>
 
@@ -550,34 +557,48 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
     <>
       <div className={'round-list ' + (compact ? 'compact' : '')}>
         <div className="round-head"><span>Vòng & Bàn</span><span>Màu quân</span><span>Đối thủ / Trắng vs Đen</span><span>Kết quả ván</span></div>
-        {p.rounds.map(r =>
-          <div className="round-row" key={r.round}>
-            <span className="round-num">Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
-            <span className={'piece ' + r.color} title={r.color === 'white' ? 'Cầm quân Trắng' : r.color === 'black' ? 'Cầm quân Đen' : 'Chưa có màu quân'}>
-              {r.color === 'white' ? '♙ Trắng' : r.color === 'black' ? '♟ Đen' : '—'}
-            </span>
-            <div className="opponent">
-              {r.opponentId ? <button onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button> : <strong>{r.opponent || 'Chưa có đối thủ'}</strong>}
-              <small style={{ color: '#657b96' }}>
-                {r.playerWhite && r.playerBlack ? `${r.playerWhite} (Trắng) vs ${r.playerBlack} (Đen)` : ''}
-                {r.rating ? ` · Elo ${r.rating}` : r.status === 'bye' ? 'Miễn đấu' : ''}
-              </small>
+        {p.rounds.map(r => {
+          const isWhite = r.color === 'white';
+          const isBlack = r.color === 'black';
+          const wName = isWhite ? p.name : (r.playerWhite && r.playerWhite !== p.name ? r.playerWhite : r.opponent);
+          let bName = isBlack ? p.name : (r.playerBlack && r.playerBlack !== p.name ? r.playerBlack : r.opponent);
+          if (wName && bName && wName.trim() === bName.trim()) {
+            bName = isWhite ? (r.opponent || 'Đối thủ') : p.name;
+          }
+
+          return (
+            <div className="round-row" key={r.round}>
+              <span className="round-num">Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
+              <span className={'piece ' + (r.color || '')} title={r.color === 'white' ? 'Cầm quân Trắng' : r.color === 'black' ? 'Cầm quân Đen' : 'Chưa có màu quân'}>
+                {r.color === 'white' ? '♙ Trắng' : r.color === 'black' ? '♟ Đen' : '—'}
+              </span>
+              <div className="opponent">
+                {r.opponentId ? <button onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button> : <strong>{r.opponent || 'Chưa có đối thủ'}</strong>}
+                <small style={{ color: '#657b96' }}>
+                  {wName && bName ? `${wName} (Trắng) vs ${bName} (Đen)` : ''}
+                  {r.rating ? ` · Elo ${r.rating}` : r.status === 'bye' ? 'Miễn đấu' : ''}
+                </small>
+              </div>
+              <span className={'round-result ' + (r.status === 'played' ? (r.score === 1 ? 'win' : r.score === 0 ? 'loss' : 'draw') : 'pending')}>
+                <b>{r.score === null ? '—' : (r.score === 1 ? 'Thắng (1 - 0)' : r.score === 0.5 ? 'Hòa (½ - ½)' : 'Thua (0 - 1)')}</b>
+                <small>{r.status === 'played' ? (r.score === 1 ? 'Thắng' : r.score === 0 ? 'Thua' : 'Hòa') : r.status === 'bye' ? 'Bye (Miễn đấu)' : r.status === 'forfeit' ? 'Xử thắng/thua' : r.status === 'pending' ? 'Chờ kết quả' : 'Chưa rõ'}</small>
+              </span>
             </div>
-            <span className={'round-result ' + (r.status === 'played' ? (r.score === 1 ? 'win' : r.score === 0 ? 'loss' : 'draw') : 'pending')}>
-              <b>{r.score === null ? '—' : (r.score === 1 ? 'Thắng (1 - 0)' : r.score === 0.5 ? 'Hòa (½ - ½)' : 'Thua (0 - 1)')}</b>
-              <small>{r.status === 'played' ? (r.score === 1 ? 'Thắng' : r.score === 0 ? 'Thua' : 'Hòa') : r.status === 'bye' ? 'Bye (Miễn đấu)' : r.status === 'forfeit' ? 'Xử thắng/thua' : r.status === 'pending' ? 'Chờ kết quả' : 'Chưa rõ'}</small>
-            </span>
-          </div>
-        )}
+          );
+        })}
       </div>
 
       <div className="mobile-match-cards">
         {p.rounds.map(r => {
           const isWhite = r.color === 'white';
-          const whiteName = isWhite ? p.name : (r.playerWhite || r.opponent);
-          const blackName = !isWhite ? p.name : (r.playerBlack || r.opponent);
+          const isBlack = r.color === 'black';
+          const whiteName = isWhite ? p.name : (r.playerWhite && r.playerWhite !== p.name ? r.playerWhite : r.opponent);
+          let blackName = isBlack ? p.name : (r.playerBlack && r.playerBlack !== p.name ? r.playerBlack : r.opponent);
+          if (whiteName && blackName && whiteName.trim() === blackName.trim()) {
+            blackName = isWhite ? (r.opponent || 'Đối thủ') : p.name;
+          }
           const whiteClub = isWhite ? (p.club || 'Chưa rõ CLB') : 'Đối thủ';
-          const blackClub = !isWhite ? (p.club || 'Chưa rõ CLB') : 'Đối thủ';
+          const blackClub = isBlack ? (p.club || 'Chưa rõ CLB') : 'Đối thủ';
 
           return (
             <div className="mobile-match-card" key={r.round}>

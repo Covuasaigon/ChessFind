@@ -88,7 +88,7 @@ export function rowsOf(html: string) {
   })).filter(x => x.length);
 }
 
-const key = (s: string) => normalize(s).replace(/[.\s:]/g, '');
+const key = (s: string) => normalize(s).replace(/[^a-z0-9]/g, '');
 function findCol(headers: Cell[], names: string[]) { return headers.findIndex(h => names.includes(key(h.text))); }
 
 export function parseRanking(html: string, source: string, group: string): Tournament {
@@ -141,7 +141,7 @@ export function parseRanking(html: string, source: string, group: string): Tourn
 
     const rawFed = fedCol >= 0 ? row[fedCol]?.text || null : null;
     const rawClub = clubCol >= 0 ? row[clubCol]?.text || '' : '';
-    const finalClub = rawClub || (rawFed ? formatClubName(rawFed) : '');
+    const finalClub = rawClub ? formatClubName(rawClub) : (rawFed ? formatClubName(rawFed) : '');
 
     players.push({
       id: `${id}-${snr}`,
@@ -342,6 +342,7 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
   const boCol = findCol(h, ['bo', 'board', 'ban']);
   const rating = findCol(h, ['rtg', 'rating']);
   const res = findCol(h, ['res', 'result']);
+  const colorCol = findCol(h, ['wb', 'w/b', 'color', 'mau', 'mauquan']);
 
   const rounds: Round[] = [];
   for (const r of rows.slice(hi + 1)) {
@@ -350,8 +351,14 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
 
     let raw = r.slice(res).map(c => c.text).join(' ').trim();
-    const colorCell = r.find(c => /^[wb]$/i.test(c.text));
-    const color = colorCell?.text.toLowerCase() === 'w' ? 'white' : colorCell?.text.toLowerCase() === 'b' ? 'black' : null;
+    let colorStr = colorCol >= 0 ? r[colorCol]?.text || '' : '';
+    if (!colorStr) {
+      const colorCell = r.find(c => /^[wb]$/i.test(c.text) || /\b(w|b)\b/i.test(c.text));
+      colorStr = colorCell?.text || '';
+    }
+    const isWhite = /w|white|trắng/i.test(colorStr);
+    const isBlack = /b|black|đen/i.test(colorStr);
+    const color = isWhite ? 'white' : isBlack ? 'black' : null;
     raw = raw.replace(/\b[wb]\b/ig, '').trim();
 
     const opponent = r[ni].text;
@@ -373,8 +380,20 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     if (rounds.some(x => x.round === rd)) continue;
 
     const resFmt = score === 1 ? '1 - 0' : score === 0.5 ? '½ - ½' : score === 0 ? '0 - 1' : raw || '—';
-    const playerWhite = color === 'white' ? p.name : opponent;
-    const playerBlack = color === 'black' ? p.name : opponent;
+
+    let playerWhite: string;
+    let playerBlack: string;
+
+    if (status === 'bye' || /bye|not paired|unpaired|spielfrei/i.test(opponent)) {
+      playerWhite = p.name;
+      playerBlack = 'Miễn đấu (Bye)';
+    } else if (color === 'black') {
+      playerWhite = opponent;
+      playerBlack = p.name;
+    } else {
+      playerWhite = p.name;
+      playerBlack = opponent;
+    }
 
     rounds.push({
       round: rd,

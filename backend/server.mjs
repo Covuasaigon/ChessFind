@@ -134,7 +134,7 @@ function rowsOf(html) {
     return [col, ...Array.from({ length: span - 1 }, () => ({ text: "", raw: "" }))];
   })).filter((x) => x.length);
 }
-var key = (s) => normalize(s).replace(/[.\s:]/g, "");
+var key = (s) => normalize(s).replace(/[^a-z0-9]/g, "");
 function findCol(headers, names) {
   return headers.findIndex((h) => names.includes(key(h.text)));
 }
@@ -179,7 +179,7 @@ function parseRanking(html, source, group) {
     const ageGroupMatch = group.match(/(?:U\d+|Trẻ|Nhi|Tiểu học|THCS|THPT)/i)?.[0] || rowTyp || "To\xE0n gi\u1EA3i";
     const rawFed = fedCol >= 0 ? row[fedCol]?.text || null : null;
     const rawClub = clubCol >= 0 ? row[clubCol]?.text || "" : "";
-    const finalClub = rawClub || (rawFed ? formatClubName(rawFed) : "");
+    const finalClub = rawClub ? formatClubName(rawClub) : rawFed ? formatClubName(rawFed) : "";
     players.push({
       id: `${id}-${snr}`,
       snr,
@@ -336,14 +336,21 @@ function parsePlayer(html, p, t) {
   const boCol = findCol(h, ["bo", "board", "ban"]);
   const rating = findCol(h, ["rtg", "rating"]);
   const res = findCol(h, ["res", "result"]);
+  const colorCol = findCol(h, ["wb", "w/b", "color", "mau", "mauquan"]);
   const rounds = [];
   for (const r of rows.slice(hi + 1)) {
     const rd = num(r[ri]?.text || "");
     if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
     const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
     let raw = r.slice(res).map((c) => c.text).join(" ").trim();
-    const colorCell = r.find((c) => /^[wb]$/i.test(c.text));
-    const color = colorCell?.text.toLowerCase() === "w" ? "white" : colorCell?.text.toLowerCase() === "b" ? "black" : null;
+    let colorStr = colorCol >= 0 ? r[colorCol]?.text || "" : "";
+    if (!colorStr) {
+      const colorCell = r.find((c) => /^[wb]$/i.test(c.text) || /\b(w|b)\b/i.test(c.text));
+      colorStr = colorCell?.text || "";
+    }
+    const isWhite = /w|white|trắng/i.test(colorStr);
+    const isBlack = /b|black|đen/i.test(colorStr);
+    const color = isWhite ? "white" : isBlack ? "black" : null;
     raw = raw.replace(/\b[wb]\b/ig, "").trim();
     const opponent = r[ni].text;
     const snr = r[ni].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
@@ -363,8 +370,18 @@ function parsePlayer(html, p, t) {
     }
     if (rounds.some((x) => x.round === rd)) continue;
     const resFmt = score === 1 ? "1 - 0" : score === 0.5 ? "\xBD - \xBD" : score === 0 ? "0 - 1" : raw || "\u2014";
-    const playerWhite = color === "white" ? p.name : opponent;
-    const playerBlack = color === "black" ? p.name : opponent;
+    let playerWhite;
+    let playerBlack;
+    if (status === "bye" || /bye|not paired|unpaired|spielfrei/i.test(opponent)) {
+      playerWhite = p.name;
+      playerBlack = "Mi\u1EC5n \u0111\u1EA5u (Bye)";
+    } else if (color === "black") {
+      playerWhite = opponent;
+      playerBlack = p.name;
+    } else {
+      playerWhite = p.name;
+      playerBlack = opponent;
+    }
     rounds.push({
       round: rd,
       board: bo,

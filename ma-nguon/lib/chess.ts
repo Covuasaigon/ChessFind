@@ -56,6 +56,7 @@ export type TournamentInfo = {
   instructions?: string;
   location?: string;
   time?: string;
+  banner_url?: string;
 };
 
 export type PrizeRule = {
