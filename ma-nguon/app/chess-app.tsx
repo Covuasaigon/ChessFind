@@ -270,34 +270,44 @@ export default function ChessApp() {
 
               <div className="dashboard-grid">
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Thứ hạng hiện tại</span>
-                  <span className="dash-stat-val">Hạng {currentRank ? currentRank : '—'} / {totalCount} kỳ thủ</span>
+                  <span className="dash-stat-label">🏆 Hạng hiện tại</span>
+                  <span className="dash-stat-val">{currentRank ? `${currentRank} / ${totalCount}` : '—'}</span>
                   <span className="dash-stat-sub">trên tổng số kỳ thủ bảng đấu</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Tổng điểm số</span>
+                  <span className="dash-stat-label">🎯 Tổng điểm số</span>
                   <span className="dash-stat-val">{fmt(player.points)} điểm</span>
                   <span className="dash-stat-sub">tích lũy qua các vòng</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Số ván thực đấu</span>
+                  <span className="dash-stat-label">⚔️ Số ván thực đấu</span>
                   <span className="dash-stat-val">{s.played} ván</span>
                   <span className="dash-stat-sub">Thắng {s.wins} · Hòa {s.draws} · Thua {s.losses}</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Số ván Trắng / Đen</span>
-                  <span className="dash-stat-val">♙ {s.white} W / ♟ {s.black} B</span>
-                  <span className="dash-stat-sub">thống kê màu quân thực đấu</span>
+                  <span className="dash-stat-label">⚪ Cầm Trắng</span>
+                  <span className="dash-stat-val">{s.white} ván</span>
+                  <span className="dash-stat-sub">W {s.whiteWins} · D {s.whiteDraws} · L {s.whiteLosses}</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Buchholz (BH)</span>
-                  <span className="dash-stat-val">{fmt(player.buchholz ?? player.ties['BH'] ?? player.ties['Buchholz'])}</span>
-                  <span className="dash-stat-sub">hệ số Buchholz</span>
+                  <span className="dash-stat-label">⚫ Cầm Đen</span>
+                  <span className="dash-stat-val">{s.black} ván</span>
+                  <span className="dash-stat-sub">W {s.blackWins} · D {s.blackDraws} · L {s.blackLosses}</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Sonneborn Berger (SB)</span>
-                  <span className="dash-stat-val">{fmt(player.sonnebornBerger ?? player.ties['SB'])}</span>
-                  <span className="dash-stat-sub">hệ số SB / Rp: {fmt(player.performance ?? player.ties['Rp'])}</span>
+                  <span className="dash-stat-label">📈 Tỷ lệ thắng (Win rate)</span>
+                  <span className="dash-stat-val">{s.winRate !== null ? `${s.winRate}%` : '—'}</span>
+                  <span className="dash-stat-sub">hiệu suất tổng thể</span>
+                </div>
+                <div className="dash-stat">
+                  <span className="dash-stat-label">🥇 Dự đoán giải thưởng</span>
+                  <span className="dash-stat-val">{medal ? `${medal.medal} ${medal.label}` : '—'}</span>
+                  <span className="dash-stat-sub">theo cơ cấu giải</span>
+                </div>
+                <div className="dash-stat">
+                  <span className="dash-stat-label">📊 Hệ số Buchholz / SB</span>
+                  <span className="dash-stat-val">{fmt(player.buchholz ?? player.ties['BH'] ?? player.ties['Buchholz'])} / {fmt(player.sonnebornBerger ?? player.ties['SB'])}</span>
+                  <span className="dash-stat-sub">Rp: {fmt(player.performance ?? player.ties['Rp']) || '—'}</span>
                 </div>
               </div>
 
@@ -472,26 +482,56 @@ function TournamentCard({ t, onOpen }: { t: Tournament; onOpen: () => void }) {
 
 function Statistics({ p }: { p: Player }) {
   const s = stats(p);
-  return <section className="statistics">
-    <h2>Thống kê thi đấu</h2>
-    <div className="stat-grid">
-      {[{ icon: <LayoutDashboard />, label: 'Số ván', n: s.played, c: 'blue' },
-      { icon: <Check />, label: 'Thắng', n: s.wins, c: 'green' },
-      { icon: <Minus />, label: 'Hòa', n: s.draws, c: 'amber' },
-      { icon: <X />, label: 'Thua', n: s.losses, c: 'red' }].map(x =>
-        <div className="stat-card" key={x.label}>
-          <span className={'stat-icon ' + x.c}>{x.icon}</span>
-          <span>{x.label}</span>
-          <b>{p.detailsLoaded ? x.n : '—'}</b>
+  return (
+    <section className="statistics" style={{ background: '#FFFFFF', padding: 20, borderRadius: 16, border: '1px solid #E2E8F0', marginTop: 16 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <BarChart3 size={18} style={{ color: '#145DA0' }} /> Thống kê thi đấu chi tiết
+      </h2>
+      <div className="stat-grid">
+        {[{ icon: <LayoutDashboard />, label: 'Số ván', n: s.played, c: 'blue' },
+        { icon: <Check />, label: 'Thắng', n: s.wins, c: 'green' },
+        { icon: <Minus />, label: 'Hòa', n: s.draws, c: 'amber' },
+        { icon: <X />, label: 'Thua', n: s.losses, c: 'red' }].map(x =>
+          <div className="stat-card" key={x.label}>
+            <span className={'stat-icon ' + x.c}>{x.icon}</span>
+            <span>{x.label}</span>
+            <b>{p.detailsLoaded ? x.n : '—'}</b>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 16, background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #CBD5E1' }}>
+        <h3 style={{ fontSize: 13, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          THỐNG KÊ MÀU QUÂN
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: '#062B4F' }}>⚪ Cầm Trắng</span>
+              <strong style={{ fontSize: 16, fontWeight: 800, color: '#145DA0' }}>{p.detailsLoaded ? `${s.white} ván` : '—'}</strong>
+            </div>
+            <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: '#475569', paddingTop: 6, borderTop: '1px dashed #E2E8F0' }}>
+              <span style={{ color: '#166534' }}>Thắng: <b>{s.whiteWins}</b></span>
+              <span style={{ color: '#854D0E' }}>Hòa: <b>{s.whiteDraws}</b></span>
+              <span style={{ color: '#991B1B' }}>Thua: <b>{s.whiteLosses}</b></span>
+            </div>
+          </div>
+
+          <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: '#062B4F' }}>⚫ Cầm Đen</span>
+              <strong style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>{p.detailsLoaded ? `${s.black} ván` : '—'}</strong>
+            </div>
+            <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: '#475569', paddingTop: 6, borderTop: '1px dashed #E2E8F0' }}>
+              <span style={{ color: '#166534' }}>Thắng: <b>{s.blackWins}</b></span>
+              <span style={{ color: '#854D0E' }}>Hòa: <b>{s.blackDraws}</b></span>
+              <span style={{ color: '#991B1B' }}>Thua: <b>{s.blackLosses}</b></span>
+            </div>
+          </div>
         </div>
-      )}
-    </div>
-    <div className="mini-stats">
-      <span>♙ Cầm Trắng <b>{p.detailsLoaded ? s.white : '—'}</b></span>
-      <span>♟ Cầm Đen <b>{p.detailsLoaded ? s.black : '—'}</b></span>
-      <span><BarChart3 size={17} /> Tỷ lệ thắng <b>{p.detailsLoaded && s.winRate !== null ? fmt(Math.round(s.winRate * 10) / 10) + '%' : '—'}</b></span>
-    </div>
-  </section>
+      </div>
+    </section>
+  );
 }
 
 function PlayerCharts({ p }: { p: Player }) {
@@ -569,31 +609,43 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
       <div className={'round-list ' + (compact ? 'compact' : '')}>
         <div className="round-head"><span>Vòng & Bàn</span><span>Màu quân</span><span>Đối thủ / Trắng vs Đen</span><span>Kết quả ván</span></div>
         {p.rounds.map(r => {
-          const isWhite = r.color === 'white';
-          const isBlack = r.color === 'black';
-          const wName = isWhite ? p.name : (r.playerWhite && r.playerWhite !== p.name ? r.playerWhite : r.opponent);
+          const isWhite = r.color === 'white' || (r.playerWhite && r.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
+          const isBlack = r.color === 'black' || (r.playerBlack && r.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase());
+
+          let wName = isWhite ? p.name : (r.playerWhite && r.playerWhite !== p.name ? r.playerWhite : r.opponent);
           let bName = isBlack ? p.name : (r.playerBlack && r.playerBlack !== p.name ? r.playerBlack : r.opponent);
           if (wName && bName && wName.trim() === bName.trim()) {
             bName = isWhite ? (r.opponent || 'Đối thủ') : p.name;
           }
 
+          let resClass = 'pending';
+          let resText = '—';
+          if (r.status === 'played') {
+            if (r.score === 1) { resClass = 'win'; resText = 'WIN 1 - 0'; }
+            else if (r.score === 0.5) { resClass = 'draw'; resText = 'DRAW 0.5 - 0.5'; }
+            else if (r.score === 0) { resClass = 'loss'; resText = 'LOSS 0 - 1'; }
+          } else if (r.status === 'bye') {
+            resClass = 'win'; resText = 'BYE 1 - 0';
+          } else if (r.status === 'forfeit') {
+            resClass = r.score === 1 ? 'win' : 'loss'; resText = r.score === 1 ? 'WIN 1 - 0' : 'LOSS 0 - 1';
+          }
+
           return (
             <div className="round-row" key={r.round}>
               <span className="round-num">Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
-              <span className={'piece ' + (r.color || '')} title={r.color === 'white' ? 'Cầm quân Trắng' : r.color === 'black' ? 'Cầm quân Đen' : 'Chưa có màu quân'}>
-                {r.color === 'white' ? '♙ Trắng' : r.color === 'black' ? '♟ Đen' : '—'}
+              <span className={'piece ' + (isWhite ? 'white' : isBlack ? 'black' : '')} title={isWhite ? 'Cầm quân Trắng' : isBlack ? 'Cầm quân Đen' : 'Chưa có màu quân'}>
+                {isWhite ? '♙ Trắng' : isBlack ? '♟ Đen' : '—'}
               </span>
               <div className="opponent">
                 {r.opponentId ? <button onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button> : <strong>{r.opponent || 'Chưa có đối thủ'}</strong>}
                 <small style={{ color: '#657b96' }}>
-                  {wName && bName ? `${wName} (Trắng) vs ${bName} (Đen)` : ''}
+                  {wName && bName ? `⚪ ${wName} vs ⚫ ${bName}` : ''}
                   {r.rating ? ` · Elo ${r.rating}` : r.status === 'bye' ? 'Miễn đấu' : ''}
                 </small>
               </div>
-              <span className={'round-result ' + (r.status === 'played' ? (r.score === 1 ? 'win' : r.score === 0 ? 'loss' : 'draw') : 'pending')}>
-                <b>{r.score === null ? '—' : (r.score === 1 ? 'Thắng (1 - 0)' : r.score === 0.5 ? 'Hòa (½ - ½)' : 'Thua (0 - 1)')}</b>
-                <small>{r.status === 'played' ? (r.score === 1 ? 'Thắng' : r.score === 0 ? 'Thua' : 'Hòa') : r.status === 'bye' ? 'Bye (Miễn đấu)' : r.status === 'forfeit' ? 'Xử thắng/thua' : r.status === 'pending' ? 'Chờ kết quả' : 'Chưa rõ'}</small>
-              </span>
+              <div className="round-result">
+                <span className={`result-badge ${resClass}`}>{resText}</span>
+              </div>
             </div>
           );
         })}
@@ -601,40 +653,64 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
 
       <div className="mobile-match-cards">
         {p.rounds.map(r => {
-          const isWhite = r.color === 'white';
-          const isBlack = r.color === 'black';
-          const whiteName = isWhite ? p.name : (r.playerWhite && r.playerWhite !== p.name ? r.playerWhite : r.opponent);
+          const isWhite = r.color === 'white' || (r.playerWhite && r.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
+          const isBlack = r.color === 'black' || (r.playerBlack && r.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase());
+
+          let whiteName = isWhite ? p.name : (r.playerWhite && r.playerWhite !== p.name ? r.playerWhite : r.opponent);
           let blackName = isBlack ? p.name : (r.playerBlack && r.playerBlack !== p.name ? r.playerBlack : r.opponent);
           if (whiteName && blackName && whiteName.trim() === blackName.trim()) {
             blackName = isWhite ? (r.opponent || 'Đối thủ') : p.name;
           }
-          const whiteClub = isWhite ? (p.club || 'Chưa rõ CLB') : 'Đối thủ';
-          const blackClub = isBlack ? (p.club || 'Chưa rõ CLB') : 'Đối thủ';
+
+          let resClass = 'pending';
+          let resText = '—';
+          if (r.status === 'played') {
+            if (r.score === 1) { resClass = 'win'; resText = 'WIN 1 - 0'; }
+            else if (r.score === 0.5) { resClass = 'draw'; resText = 'DRAW 0.5 - 0.5'; }
+            else if (r.score === 0) { resClass = 'loss'; resText = 'LOSS 0 - 1'; }
+          } else if (r.status === 'bye') {
+            resClass = 'win'; resText = 'BYE 1 - 0';
+          } else if (r.status === 'forfeit') {
+            resClass = r.score === 1 ? 'win' : 'loss'; resText = r.score === 1 ? 'WIN 1 - 0' : 'LOSS 0 - 1';
+          }
 
           return (
-            <div className="mobile-match-card" key={r.round}>
-              <div className="match-card-header">
-                <span className="match-card-round">Vòng {r.round}</span>
-                <span className="match-card-board">{r.board ? `Bàn số ${r.board}` : 'Bàn —'}</span>
+            <div className="mobile-match-card" key={r.round} style={{ background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', padding: 14, marginBottom: 12, boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
+              <div className="match-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #F1F5F9' }}>
+                <span className="match-card-round" style={{ fontSize: 13, fontWeight: 800, color: '#062B4F' }}>Ván {r.round}</span>
+                <span className="match-card-board" style={{ fontSize: 12, fontWeight: 700, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: 6 }}>
+                  {r.board ? `Bàn số ${r.board}` : 'Bàn —'}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: isWhite ? '#1E40AF' : '#0F172A', background: isWhite ? '#EFF6FF' : '#F1F5F9', padding: '2px 8px', borderRadius: 6 }}>
+                  {isWhite ? '⚪ Trắng' : isBlack ? '⚫ Đen' : '—'}
+                </span>
               </div>
-              <div className="match-vs-box">
-                <div className="match-player-side">
-                  <span className="match-player-name">♙ {whiteName}</span>
-                  <span className="match-player-club">{whiteClub}</span>
-                </div>
-                <span className="match-vs-badge">VS</span>
-                <div className="match-player-side right">
-                  <span className="match-player-name">♟ {blackName}</span>
-                  <span className="match-player-club">{blackClub}</span>
+
+              <div className="match-vs-box" style={{ background: '#F8FAFC', padding: 10, borderRadius: 10, border: '1px solid #E2E8F0', marginBottom: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, fontWeight: isWhite ? 800 : 600, color: isWhite ? '#062B4F' : '#334155' }}>
+                    <span>⚪ {whiteName}</span>
+                    <span style={{ fontSize: 11, color: '#64748B' }}>{isWhite ? 'Trắng' : 'Đối thủ'}</span>
+                  </div>
+                  <div style={{ textAlign: 'center', fontSize: 10, fontWeight: 800, color: '#94A3B8', margin: '2px 0' }}>VS</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, fontWeight: isBlack ? 800 : 600, color: isBlack ? '#062B4F' : '#334155' }}>
+                    <span>⚫ {blackName}</span>
+                    <span style={{ fontSize: 11, color: '#64748B' }}>{isBlack ? 'Đen' : 'Đối thủ'}</span>
+                  </div>
                 </div>
               </div>
-              <div className="match-card-footer">
+
+              <div className="match-card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="subtle" style={{ fontSize: 12 }}>
-                  {r.opponentId ? <button style={{ background: 'none', border: 0, padding: 0, color: '#145DA0', fontWeight: 700, cursor: 'pointer' }} onClick={() => onOpponent(r.opponentId!)}>Hồ sơ đối thủ ➔</button> : (r.opponent || 'Chưa có đối thủ')}
+                  {r.opponentId ? (
+                    <button style={{ background: 'none', border: 0, padding: 0, color: '#145DA0', fontWeight: 700, cursor: 'pointer' }} onClick={() => onOpponent(r.opponentId!)}>
+                      Hồ sơ đối thủ ➔
+                    </button>
+                  ) : (
+                    <span style={{ color: '#64748B' }}>{r.opponent || 'Chưa có đối thủ'}</span>
+                  )}
                 </span>
-                <span className={'round-result ' + (r.status === 'played' ? (r.score === 1 ? 'win' : r.score === 0 ? 'loss' : 'draw') : 'pending')}>
-                  <b>{r.score === null ? '—' : (r.score === 1 ? '1 - 0' : r.score === 0.5 ? '½ - ½' : '0 - 1')}</b>
-                </span>
+                <span className={`result-badge ${resClass}`}>{resText}</span>
               </div>
             </div>
           );

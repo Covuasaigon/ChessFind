@@ -1834,16 +1834,60 @@ svg {
   text-align: right;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
 }
 
 .round-result b {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .round-result small {
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Dedicated Result Badge Styling */
+.result-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  white-space: nowrap;
+  min-width: 94px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  line-height: 1.2;
+}
+
+.result-badge.win {
+  background: #E6F4EA;
+  color: #137333;
+  border: 1px solid #CEEAD6;
+}
+
+.result-badge.loss {
+  background: #FCE8E6;
+  color: #C5221F;
+  border: 1px solid #FAD2CF;
+}
+
+.result-badge.draw {
+  background: #FEF7E0;
+  color: #B06000;
+  border: 1px solid #FEEFC3;
+}
+
+.result-badge.pending {
+  background: #F1F3F4;
+  color: #5F6368;
+  border: 1px solid #E8EAED;
 }
 
 .win { color: #169b62; }

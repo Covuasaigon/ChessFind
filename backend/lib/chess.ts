@@ -142,13 +142,46 @@ export function formatClubName(club: string | null | undefined): string {
 }
 
 export function stats(p: Player) {
-  const allCompleted = p.rounds.filter(x => x.status !== 'pending' && x.status !== 'unknown');
-  const r = p.rounds.filter(x => x.status === 'played' && x.score !== null);
-  const wins = p.rounds.filter(x => x.score === 1).length;
-  const draws = p.rounds.filter(x => x.score === 0.5).length;
-  const losses = p.rounds.filter(x => x.score === 0).length;
-  const white = p.rounds.filter(x => x.color === 'white').length;
-  const black = p.rounds.filter(x => x.color === 'black').length;
+  const rounds = p.rounds || [];
+  const allCompleted = rounds.filter(x => x.status !== 'pending' && x.status !== 'unknown');
+  const r = rounds.filter(x => x.status === 'played' && x.score !== null);
+  const wins = rounds.filter(x => x.score === 1).length;
+  const draws = rounds.filter(x => x.score === 0.5).length;
+  const losses = rounds.filter(x => x.score === 0).length;
+
+  let white = 0;
+  let whiteWins = 0;
+  let whiteDraws = 0;
+  let whiteLosses = 0;
+
+  let black = 0;
+  let blackWins = 0;
+  let blackDraws = 0;
+  let blackLosses = 0;
+
+  for (const rd of rounds) {
+    let isW = rd.color === 'white';
+    let isB = rd.color === 'black';
+
+    if (!isW && !isB && p.name) {
+      const pNameNorm = p.name.trim().toLowerCase();
+      if (rd.playerWhite && rd.playerWhite.trim().toLowerCase() === pNameNorm) isW = true;
+      else if (rd.playerBlack && rd.playerBlack.trim().toLowerCase() === pNameNorm) isB = true;
+    }
+
+    if (isW) {
+      white++;
+      if (rd.score === 1) whiteWins++;
+      else if (rd.score === 0.5) whiteDraws++;
+      else if (rd.score === 0) whiteLosses++;
+    } else if (isB) {
+      black++;
+      if (rd.score === 1) blackWins++;
+      else if (rd.score === 0.5) blackDraws++;
+      else if (rd.score === 0) blackLosses++;
+    }
+  }
+
   const totalPlayed = allCompleted.length > 0 ? allCompleted.length : r.length;
 
   return {
@@ -157,10 +190,16 @@ export function stats(p: Player) {
     draws,
     losses,
     white,
+    whiteWins,
+    whiteDraws,
+    whiteLosses,
     black,
-    unknown: r.filter(x => x.color === null).length,
-    special: p.rounds.filter(x => ['bye', 'forfeit'].includes(x.status)).length,
-    winRate: totalPlayed > 0 ? (wins / totalPlayed) * 100 : null
+    blackWins,
+    blackDraws,
+    blackLosses,
+    unknown: rounds.filter(x => x.color === null && x.status === 'played').length,
+    special: rounds.filter(x => ['bye', 'forfeit'].includes(x.status)).length,
+    winRate: totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : null
   };
 }
 
