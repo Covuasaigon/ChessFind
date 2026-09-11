@@ -244,6 +244,9 @@ export default function Admin({ onChanged }: AdminProps) {
           if (d.token && typeof window !== 'undefined') {
             localStorage.setItem('admin_token', d.token);
           }
+          if (d.csrf) {
+            setState(prev => ({ ...(prev || {}), admin: true, csrf: d.csrf }));
+          }
           setPassword('');
           if (typeof window !== 'undefined' && location.pathname !== '/admin') {
             history.pushState({}, '', '/admin');

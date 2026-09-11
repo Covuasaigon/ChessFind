@@ -131,11 +131,25 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       const allowedOrigins = new Set([
         u.origin,
         process.env.FRONTEND_URL,
+        process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : '',
         process.env.PUBLIC_ORIGIN,
-        process.env.API_URL
+        process.env.API_URL,
+        'https://chess-find-m38a.vercel.app',
+        'https://co-vua-sai-gon.vercel.app',
+        'http://localhost:5173',
+        'http://localhost:3000'
       ].filter(Boolean));
 
-      if (reqOrigin && !allowedOrigins.has(reqOrigin) && process.env.NODE_ENV === 'production') {
+      const isAllowedOrigin = (orig: string | null) => {
+        if (!orig) return true;
+        const cleanOrig = orig.replace(/\/$/, '');
+        if (allowedOrigins.has(orig) || allowedOrigins.has(cleanOrig)) return true;
+        if (cleanOrig.endsWith('.vercel.app')) return true;
+        if (cleanOrig.includes('localhost') || cleanOrig.includes('127.0.0.1')) return true;
+        return false;
+      };
+
+      if (reqOrigin && !isAllowedOrigin(reqOrigin) && process.env.NODE_ENV === 'production') {
         return json({ error: 'Yêu cầu không hợp lệ. Hãy thao tác trong ứng dụng.' }, 403);
       }
 

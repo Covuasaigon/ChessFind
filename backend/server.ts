@@ -36,19 +36,23 @@ const types: Record<string, string> = {
 function getCorsHeaders(reqOrigin?: string | null): Record<string, string> {
   const allowedOrigins = [
     process.env.FRONTEND_URL,
+    process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : null,
     process.env.PUBLIC_ORIGIN,
     process.env.API_URL,
     'https://chess-find-m38a.vercel.app',
+    'https://co-vua-sai-gon.vercel.app',
     'http://localhost:5173',
     'http://localhost:3000'
   ].filter(Boolean) as string[];
 
   let allowOrigin = reqOrigin || process.env.FRONTEND_URL || 'https://chess-find-m38a.vercel.app';
   if (reqOrigin) {
+    const cleanOrigin = reqOrigin.replace(/\/$/, '');
     if (
       allowedOrigins.includes(reqOrigin) ||
-      reqOrigin.endsWith('.vercel.app') ||
-      reqOrigin.includes('localhost') ||
+      allowedOrigins.includes(cleanOrigin) ||
+      cleanOrigin.endsWith('.vercel.app') ||
+      cleanOrigin.includes('localhost') ||
       process.env.NODE_ENV !== 'production'
     ) {
       allowOrigin = reqOrigin;

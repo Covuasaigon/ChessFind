@@ -468,10 +468,23 @@ function createApi(db2, sourceParam = {}) {
       const allowedOrigins = new Set([
         u.origin,
         process.env.FRONTEND_URL,
+        process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : "",
         process.env.PUBLIC_ORIGIN,
-        process.env.API_URL
+        process.env.API_URL,
+        "https://chess-find-m38a.vercel.app",
+        "https://co-vua-sai-gon.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:3000"
       ].filter(Boolean));
-      if (reqOrigin && !allowedOrigins.has(reqOrigin) && process.env.NODE_ENV === "production") {
+      const isAllowedOrigin = (orig) => {
+        if (!orig) return true;
+        const cleanOrig = orig.replace(/\/$/, "");
+        if (allowedOrigins.has(orig) || allowedOrigins.has(cleanOrig)) return true;
+        if (cleanOrig.endsWith(".vercel.app")) return true;
+        if (cleanOrig.includes("localhost") || cleanOrig.includes("127.0.0.1")) return true;
+        return false;
+      };
+      if (reqOrigin && !isAllowedOrigin(reqOrigin) && process.env.NODE_ENV === "production") {
         return json({ error: "Y\xEAu c\u1EA7u kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y thao t\xE1c trong \u1EE9ng d\u1EE5ng." }, 403);
       }
       if (path === "/api/admin/upload-image") {
@@ -945,15 +958,18 @@ var types = {
 function getCorsHeaders(reqOrigin) {
   const allowedOrigins = [
     process.env.FRONTEND_URL,
+    process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : null,
     process.env.PUBLIC_ORIGIN,
     process.env.API_URL,
     "https://chess-find-m38a.vercel.app",
+    "https://co-vua-sai-gon.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000"
   ].filter(Boolean);
   let allowOrigin = reqOrigin || process.env.FRONTEND_URL || "https://chess-find-m38a.vercel.app";
   if (reqOrigin) {
-    if (allowedOrigins.includes(reqOrigin) || reqOrigin.endsWith(".vercel.app") || reqOrigin.includes("localhost") || process.env.NODE_ENV !== "production") {
+    const cleanOrigin = reqOrigin.replace(/\/$/, "");
+    if (allowedOrigins.includes(reqOrigin) || allowedOrigins.includes(cleanOrigin) || cleanOrigin.endsWith(".vercel.app") || cleanOrigin.includes("localhost") || process.env.NODE_ENV !== "production") {
       allowOrigin = reqOrigin;
     }
   }
