@@ -244,107 +244,198 @@ export default function ChessApp() {
           const totalCount = player.totalPlayers || (current?.players ? current.players.length : 0);
           const medal = getMedal(currentRank, player.ageGroup || current.group, current.prizes);
 
+          let isNextWhite = false;
+          let isNextBlack = false;
+          if (next) {
+            if (next.color === 'white') isNextWhite = true;
+            else if (next.color === 'black') isNextBlack = true;
+            else if (next.playerWhite && next.playerWhite.trim().toLowerCase() === player.name.trim().toLowerCase()) isNextWhite = true;
+            else if (next.playerBlack && next.playerBlack.trim().toLowerCase() === player.name.trim().toLowerCase()) isNextBlack = true;
+          }
+
+          const nextWhiteName = next ? (isNextWhite ? player.name : (next.playerWhite && next.playerWhite !== player.name ? next.playerWhite : next.opponent)) : '';
+          let nextBlackName = next ? (isNextBlack ? player.name : (next.playerBlack && next.playerBlack !== player.name ? next.playerBlack : next.opponent)) : '';
+          if (nextWhiteName && nextBlackName && nextWhiteName.trim() === nextBlackName.trim()) {
+            nextBlackName = isNextWhite ? (next?.opponent || 'Đối thủ') : player.name;
+          }
+
           return (
-            <div className="player-dashboard-card" style={{ marginTop: 16 }}>
-              <div className="dashboard-header-row">
-                <div className="dashboard-title-box">
-                  <span style={{ fontSize: 28 }} title={medal ? medal.label : 'Dự kiến kết quả'}>{medal ? medal.medal : '♟'}</span>
-                  <div>
-                    <h2>Hồ sơ kỳ thủ · {player.name}</h2>
-                    <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 600 }}>
-                      SBD: <b>{player.snr}</b> · Bảng: <b>{player.ageGroup || current.group}</b> · Dự kiến: <b>{medal ? medal.label : 'Chưa có giải thưởng'}</b>
+            <>
+              {/* 2. XẾP HẠNG & KPI DASHBOARD CARD */}
+              <div className="player-dashboard-card" style={{ marginTop: 16 }}>
+                <div className="dashboard-header-row">
+                  <div className="dashboard-title-box">
+                    <span style={{ fontSize: 28 }} title={medal ? medal.label : 'Dự kiến kết quả'}>{medal ? medal.medal : '♟'}</span>
+                    <div>
+                      <h2>Hồ sơ kỳ thủ · {player.name}</h2>
+                      <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 600 }}>
+                        SBD: <b>{player.snr}</b> · Bảng: <b>{player.ageGroup || current.group}</b> · Dự kiến: <b>{medal ? medal.label : 'Chưa có giải thưởng'}</b>
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {medal && (
+                      <span className="soft-badge" style={{ background: 'rgba(212, 175, 55, 0.25)', color: '#D4AF37', border: '1px solid rgba(212, 175, 55, 0.4)', fontWeight: 800 }}>
+                        {medal.medal} {medal.label}
+                      </span>
+                    )}
+                    <span className="soft-badge" style={{ background: 'rgba(20, 93, 160, 0.15)', color: '#145DA0', border: '1px solid rgba(20, 93, 160, 0.3)', fontWeight: 700 }}>
+                      CLB/Tỉnh: {player.club || formatClubName(player.federation || '')}
                     </span>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {medal && (
-                    <span className="soft-badge" style={{ background: 'rgba(212, 175, 55, 0.25)', color: '#D4AF37', border: '1px solid rgba(212, 175, 55, 0.4)', fontWeight: 800 }}>
-                      {medal.medal} {medal.label}
+
+                <div className="dashboard-grid">
+                  <div className="dash-stat">
+                    <span className="dash-stat-label">🏆 Hạng hiện tại</span>
+                    <span className="dash-stat-val">{currentRank ? `${currentRank} / ${totalCount}` : '—'}</span>
+                    <span className="dash-stat-sub">trên tổng số kỳ thủ bảng đấu</span>
+                  </div>
+                  <div className="dash-stat">
+                    <span className="dash-stat-label">🎯 Tổng điểm số</span>
+                    <span className="dash-stat-val">{fmt(player.points)} điểm</span>
+                    <span className="dash-stat-sub">tích lũy qua các vòng</span>
+                  </div>
+                  <div className="dash-stat">
+                    <span className="dash-stat-label">⚔️ Số ván thực đấu</span>
+                    <span className="dash-stat-val">{s.played} ván</span>
+                    <span className="dash-stat-sub">Thắng {s.wins} · Hòa {s.draws} · Thua {s.losses}</span>
+                  </div>
+                  <div className="dash-stat">
+                    <span className="dash-stat-label">⚪ Cầm Trắng</span>
+                    <span className="dash-stat-val">{s.white} ván</span>
+                    <span className="dash-stat-sub">W {s.whiteWins} · D {s.whiteDraws} · L {s.whiteLosses}</span>
+                  </div>
+                  <div className="dash-stat">
+                    <span className="dash-stat-label">⚫ Cầm Đen</span>
+                    <span className="dash-stat-val">{s.black} ván</span>
+                    <span className="dash-stat-sub">W {s.blackWins} · D {s.blackDraws} · L {s.blackLosses}</span>
+                  </div>
+                  <div className="dash-stat">
+                    <span className="dash-stat-label">📈 Tỷ lệ thắng (Win rate)</span>
+                    <span className="dash-stat-val">{s.winRate !== null ? `${s.winRate}%` : '—'}</span>
+                    <span className="dash-stat-sub">hiệu suất tổng thể</span>
+                  </div>
+                  <div className="dash-stat">
+                    <span className="dash-stat-label">🥇 Dự đoán giải thưởng</span>
+                    <span className="dash-stat-val">{medal ? `${medal.medal} ${medal.label}` : 'Chưa đạt huy chương'}</span>
+                    <span className="dash-stat-sub">theo cơ cấu giải</span>
+                  </div>
+                  <div className="dash-stat">
+                    <span className="dash-stat-label">📊 Hệ số Buchholz / SB</span>
+                    <span className="dash-stat-val">{fmt(player.buchholz ?? player.ties['BH'] ?? player.ties['Buchholz'])} / {fmt(player.sonnebornBerger ?? player.ties['SB'])}</span>
+                    <span className="dash-stat-sub">Rp: {fmt(player.performance ?? player.ties['Rp']) || '—'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. PHẦN 1: VÁN TIẾP THEO HIGHLIGHT CARD */}
+              <div className="next-match-card-highlight" style={{ background: 'linear-gradient(135deg, #062B4F 0%, #0F3C6E 100%)', borderRadius: 16, padding: 18, color: '#FFFFFF', marginTop: 16, boxShadow: '0 4px 20px rgba(6,43,79,0.15)', border: '1px solid #1E4D80' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#F4C542', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Clock size={16} /> ♟ VÁN TIẾP THEO
+                  </span>
+                  {next ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,0.15)', padding: '4px 12px', borderRadius: 20 }}>
+                      Trạng thái: <b>Đang chờ thi đấu</b>
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(34,197,94,0.2)', color: '#4ADE80', padding: '4px 12px', borderRadius: 20, border: '1px solid rgba(34,197,94,0.3)' }}>
+                      ✓ Đã hoàn thành tất cả các ván đấu
                     </span>
                   )}
-                  <span className="soft-badge" style={{ background: 'rgba(20, 93, 160, 0.15)', color: '#145DA0', border: '1px solid rgba(20, 93, 160, 0.3)', fontWeight: 700 }}>
-                    CLB/Tỉnh: {player.club || formatClubName(player.federation || '')}
-                  </span>
                 </div>
-              </div>
 
-              <div className="dashboard-grid">
-                <div className="dash-stat">
-                  <span className="dash-stat-label">🏆 Hạng hiện tại</span>
-                  <span className="dash-stat-val">{currentRank ? `${currentRank} / ${totalCount}` : '—'}</span>
-                  <span className="dash-stat-sub">trên tổng số kỳ thủ bảng đấu</span>
-                </div>
-                <div className="dash-stat">
-                  <span className="dash-stat-label">🎯 Tổng điểm số</span>
-                  <span className="dash-stat-val">{fmt(player.points)} điểm</span>
-                  <span className="dash-stat-sub">tích lũy qua các vòng</span>
-                </div>
-                <div className="dash-stat">
-                  <span className="dash-stat-label">⚔️ Số ván thực đấu</span>
-                  <span className="dash-stat-val">{s.played} ván</span>
-                  <span className="dash-stat-sub">Thắng {s.wins} · Hòa {s.draws} · Thua {s.losses}</span>
-                </div>
-                <div className="dash-stat">
-                  <span className="dash-stat-label">⚪ Cầm Trắng</span>
-                  <span className="dash-stat-val">{s.white} ván</span>
-                  <span className="dash-stat-sub">W {s.whiteWins} · D {s.whiteDraws} · L {s.whiteLosses}</span>
-                </div>
-                <div className="dash-stat">
-                  <span className="dash-stat-label">⚫ Cầm Đen</span>
-                  <span className="dash-stat-val">{s.black} ván</span>
-                  <span className="dash-stat-sub">W {s.blackWins} · D {s.blackDraws} · L {s.blackLosses}</span>
-                </div>
-                <div className="dash-stat">
-                  <span className="dash-stat-label">📈 Tỷ lệ thắng (Win rate)</span>
-                  <span className="dash-stat-val">{s.winRate !== null ? `${s.winRate}%` : '—'}</span>
-                  <span className="dash-stat-sub">hiệu suất tổng thể</span>
-                </div>
-                <div className="dash-stat">
-                  <span className="dash-stat-label">🥇 Dự đoán giải thưởng</span>
-                  <span className="dash-stat-val">{medal ? `${medal.medal} ${medal.label}` : '—'}</span>
-                  <span className="dash-stat-sub">theo cơ cấu giải</span>
-                </div>
-                <div className="dash-stat">
-                  <span className="dash-stat-label">📊 Hệ số Buchholz / SB</span>
-                  <span className="dash-stat-val">{fmt(player.buchholz ?? player.ties['BH'] ?? player.ties['Buchholz'])} / {fmt(player.sonnebornBerger ?? player.ties['SB'])}</span>
-                  <span className="dash-stat-sub">Rp: {fmt(player.performance ?? player.ties['Rp']) || '—'}</span>
-                </div>
-              </div>
+                {next ? (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <span style={{ fontSize: 14, fontWeight: 800, background: '#D4AF37', color: '#062B4F', padding: '4px 10px', borderRadius: 8 }}>
+                        Vòng {next.round}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 8 }}>
+                        Bàn số: {next.board ? `#${next.board}` : 'Chưa xếp'}
+                      </span>
+                      <span className={isNextWhite ? 'white-piece' : isNextBlack ? 'black-piece' : 'subtle'} style={{ fontSize: 13, fontWeight: 700 }}>
+                        {isNextWhite ? '⚪ Bạn cầm quân Trắng' : isNextBlack ? '⚫ Bạn cầm quân Đen' : 'Màu quân: Chưa rõ'}
+                      </span>
+                    </div>
 
-              <div className="next-match-banner">
-                <div className="next-match-info">
-                  <span className="next-match-tag">
-                    <Clock size={12} /> {next ? `VÁN TIẾP THEO · VÒNG ${next.round}` : 'TRẠNG THÁI VÁN ĐẤU'}
-                  </span>
-                  <div className="next-match-details" style={{ marginTop: 4 }}>
-                    {next ? (
-                      <>
-                        <span>Bàn số <b>{next.board ? `#${next.board}` : 'chưa xếp'}</b></span>
-                        <span style={{ margin: '0 8px', opacity: 0.6 }}>|</span>
-                        <span>Màu quân: <b>{next.color === 'white' ? '♙ Quân Trắng' : next.color === 'black' ? '♟ Quân Đen' : 'Chưa rõ'}</b></span>
-                        <span style={{ margin: '0 8px', opacity: 0.6 }}>|</span>
-                        <span>Đối thủ: <b>{next.opponent || 'Chờ đối thủ'}</b></span>
-                      </>
-                    ) : (
-                      <span>Đã hoàn thành các vòng đấu theo lịch trình ban tổ chức.</span>
+                    <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 12, border: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', flexWrap: 'wrap', gap: 8, textAlign: 'center' }}>
+                        <div style={{ flex: 1, minWidth: 120 }}>
+                          <small style={{ fontSize: 11, color: '#94A3B8', display: 'block', marginBottom: 2 }}>Cầm quân Trắng</small>
+                          <strong style={{ fontSize: 15, fontWeight: 800, color: isNextWhite ? '#F4C542' : '#FFFFFF' }}>
+                            ⚪ {nextWhiteName} {isNextWhite ? '(Bạn)' : ''}
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 900, color: '#D4AF37', padding: '0 8px' }}>VS</div>
+                        <div style={{ flex: 1, minWidth: 120 }}>
+                          <small style={{ fontSize: 11, color: '#94A3B8', display: 'block', marginBottom: 2 }}>Cầm quân Đen</small>
+                          <strong style={{ fontSize: 15, fontWeight: 800, color: isNextBlack ? '#F4C542' : '#FFFFFF' }}>
+                            ⚫ {nextBlackName} {isNextBlack ? '(Bạn)' : ''}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {next.opponentId && (
+                      <div style={{ textAlign: 'right' }}>
+                        <button
+                          className="saas-btn-gold"
+                          style={{ height: 36, padding: '0 16px', fontSize: 13, fontWeight: 700 }}
+                          onClick={() => {
+                            const opp = current.players.find(x => x.id === next.opponentId);
+                            if (opp) open(current, opp);
+                          }}
+                        >
+                          Xem Hồ Sơ Đối Thủ ➔
+                        </button>
+                      </div>
                     )}
                   </div>
-                </div>
-
-                {next && next.opponentId && (
-                  <button
-                    className="saas-btn-gold"
-                    style={{ height: 34, padding: '0 14px', fontSize: 12 }}
-                    onClick={() => {
-                      const opp = current.players.find(x => x.id === next.opponentId);
-                      if (opp) open(current, opp);
-                    }}
-                  >
-                    Xem Hồ Sơ Đối Thủ ➔
-                  </button>
+                ) : (
+                  <div style={{ padding: '6px 0', fontSize: 14, color: '#CBD5E1', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Trophy size={18} style={{ color: '#F4C542' }} />
+                    <span>Đã hoàn thành tất cả các ván đấu</span>
+                  </div>
                 )}
               </div>
-            </div>
+
+              {/* 4. PHẦN 2: THÀNH TÍCH GIẢI ĐẤU CARD */}
+              <div style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E2E8F0', padding: 18, marginTop: 16, boxShadow: '0 2px 8px rgba(6,43,79,0.04)' }}>
+                <h3 style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Trophy size={18} style={{ color: '#D4AF37' }} />
+                  <span>THÀNH TÍCH GIẢI ĐẤU</span>
+                </h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #E2E8F0' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B', display: 'block', marginBottom: 4 }}>
+                      🏆 Xếp hạng hiện tại
+                    </span>
+                    <strong style={{ fontSize: 18, fontWeight: 800, color: '#062B4F' }}>
+                      Hạng {currentRank ? currentRank : '—'} / {totalCount} kỳ thủ
+                    </strong>
+                    <small style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 2 }}>
+                      bảng {player.ageGroup || current.group}
+                    </small>
+                  </div>
+
+                  <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #E2E8F0' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B', display: 'block', marginBottom: 4 }}>
+                      🥇 Dự kiến đạt
+                    </span>
+                    <strong style={{ fontSize: 17, fontWeight: 800, color: medal ? '#B45309' : '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{medal ? medal.medal : '🎖️'}</span>
+                      <span>{medal ? medal.label : 'Chưa đạt huy chương'}</span>
+                    </strong>
+                    <small style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 2 }}>
+                      theo cơ cấu giải thưởng ban tổ chức
+                    </small>
+                  </div>
+                </div>
+              </div>
+            </>
           );
         })()}
 

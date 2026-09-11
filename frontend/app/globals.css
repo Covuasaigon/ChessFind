@@ -2244,12 +2244,76 @@ label .input-wrap {
   }
 
   .profile-heading { flex-wrap: wrap; gap: 16px; }
-  .profile-name h1 { font-size: 26px; }
-  .score-top { padding: 22px 20px; }
-  .score-top strong { font-size: 38px; }
+  .profile-name h1 { font-size: 24px !important; }
+  .score-top { padding: 18px 16px; }
+  .score-top strong { font-size: 32px; }
   .import-panel form { display: flex; flex-direction: column; }
   .admin-tournament { flex-direction: column; align-items: stretch; }
   .admin-actions { justify-content: flex-start; }
+
+  /* Mobile Banner Fix & Contain (No Cropping) */
+  .promo-banner-container,
+  .promo-banner-slide {
+    max-height: 220px !important;
+    height: auto !important;
+    min-height: 180px !important;
+  }
+
+  .promo-banner-content-wrapper {
+    flex-direction: column-reverse !important;
+    padding: 12px !important;
+    gap: 8px !important;
+  }
+
+  .promo-banner-right {
+    width: 100% !important;
+    max-height: 120px !important;
+  }
+
+  .promo-banner-img-frame,
+  .promo-banner-img,
+  .hero-king-image {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 130px !important;
+    object-fit: contain !important;
+  }
+
+  /* Typography Optimization */
+  h1, .hero-heading, .promo-banner-left h2 {
+    font-size: 24px !important;
+    line-height: 1.25 !important;
+  }
+
+  h2, .section-heading h2, .dashboard-title-box h2 {
+    font-size: 18px !important;
+    line-height: 1.3 !important;
+  }
+
+  p, .subtle, .banner-description, .dash-stat-sub {
+    font-size: 13px !important;
+  }
+
+  /* Card Padding Reduction */
+  .panel, .player-dashboard-card, .score-panel, .statistics, .promo-banner-slide {
+    padding: 14px !important;
+    border-radius: 12px !important;
+  }
+
+  /* Button Height Optimization: max 44px */
+  button, .hero-search-btn, .banner-cta-btn, .save-btn, .outline {
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    padding: 0 16px !important;
+    font-size: 13px !important;
+  }
+
+  /* 1 Column Layout on Mobile */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
 }
 
 .login-card {
