@@ -493,38 +493,40 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onO
       </div>
       <button className="outline" onClick={() => { setQ(''); setTimeout(() => document.getElementById('selected-player')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>Vị trí của con</button>
     </div>
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Hạng</TableHead>
-          <TableHead>Họ và tên kỳ thủ</TableHead>
-          <TableHead>SBD</TableHead>
-          <TableHead>Đơn vị / CLB</TableHead>
-          <TableHead>Điểm</TableHead>
-          <TableHead>Buchholz (BH)</TableHead>
-          <TableHead>Sonneborn Berger (SB)</TableHead>
-          <TableHead>Performance (RP)</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {ps.map(p =>
-          <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
-            <TableCell><span className={p.rank && p.rank <= 3 ? 'rank-medal' : 'rank-number'}>{fmt(p.rank)}</span></TableCell>
-            <TableCell>
-              <button className="rank-player" onClick={() => onOpen(p)}>
-                <b>{p.name}</b>
-              </button>
-            </TableCell>
-            <TableCell>{p.snr}</TableCell>
-            <TableCell>{p.club || '—'}</TableCell>
-            <TableCell className="points">{fmt(p.points)}</TableCell>
-            <TableCell>{fmt(p.buchholz ?? p.ties['BH'] ?? p.ties['Buchholz'])}</TableCell>
-            <TableCell>{fmt(p.sonnebornBerger ?? p.ties['SB'])}</TableCell>
-            <TableCell>{fmt(p.performance ?? p.ties['Rp'] ?? p.ties['Performance'])}</TableCell>
+    <div className="saas-table-container scrollbar-thin">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Hạng</TableHead>
+            <TableHead>Họ và tên kỳ thủ</TableHead>
+            <TableHead>SBD</TableHead>
+            <TableHead>Đơn vị / CLB</TableHead>
+            <TableHead>Điểm</TableHead>
+            <TableHead>Buchholz (BH)</TableHead>
+            <TableHead>Sonneborn Berger (SB)</TableHead>
+            <TableHead>Performance (RP)</TableHead>
           </TableRow>
-        )}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {ps.map(p =>
+            <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
+              <TableCell><span className={p.rank && p.rank <= 3 ? 'rank-medal' : 'rank-number'}>{fmt(p.rank)}</span></TableCell>
+              <TableCell>
+                <button className="rank-player" onClick={() => onOpen(p)}>
+                  <b>{p.name}</b>
+                </button>
+              </TableCell>
+              <TableCell>{p.snr}</TableCell>
+              <TableCell>{p.club || '—'}</TableCell>
+              <TableCell className="points">{fmt(p.points)}</TableCell>
+              <TableCell>{fmt(p.buchholz ?? p.ties['BH'] ?? p.ties['Buchholz'])}</TableCell>
+              <TableCell>{fmt(p.sonnebornBerger ?? p.ties['SB'])}</TableCell>
+              <TableCell>{fmt(p.performance ?? p.ties['Rp'] ?? p.ties['Performance'])}</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
     {!ps.length && <p className="empty-text">Không có kết quả phù hợp.</p>}
     <p className="subtle below">{t.demo ? 'Bảng xếp hạng minh họa.' : 'Thứ hạng và các hệ số theo phiên đồng bộ Chess-Results mới nhất.'}</p>
   </section>
