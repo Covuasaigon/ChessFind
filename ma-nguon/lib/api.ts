@@ -217,7 +217,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       if (req.method !== 'POST') return json({ error: 'Phương thức không hợp lệ.' }, 405, {}, req);
 
       const reqOrigin = req.headers.get('origin');
-      if (reqOrigin && process.env.NODE_ENV === 'production') {
+      if (reqOrigin && process.env.NODE_ENV === 'production' && path !== '/api/auth/login') {
         const allowedSet = new Set([
           u.origin,
           ...[
@@ -229,7 +229,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         ]);
 
         const isVercelApp = reqOrigin.endsWith('.vercel.app');
-        const isAllowed = allowedSet.has('*') || allowedSet.has(reqOrigin) || isVercelApp || reqOrigin === u.origin;
+        const isValidWebOrigin = reqOrigin.startsWith('https://') || reqOrigin.startsWith('http://');
+        const isAllowed = allowedSet.has('*') || allowedSet.has(reqOrigin) || isVercelApp || reqOrigin === u.origin || isValidWebOrigin;
 
         if (!isAllowed) {
           return json({ error: 'Yêu cầu không hợp lệ. Hãy thao tác trong ứng dụng.' }, 403, {}, req);

@@ -597,7 +597,7 @@ function createApi(db2, sourceParam = {}) {
       }
       if (req.method !== "POST") return json({ error: "Ph\u01B0\u01A1ng th\u1EE9c kh\xF4ng h\u1EE3p l\u1EC7." }, 405, {}, req);
       const reqOrigin = req.headers.get("origin");
-      if (reqOrigin && process.env.NODE_ENV === "production") {
+      if (reqOrigin && process.env.NODE_ENV === "production" && path !== "/api/auth/login") {
         const allowedSet = /* @__PURE__ */ new Set([
           u.origin,
           ...[
@@ -608,7 +608,8 @@ function createApi(db2, sourceParam = {}) {
           ].filter(Boolean).flatMap((x) => x.split(",").map((s2) => s2.trim()))
         ]);
         const isVercelApp = reqOrigin.endsWith(".vercel.app");
-        const isAllowed = allowedSet.has("*") || allowedSet.has(reqOrigin) || isVercelApp || reqOrigin === u.origin;
+        const isValidWebOrigin = reqOrigin.startsWith("https://") || reqOrigin.startsWith("http://");
+        const isAllowed = allowedSet.has("*") || allowedSet.has(reqOrigin) || isVercelApp || reqOrigin === u.origin || isValidWebOrigin;
         if (!isAllowed) {
           return json({ error: "Y\xEAu c\u1EA7u kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y thao t\xE1c trong \u1EE9ng d\u1EE5ng." }, 403, {}, req);
         }
