@@ -752,10 +752,15 @@ export default function Admin({ onChanged }: AdminProps) {
       </Dialog>
 
       <Dialog open={!!infoModal} onOpenChange={(v: boolean) => { if (!v && !busy) setInfoModal(null); }}>
-        <DialogContent showCloseButton={false} style={{ maxWidth: 680, maxHeight: '88vh', overflowY: 'auto' }}>
+        <DialogContent showCloseButton={false} style={{ maxWidth: 720, maxHeight: '88vh', overflowY: 'auto' }}>
           <DialogHeader>
-            <DialogTitle>Quản Lý Thông Tin & Cơ Cấu Giải Thưởng</DialogTitle>
-            <DialogDescription>Thiết lập thông tin tổ chức, điều lệ và giải thưởng cho từng bảng đấu.</DialogDescription>
+            <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#062B4F' }}>
+              <Sparkles size={20} className="text-amber-500" />
+              <span>Module Quản Trị Giải Đấu — {infoModal?.name}</span>
+            </DialogTitle>
+            <DialogDescription>
+              Quản lý Giới thiệu giải, Điều lệ thi đấu, Hướng dẫn cho Phụ huynh, Cơ cấu giải thưởng & Huy chương từng bảng đấu.
+            </DialogDescription>
           </DialogHeader>
           {infoModal && (
             <form className="edit-form" onSubmit={async (e: React.FormEvent<HTMLFormElement>) => {
@@ -769,43 +774,60 @@ export default function Admin({ onChanged }: AdminProps) {
               }
             }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <label className="saas-label">Địa điểm tổ chức
-                  <input className="saas-input" style={{ paddingLeft: 16 }} placeholder="Nhà thi đấu, Quận/Huyện, TP..." value={infoModal.info?.location || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), location: e.target.value } })} />
+                <label className="saas-label">📍 Địa điểm tổ chức
+                  <input className="saas-input" style={{ paddingLeft: 16 }} placeholder="Nhà thi đấu, Quận/Huyện, TP.HCM..." value={infoModal.info?.location || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), location: e.target.value } })} />
                 </label>
-                <label className="saas-label">Thời gian tổ chức
+                <label className="saas-label">⏰ Thời gian tổ chức
                   <input className="saas-input" style={{ paddingLeft: 16 }} placeholder="Ngày DD/MM/YYYY..." value={infoModal.info?.time || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), time: e.target.value } })} />
                 </label>
               </div>
 
-              <label className="saas-label" style={{ marginTop: 8 }}>Giới thiệu giải đấu
-                <textarea className="saas-input" style={{ padding: 12, height: 70 }} placeholder="Mô tả tóm tắt về giải đấu..." value={infoModal.info?.intro || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), intro: e.target.value } })} />
+              <label className="saas-label" style={{ marginTop: 8 }}>📝 Giới thiệu giải đấu
+                <textarea className="saas-input" style={{ padding: 12, height: 75 }} placeholder="Mô tả tóm tắt quy mô, ý nghĩa giải đấu..." value={infoModal.info?.intro || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), intro: e.target.value } })} />
               </label>
 
-              <label className="saas-label" style={{ marginTop: 8 }}>Điều lệ giải đấu
-                <textarea className="saas-input" style={{ padding: 12, height: 70 }} placeholder="Quy định thi đấu, thời gian mỗi ván..." value={infoModal.info?.regulations || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), regulations: e.target.value } })} />
+              <label className="saas-label" style={{ marginTop: 8 }}>📜 Điều lệ giải đấu
+                <textarea className="saas-input" style={{ padding: 12, height: 75 }} placeholder="Quy định thi đấu, thời gian từng ván, luật cờ..." value={infoModal.info?.regulations || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), regulations: e.target.value } })} />
               </label>
 
-              <label className="saas-label" style={{ marginTop: 8 }}>Hướng dẫn cho Phụ huynh
-                <textarea className="saas-input" style={{ padding: 12, height: 70 }} placeholder="Lưu ý đón trả con, trang phục, tác phong..." value={infoModal.info?.instructions || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), instructions: e.target.value } })} />
+              <label className="saas-label" style={{ marginTop: 8 }}>📢 Hướng dẫn cho Phụ huynh & Kỳ thủ
+                <textarea className="saas-input" style={{ padding: 12, height: 75 }} placeholder="Lưu ý đón trả con, trang phục, tác phong thi đấu..." value={infoModal.info?.instructions || ''} onChange={(e) => setInfoModal({ ...infoModal, info: { ...(infoModal.info || {}), instructions: e.target.value } })} />
               </label>
 
-              <div style={{ marginTop: 16, borderTop: '1px solid #E2E8F0', paddingTop: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: '#062B4F' }}>🏆 Cơ Cấu Giải Thưởng Theo Bảng</span>
-                  <button type="button" className="saas-btn-gold" style={{ height: 32, padding: '0 12px', fontSize: 12 }} onClick={() => {
-                    const currentPrizes = infoModal.prizes || [];
-                    setInfoModal({
-                      ...infoModal,
-                      prizes: [...currentPrizes, { group: infoModal.group || 'U08', rank: currentPrizes.length + 1, prizeName: 'Huy chương Vàng', medal: 'gold' }]
-                    });
-                  }}>
-                    + Thêm Hạng Giải
-                  </button>
+              <div style={{ marginTop: 16, borderTop: '1px solid #E2E8F0', paddingTop: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', display: 'block' }}>🏆 Cơ Cấu Giải Thưởng & Huy Chương Từng Bảng Đấu</span>
+                    <span style={{ fontSize: 12, color: '#64748B' }}>Thiết lập huy chương (🥇 Vàng, 🥈 Bạc, 🥉 Đồng, 🏆 Khuyến khích) cho từng bảng đấu.</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button type="button" className="outline" style={{ height: 32, padding: '0 10px', fontSize: 11, fontWeight: 700 }} onClick={() => {
+                      const grp = infoModal.group || 'Tất cả';
+                      const defaultPrizes = [
+                        { group: grp, rank: 1, prizeName: 'Cúp & Huy chương Vàng', medal: 'gold' as const },
+                        { group: grp, rank: 2, prizeName: 'Huy chương Bạc', medal: 'silver' as const },
+                        { group: grp, rank: 3, prizeName: 'Huy chương Đồng', medal: 'bronze' as const },
+                        { group: grp, rank: 4, prizeName: 'Giải Khuyến Khích (Top 4)', medal: 'top' as const }
+                      ];
+                      setInfoModal({ ...infoModal, prizes: [...(infoModal.prizes || []), ...defaultPrizes] });
+                    }}>
+                      ⚡ Khởi tạo nhanh Top 4
+                    </button>
+                    <button type="button" className="saas-btn-gold" style={{ height: 32, padding: '0 12px', fontSize: 12 }} onClick={() => {
+                      const currentPrizes = infoModal.prizes || [];
+                      setInfoModal({
+                        ...infoModal,
+                        prizes: [...currentPrizes, { group: infoModal.group || 'U08', rank: currentPrizes.length + 1, prizeName: 'Huy chương Vàng', medal: 'gold' }]
+                      });
+                    }}>
+                      + Thêm Hạng Giải
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {(infoModal.prizes || []).map((pz, idx) => (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1.5fr 100px auto', gap: 6, alignItems: 'center', background: '#F8FAFC', padding: 8, borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 75px 1.5fr 120px auto', gap: 6, alignItems: 'center', background: '#F8FAFC', padding: 8, borderRadius: 8, border: '1px solid #E2E8F0' }}>
                       <input className="saas-input" style={{ paddingLeft: 8, height: 36, fontSize: 13 }} placeholder="Bảng (U08, U10...)" value={pz.group} onChange={(e) => {
                         const next = [...(infoModal.prizes || [])];
                         next[idx].group = e.target.value;
@@ -826,9 +848,9 @@ export default function Admin({ onChanged }: AdminProps) {
                         next[idx].medal = e.target.value as any;
                         setInfoModal({ ...infoModal, prizes: next });
                       }}>
-                        <option value="gold">🥇 Vàng</option>
-                        <option value="silver">🥈 Bạc</option>
-                        <option value="bronze">🥉 Đồng</option>
+                        <option value="gold">🥇 HC Vàng</option>
+                        <option value="silver">🥈 HC Bạc</option>
+                        <option value="bronze">🥉 HC Đồng</option>
                         <option value="top">🏆 Khuyến khích</option>
                       </select>
                       <button type="button" className="outline danger-btn" style={{ padding: '6px 8px', fontSize: 12, borderRadius: 6 }} onClick={() => {
@@ -840,7 +862,7 @@ export default function Admin({ onChanged }: AdminProps) {
                     </div>
                   ))}
                   {!infoModal.prizes?.length && (
-                    <p style={{ fontSize: 12, color: '#64748B', fontStyle: 'italic', margin: 0 }}>Chưa có cơ cấu giải thưởng thủ công. Hệ thống sẽ tự động dùng xếp hạng Hạng 1 (🥇 Vàng), Hạng 2 (🥈 Bạc), Hạng 3 (🥉 Đồng).</p>
+                    <p style={{ fontSize: 12, color: '#64748B', fontStyle: 'italic', margin: 0 }}>Chưa có cơ cấu giải thưởng thủ công. Hệ thống sẽ tự động dùng xếp hạng mặc định: Hạng 1 (🥇 Vàng), Hạng 2 (🥈 Bạc), Hạng 3 (🥉 Đồng).</p>
                   )}
                 </div>
               </div>
@@ -848,7 +870,7 @@ export default function Admin({ onChanged }: AdminProps) {
               {error && <p className="notice warning" role="alert" style={{ marginTop: 12 }}>{error}</p>}
               <div className="dialog-actions" style={{ marginTop: 16 }}>
                 <button type="button" className="outline" disabled={!!busy} onClick={() => setInfoModal(null)}>Hủy</button>
-                <button className="saas-btn-primary" disabled={!!busy}>{busy ? 'Đang lưu…' : 'Lưu Thông Tin & Giải Thưởng'}</button>
+                <button className="saas-btn-primary" disabled={!!busy}>{busy ? 'Đang lưu…' : 'Lưu Quản Trị Giải Đấu'}</button>
               </div>
             </form>
           )}
