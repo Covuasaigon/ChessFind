@@ -304,12 +304,12 @@ export default function ChessApp() {
                   <div className="dash-stat">
                     <span className="dash-stat-label">⚪ Cầm Trắng</span>
                     <span className="dash-stat-val">{s.white} ván</span>
-                    <span className="dash-stat-sub">W {s.whiteWins} · D {s.whiteDraws} · L {s.whiteLosses}</span>
+                    <span className="dash-stat-sub">Thắng {s.whiteWins} · Hòa {s.whiteDraws} · Thua {s.whiteLosses}</span>
                   </div>
                   <div className="dash-stat">
                     <span className="dash-stat-label">⚫ Cầm Đen</span>
                     <span className="dash-stat-val">{s.black} ván</span>
-                    <span className="dash-stat-sub">W {s.blackWins} · D {s.blackDraws} · L {s.blackLosses}</span>
+                    <span className="dash-stat-sub">Thắng {s.blackWins} · Hòa {s.blackDraws} · Thua {s.blackLosses}</span>
                   </div>
                   <div className="dash-stat">
                     <span className="dash-stat-label">📈 Tỷ lệ thắng (Win rate)</span>
@@ -442,7 +442,6 @@ export default function ChessApp() {
         <Tabs value={tab} onValueChange={setTab} className="profile-tabs">
           <TabsList className="main-tabs">
             <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-            <TabsTrigger value="info">Thông tin giải đấu</TabsTrigger>
             <TabsTrigger value="results">Chi tiết ván đấu</TabsTrigger>
             <TabsTrigger value="ranking">Bảng xếp hạng</TabsTrigger>
             <TabsTrigger value="charts">Biểu đồ thi đấu</TabsTrigger>
@@ -480,12 +479,6 @@ export default function ChessApp() {
                 <Rounds p={player} loading={detailLoading} error={detailError} compact onOpponent={id => { const p = current.players.find(p => p.id === id); if (p) open(current, p) }} />
               </section>
             </div>
-
-            <TournamentInfoSlides tournamentId={current.id} />
-          </TabsContent>
-
-          <TabsContent value="info">
-            <TournamentInfoSlides tournamentId={current.id} />
           </TabsContent>
 
           <TabsContent value="results">
@@ -598,25 +591,25 @@ function Statistics({ p }: { p: Player }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="white-piece">⚪ WHITE</span>
-              <strong style={{ fontSize: 16, fontWeight: 800, color: '#145DA0' }}>{p.detailsLoaded ? `${s.white} games` : '—'}</strong>
+              <span className="white-piece" style={{ fontSize: 14, fontWeight: 700 }}>⚪ Trắng</span>
+              <strong style={{ fontSize: 16, fontWeight: 800, color: '#145DA0' }}>{p.detailsLoaded ? `${s.white} ván` : '—'}</strong>
             </div>
             <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: '#475569', paddingTop: 6, borderTop: '1px dashed #E2E8F0' }}>
-              <span style={{ color: '#166534' }}>Wins: <b>{s.whiteWins}</b></span>
-              <span style={{ color: '#854D0E' }}>Draws: <b>{s.whiteDraws}</b></span>
-              <span style={{ color: '#991B1B' }}>Losses: <b>{s.whiteLosses}</b></span>
+              <span style={{ color: '#166534' }}>Thắng: <b>{s.whiteWins}</b></span>
+              <span style={{ color: '#854D0E' }}>Hòa: <b>{s.whiteDraws}</b></span>
+              <span style={{ color: '#991B1B' }}>Thua: <b>{s.whiteLosses}</b></span>
             </div>
           </div>
 
           <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="black-piece">⚫ BLACK</span>
-              <strong style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>{p.detailsLoaded ? `${s.black} games` : '—'}</strong>
+              <span className="black-piece" style={{ fontSize: 14, fontWeight: 700 }}>⚫ Đen</span>
+              <strong style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>{p.detailsLoaded ? `${s.black} ván` : '—'}</strong>
             </div>
             <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: '#475569', paddingTop: 6, borderTop: '1px dashed #E2E8F0' }}>
-              <span style={{ color: '#166534' }}>Wins: <b>{s.blackWins}</b></span>
-              <span style={{ color: '#854D0E' }}>Draws: <b>{s.blackDraws}</b></span>
-              <span style={{ color: '#991B1B' }}>Losses: <b>{s.blackLosses}</b></span>
+              <span style={{ color: '#166534' }}>Thắng: <b>{s.blackWins}</b></span>
+              <span style={{ color: '#854D0E' }}>Hòa: <b>{s.blackDraws}</b></span>
+              <span style={{ color: '#991B1B' }}>Thua: <b>{s.blackLosses}</b></span>
             </div>
           </div>
         </div>
@@ -698,7 +691,7 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
   return (
     <>
       <div className={'round-list ' + (compact ? 'compact' : '')}>
-        <div className="round-head"><span>Vòng & Bàn</span><span>Màu quân</span><span>Đối thủ</span><span>Kết quả ván</span></div>
+        <div className="round-head"><span>Vòng & Bàn</span><span style={{ textAlign: 'center' }}>Màu</span><span>Đối thủ</span><span>Kết quả ván</span></div>
         {p.rounds.map(r => {
           const isWhite = r.color === 'white' || (r.playerWhite && r.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
           const isBlack = r.color === 'black' || (r.playerBlack && r.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase());
@@ -706,28 +699,28 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
           let resClass = 'pending';
           let resText = '—';
           if (r.status === 'played') {
-            if (r.score === 1) { resClass = 'win'; resText = 'WIN 1 - 0'; }
-            else if (r.score === 0.5) { resClass = 'draw'; resText = 'DRAW 0.5 - 0.5'; }
-            else if (r.score === 0) { resClass = 'loss'; resText = 'LOSS 0 - 1'; }
+            if (r.score === 1) { resClass = 'win'; resText = 'THẮNG 1 - 0'; }
+            else if (r.score === 0.5) { resClass = 'draw'; resText = 'HÒA 0.5 - 0.5'; }
+            else if (r.score === 0) { resClass = 'loss'; resText = 'THUA 0 - 1'; }
           } else if (r.status === 'bye') {
             resClass = 'win'; resText = 'BYE 1 - 0';
           } else if (r.status === 'forfeit') {
-            resClass = r.score === 1 ? 'win' : 'loss'; resText = r.score === 1 ? 'WIN 1 - 0' : 'LOSS 0 - 1';
+            resClass = r.score === 1 ? 'win' : 'loss'; resText = r.score === 1 ? 'THẮNG 1 - 0' : 'THUA 0 - 1';
           }
 
           return (
             <div className="round-row" key={r.round}>
-              <span className="round-num">Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
-              <span className={isWhite ? 'white-piece' : isBlack ? 'black-piece' : 'subtle'}>
-                {isWhite ? '⚪ Trắng' : isBlack ? '⚫ Đen' : '—'}
+              <span className="round-num" style={{ whiteSpace: 'nowrap' }}>Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
+              <span className="color-icon" style={{ textAlign: 'center', fontSize: 16 }}>
+                {isWhite ? '⚪' : isBlack ? '⚫' : '—'}
               </span>
-              <div className="opponent">
+              <div className="opponent" style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {r.opponentId ? (
-                  <button onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button>
+                  <button style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', display: 'inline-block' }} onClick={() => onOpponent(r.opponentId!)}>{r.opponent}</button>
                 ) : (
-                  <strong>{r.opponent || 'Chưa có đối thủ'}</strong>
+                  <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', display: 'inline-block' }}>{r.opponent || 'Chưa có đối thủ'}</strong>
                 )}
-                {r.rating && <small style={{ color: '#657b96' }}>Elo {r.rating}</small>}
+                {r.rating && <small style={{ color: '#657b96', marginLeft: 6 }}>Elo {r.rating}</small>}
               </div>
               <div className="round-result">
                 <span className={`result-badge ${resClass}`}>{resText}</span>
@@ -745,13 +738,13 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
           let resClass = 'pending';
           let resText = '—';
           if (r.status === 'played') {
-            if (r.score === 1) { resClass = 'win'; resText = 'WIN 1 - 0'; }
-            else if (r.score === 0.5) { resClass = 'draw'; resText = 'DRAW 0.5 - 0.5'; }
-            else if (r.score === 0) { resClass = 'loss'; resText = 'LOSS 0 - 1'; }
+            if (r.score === 1) { resClass = 'win'; resText = 'THẮNG 1 - 0'; }
+            else if (r.score === 0.5) { resClass = 'draw'; resText = 'HÒA 0.5 - 0.5'; }
+            else if (r.score === 0) { resClass = 'loss'; resText = 'THUA 0 - 1'; }
           } else if (r.status === 'bye') {
             resClass = 'win'; resText = 'BYE 1 - 0';
           } else if (r.status === 'forfeit') {
-            resClass = r.score === 1 ? 'win' : 'loss'; resText = r.score === 1 ? 'WIN 1 - 0' : 'LOSS 0 - 1';
+            resClass = r.score === 1 ? 'win' : 'loss'; resText = r.score === 1 ? 'THẮNG 1 - 0' : 'THUA 0 - 1';
           }
 
           return (
@@ -760,22 +753,22 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
                 <span className="match-card-round" style={{ fontSize: 13, fontWeight: 800, color: '#062B4F' }}>
                   Vòng {r.round} {r.board ? `· Bàn ${r.board}` : ''}
                 </span>
-                <span className={isWhite ? 'white-piece' : isBlack ? 'black-piece' : 'subtle'}>
-                  {isWhite ? '⚪ Trắng' : isBlack ? '⚫ Đen' : '—'}
+                <span className="color-icon" style={{ fontSize: 16 }}>
+                  {isWhite ? '⚪' : isBlack ? '⚫' : '—'}
                 </span>
               </div>
 
               <div style={{ marginBottom: 10 }}>
-                <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600, display: 'block', marginBottom: 2 }}>Đối thủ thi đấu:</span>
-                <div className="opponent">
+                <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600, display: 'block', marginBottom: 2 }}>Đối thủ:</span>
+                <div className="opponent" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {r.opponentId ? (
-                    <button style={{ fontSize: 15, fontWeight: 800, color: '#145DA0' }} onClick={() => onOpponent(r.opponentId!)}>
+                    <button style={{ fontSize: 15, fontWeight: 800, color: '#145DA0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }} onClick={() => onOpponent(r.opponentId!)}>
                       {r.opponent} ➔
                     </button>
                   ) : (
-                    <strong style={{ fontSize: 15, fontWeight: 800, color: '#062B4F' }}>{r.opponent || 'Chưa có đối thủ'}</strong>
+                    <strong style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{r.opponent || 'Chưa có đối thủ'}</strong>
                   )}
-                  {r.rating && <small style={{ color: '#64748B' }}>Elo: {r.rating}</small>}
+                  {r.rating && <small style={{ color: '#64748B', display: 'block', marginTop: 2 }}>Elo: {r.rating}</small>}
                 </div>
               </div>
 
