@@ -1183,26 +1183,11 @@ function TournamentInfoSlider() {
         <div
           className="tournament-info-slider-card"
           onClick={() => setActiveImage({ url: currentSlide.image_url, title: currentSlide.title })}
-          style={{
-            position: 'relative',
-            width: '100%',
-            background: '#F8FAFC',
-            cursor: 'pointer',
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
         >
           <img
             src={currentSlide.image_url}
             alt={currentSlide.title}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              display: 'block'
-            }}
+            className="tournament-info-slider-img"
             loading="lazy"
           />
 
@@ -1221,7 +1206,8 @@ function TournamentInfoSlider() {
               fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
-              gap: 6
+              gap: 6,
+              zIndex: 3
             }}
           >
             <span>{slideTypeIcons[currentSlide.slide_type] || '📌'}</span>
@@ -1242,7 +1228,8 @@ function TournamentInfoSlider() {
               fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
-              gap: 6
+              gap: 6,
+              zIndex: 3
             }}
           >
             <Search size={14} /> Phóng to xem chi tiết
@@ -1259,21 +1246,21 @@ function TournamentInfoSlider() {
                   left: 10,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  width: 36,
-                  height: 36,
+                  width: 38,
+                  height: 38,
                   borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.85)',
+                  background: 'rgba(255,255,255,0.9)',
                   color: '#062B4F',
                   border: 'none',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  zIndex: 2
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  zIndex: 4
                 }}
               >
-                <ChevronLeft size={20} />
+                <ChevronLeft size={22} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleNext(); }}
@@ -1283,21 +1270,21 @@ function TournamentInfoSlider() {
                   right: 10,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  width: 36,
-                  height: 36,
+                  width: 38,
+                  height: 38,
                   borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.85)',
+                  background: 'rgba(255,255,255,0.9)',
                   color: '#062B4F',
                   border: 'none',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                  zIndex: 2
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  zIndex: 4
                 }}
               >
-                <ChevronRight size={20} />
+                <ChevronRight size={22} />
               </button>
             </>
           )}
@@ -1352,7 +1339,7 @@ function TournamentInfoSlider() {
             right: 0,
             bottom: 0,
             zIndex: 99999,
-            background: 'rgba(6, 43, 79, 0.94)',
+            background: 'rgba(15, 23, 42, 0.95)',
             backdropFilter: 'blur(8px)',
             display: 'flex',
             flexDirection: 'column',
@@ -1378,23 +1365,26 @@ function TournamentInfoSlider() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              zIndex: 100000
             }}
           >
             ✕
           </button>
-          <img
-            src={activeImage.url}
-            alt={activeImage.title}
-            style={{
-              maxWidth: '95vw',
-              maxHeight: '85vh',
-              objectFit: 'contain',
-              borderRadius: 8,
-              boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
-            }}
-          />
-          <span style={{ color: '#FFFFFF', fontSize: 16, fontWeight: 700, marginTop: 14, textAlign: 'center' }}>
+          <div style={{ maxWidth: '95vw', maxHeight: '85vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <img
+              src={activeImage.url}
+              alt={activeImage.title}
+              style={{
+                maxWidth: '95vw',
+                maxHeight: '85vh',
+                objectFit: 'contain',
+                borderRadius: 8,
+                boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+              }}
+            />
+          </div>
+          <span style={{ color: '#FFFFFF', fontSize: 15, fontWeight: 700, marginTop: 12, textAlign: 'center', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
             {activeImage.title}
           </span>
         </div>

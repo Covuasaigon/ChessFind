@@ -1162,11 +1162,11 @@ export default function Admin({ onChanged }: AdminProps) {
               {slideForm.image_url && (
                 <div style={{ marginBottom: 16, background: '#FFFFFF', padding: 14, borderRadius: 12, border: '1px solid #CBD5E1', display: 'block' }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#062B4F', display: 'block', marginBottom: 8 }}>Xem trước hình ảnh slide (Hiển thị đầy đủ không bị crop):</span>
-                  <div style={{ width: '100%', maxWidth: 480, height: 260, background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="tournament-info-slider-card" style={{ width: '100%', height: 320, borderRadius: 10, border: '1px solid #CBD5E1', overflow: 'hidden' }}>
                     <img
                       src={slideForm.image_url}
                       alt="Slide preview"
-                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                      className="tournament-info-slider-img"
                     />
                   </div>
                 </div>
@@ -1184,7 +1184,7 @@ export default function Admin({ onChanged }: AdminProps) {
                     className="outline"
                     onClick={() => setSlideForm({
                       id: '',
-                      tournament_id: 'global',
+                      tournament_id: '',
                       title: '',
                       slide_type: 'Điều lệ giải đấu',
                       image_url: '',
@@ -1203,16 +1203,16 @@ export default function Admin({ onChanged }: AdminProps) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
             {(state?.slides || []).map((item: TournamentSlideItem) => (
               <div key={item.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #CBD5E1', overflow: 'hidden', boxShadow: '0 4px 12px rgba(6,43,79,0.05)', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ position: 'relative', width: '100%', height: 200, background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #E2E8F0' }}>
+                <div className="tournament-info-slider-card" style={{ height: 220, borderBottom: '1px solid #E2E8F0', borderRadius: '16px 16px 0 0' }}>
                   <img
                     src={item.image_url}
                     alt={item.title}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    className="tournament-info-slider-img"
                   />
-                  <span className="soft-badge" style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(6,43,79,0.85)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)', fontWeight: 700, fontSize: 11 }}>
+                  <span className="soft-badge" style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(6,43,79,0.85)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)', fontWeight: 700, fontSize: 11, zIndex: 2 }}>
                     {item.slide_type}
                   </span>
-                  <span className="soft-badge" style={{ position: 'absolute', top: 10, right: 10, background: item.status === 'active' ? '#DCFCE7' : '#FEE2E2', color: item.status === 'active' ? '#15803D' : '#991B1B', fontWeight: 700, fontSize: 11 }}>
+                  <span className="soft-badge" style={{ position: 'absolute', top: 10, right: 10, background: item.status === 'active' ? '#DCFCE7' : '#FEE2E2', color: item.status === 'active' ? '#15803D' : '#991B1B', fontWeight: 700, fontSize: 11, zIndex: 2 }}>
                     {item.status === 'active' ? '🟢 Active' : '🔴 Hidden'}
                   </span>
                 </div>
