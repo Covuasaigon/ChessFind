@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Toaster, toast } from 'sonner';
-import { Tournament, Player, makeDemo, normalize, matchPlayer, fmt, stats } from '@/lib/chess';
+import { Tournament, Player, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getNextMatch } from '@/lib/chess';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell } from 'recharts';
 import Admin from './admin';
 
@@ -232,6 +232,99 @@ export default function ChessApp() {
           <span>{current.players ? current.players.length : 0} kỳ thủ</span>
           <span className="update"><Clock size={14} />{current.demo ? 'Bản minh họa' : current.updated ? 'Cập nhật ' + new Date(current.updated).toLocaleString('vi-VN') : 'Chưa đồng bộ'}</span>
         </div>
+
+        {/* PLAYER DASHBOARD SECTION */}
+        {(() => {
+          const s = stats(player);
+          const next = getNextMatch(player);
+          const medal = getMedal(player.rank, player.ageGroup || current.group, current.prizes);
+
+          return (
+            <div className="player-dashboard-card" style={{ marginTop: 16 }}>
+              <div className="dashboard-header-row">
+                <div className="dashboard-title-box">
+                  {medal && <span style={{ fontSize: 26 }} title={medal.label}>{medal.medal}</span>}
+                  <div>
+                    <h2>Player Dashboard · {player.name}</h2>
+                    <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 600 }}>
+                      SBD: <b>{player.snr}</b> · Bảng: <b>{player.ageGroup || current.group}</b> {medal ? `· ${medal.label}` : ''}
+                    </span>
+                  </div>
+                </div>
+                <span className="soft-badge" style={{ background: 'rgba(212, 175, 55, 0.2)', color: '#D4AF37', border: '1px solid rgba(212, 175, 55, 0.4)', fontWeight: 700 }}>
+                  CLB: {player.club || 'Chưa rõ'}
+                </span>
+              </div>
+
+              <div className="dashboard-grid">
+                <div className="dash-stat">
+                  <span className="dash-stat-label">Thứ hạng hiện tại</span>
+                  <span className="dash-stat-val">Hạng {fmt(player.rank)}</span>
+                  <span className="dash-stat-sub">trên tổng {current.players ? current.players.length : 0} kỳ thủ</span>
+                </div>
+                <div className="dash-stat">
+                  <span className="dash-stat-label">Tổng điểm số</span>
+                  <span className="dash-stat-val">{fmt(player.points)} điểm</span>
+                  <span className="dash-stat-sub">điểm tích lũy toàn giải</span>
+                </div>
+                <div className="dash-stat">
+                  <span className="dash-stat-label">Số ván đã đấu</span>
+                  <span className="dash-stat-val">{s.played} ván</span>
+                  <span className="dash-stat-sub">Thắng {s.wins} · Hòa {s.draws} · Thua {s.losses}</span>
+                </div>
+                <div className="dash-stat">
+                  <span className="dash-stat-label">Số ván Trắng / Đen</span>
+                  <span className="dash-stat-val">♙ {s.white} W / ♟ {s.black} B</span>
+                  <span className="dash-stat-sub">thống kê màu quân thực đấu</span>
+                </div>
+                <div className="dash-stat">
+                  <span className="dash-stat-label">Đơn vị / CLB</span>
+                  <span className="dash-stat-val" style={{ fontSize: 14, wordBreak: 'break-word' }}>{player.club || 'Chưa rõ'}</span>
+                  <span className="dash-stat-sub">đơn vị đăng ký thi đấu</span>
+                </div>
+                <div className="dash-stat">
+                  <span className="dash-stat-label">Số báo danh (SBD)</span>
+                  <span className="dash-stat-val">SBD {player.snr}</span>
+                  <span className="dash-stat-sub">Bảng {player.ageGroup || current.group}</span>
+                </div>
+              </div>
+
+              <div className="next-match-banner">
+                <div className="next-match-info">
+                  <span className="next-match-tag">
+                    <Clock size={12} /> {next ? `VÁN TIẾP THEO · VÒNG ${next.round}` : 'TRẠNG THÁI VÁN ĐẤU'}
+                  </span>
+                  <div className="next-match-details" style={{ marginTop: 4 }}>
+                    {next ? (
+                      <>
+                        <span>Bàn số <b>{next.board ? `#${next.board}` : 'chưa xếp'}</b></span>
+                        <span style={{ margin: '0 8px', opacity: 0.6 }}>|</span>
+                        <span>Màu quân: <b>{next.color === 'white' ? '♙ Quân Trắng' : next.color === 'black' ? '♟ Quân Đen' : 'Chưa rõ'}</b></span>
+                        <span style={{ margin: '0 8px', opacity: 0.6 }}>|</span>
+                        <span>Đối thủ: <b>{next.opponent || 'Chờ đối thủ'}</b></span>
+                      </>
+                    ) : (
+                      <span>Đã hoàn thành các vòng đấu theo lịch trình ban tổ chức.</span>
+                    )}
+                  </div>
+                </div>
+
+                {next && next.opponentId && (
+                  <button
+                    className="saas-btn-gold"
+                    style={{ height: 34, padding: '0 14px', fontSize: 12 }}
+                    onClick={() => {
+                      const opp = current.players.find(x => x.id === next.opponentId);
+                      if (opp) open(current, opp);
+                    }}
+                  >
+                    Xem Hồ Sơ Đối Thủ ➔
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         <Tabs value={tab} onValueChange={setTab} className="profile-tabs">
           <TabsList className="main-tabs">
