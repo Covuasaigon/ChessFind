@@ -1,4 +1,4 @@
-import type { Tournament, Player } from './chess';
+import { formatClubName, stats, getNextMatch, getMedal, type Tournament, type Player } from './chess';
 import { importTournament, importPlayer, validateSource, detectCategories, type CategoryDetectResult } from './chess-source';
 import { DEFAULT_ADMIN } from './default-admin';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -183,31 +183,72 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
           if (!t || !p) return json({ error: 'Hồ sơ không tồn tại hoặc giải đang ẩn.' }, 404, {}, req);
 
+          const rank = p.rank ?? (t.players.findIndex(x => x.id === pid) + 1);
+          const totalPlayers = t.players ? t.players.length : 0;
+          const club = p.club || formatClubName(p.federation || '');
+
+          let playerObj: Player;
+
           const r = await db.prepare('SELECT payload FROM details WHERE tid = ? AND pid = ? AND revision = ?').bind(id, pid, t.updated).first<{ payload: string }>();
-          if (r) return json({ player: JSON.parse(r.payload) }, 200, {}, req);
+          if (r) {
+            playerObj = JSON.parse(r.payload);
+          } else {
+            if (!await lock('detail:' + id, 3)) return json({ error: 'Nguồn đang được tải. Hãy thử lại sau vài giây.' }, 429, {}, req);
+            playerObj = await source.player(t, p);
 
-          if (!await lock('detail:' + id, 3)) return json({ error: 'Nguồn đang được tải. Hãy thử lại sau vài giây.' }, 429, {}, req);
-          const player = await source.player(t, p);
+            // Save matches to matches table
+            try {
+              for (const rd of playerObj.rounds) {
+                const matchId = `${playerObj.id}-rd${rd.round}`;
+                await db.prepare(`
+                  INSERT INTO matches (id, category_id, player_id, player_white, player_black, round, board, result, score, color, opponent_id, opponent_name)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET
+                    player_white = excluded.player_white,
+                    player_black = excluded.player_black,
+                    board = excluded.board,
+                    result = excluded.result,
+                    score = excluded.score
+                `).bind(matchId, p.categoryId || t.id, playerObj.id, rd.playerWhite || null, rd.playerBlack || null, rd.round, rd.board || null, rd.result || null, rd.score, rd.color || null, rd.opponentId || null, rd.opponent || null).run();
+              }
+            } catch { }
 
-          // Save matches to matches table
-          try {
-            for (const rd of player.rounds) {
-              const matchId = `${player.id}-rd${rd.round}`;
-              await db.prepare(`
-                INSERT INTO matches (id, category_id, player_id, player_white, player_black, round, board, result, score, color, opponent_id, opponent_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                  player_white = excluded.player_white,
-                  player_black = excluded.player_black,
-                  board = excluded.board,
-                  result = excluded.result,
-                  score = excluded.score
-              `).bind(matchId, p.categoryId || t.id, player.id, rd.playerWhite || null, rd.playerBlack || null, rd.round, rd.board || null, rd.result || null, rd.score, rd.color || null, rd.opponentId || null, rd.opponent || null).run();
-            }
-          } catch { }
+            await db.prepare('INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload').bind(id, pid, t.updated, JSON.stringify(playerObj)).run();
+          }
 
-          await db.prepare('INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload').bind(id, pid, t.updated, JSON.stringify(player)).run();
-          return json({ player }, 200, {}, req);
+          const s = stats(playerObj);
+          const nextMatch = getNextMatch(playerObj);
+          const medalPrediction = getMedal(rank, p.ageGroup || t.group, t.prizes);
+
+          const fullPlayer = {
+            ...playerObj,
+            rank,
+            totalPlayers,
+            club,
+            games: s.played,
+            whiteGames: s.white,
+            blackGames: s.black,
+            wins: s.wins,
+            draws: s.draws,
+            losses: s.losses,
+            nextMatch,
+            medalPrediction
+          };
+
+          return json({
+            player: fullPlayer,
+            rank,
+            totalPlayers,
+            club,
+            games: s.played,
+            whiteGames: s.white,
+            blackGames: s.black,
+            wins: s.wins,
+            draws: s.draws,
+            losses: s.losses,
+            nextMatch,
+            medalPrediction
+          }, 200, {}, req);
         }
         return json({ error: 'Không tìm thấy chức năng.' }, 404, {}, req);
       }

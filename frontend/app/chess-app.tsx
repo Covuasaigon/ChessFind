@@ -238,7 +238,9 @@ export default function ChessApp() {
         {(() => {
           const s = stats(player);
           const next = getNextMatch(player);
-          const medal = getMedal(player.rank, player.ageGroup || current.group, current.prizes);
+          const currentRank = player.rank ?? (current?.players ? (current.players.findIndex(x => x.id === player.id) + 1) : null);
+          const totalCount = player.totalPlayers || (current?.players ? current.players.length : 0);
+          const medal = getMedal(currentRank, player.ageGroup || current.group, current.prizes);
 
           return (
             <div className="player-dashboard-card" style={{ marginTop: 16 }}>
@@ -267,8 +269,8 @@ export default function ChessApp() {
               <div className="dashboard-grid">
                 <div className="dash-stat">
                   <span className="dash-stat-label">Thứ hạng hiện tại</span>
-                  <span className="dash-stat-val">Hạng {fmt(player.rank)}</span>
-                  <span className="dash-stat-sub">trên tổng {current.players ? current.players.length : 0} kỳ thủ</span>
+                  <span className="dash-stat-val">Hạng {currentRank ? currentRank : '—'} / {totalCount} kỳ thủ</span>
+                  <span className="dash-stat-sub">trên tổng số kỳ thủ bảng đấu</span>
                 </div>
                 <div className="dash-stat">
                   <span className="dash-stat-label">Tổng điểm số</span>

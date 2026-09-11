@@ -25,6 +25,7 @@ export type Player = {
   country?: string | null;
   rating: number | null;
   rank: number | null;
+  totalPlayers?: number;
   points: number | null;
   buchholz?: number | null;
   sonnebornBerger?: number | null;
@@ -34,6 +35,14 @@ export type Player = {
   ties: Record<string, number | null>;
   rounds: Round[];
   detailsLoaded: boolean;
+  games?: number;
+  whiteGames?: number;
+  blackGames?: number;
+  wins?: number;
+  draws?: number;
+  losses?: number;
+  nextMatch?: Round | null;
+  medalPrediction?: { medal: string; label: string; type?: string } | null;
 };
 
 export type Category = {

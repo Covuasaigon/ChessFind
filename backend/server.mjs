@@ -46,6 +46,47 @@ function formatClubName(club) {
   if (CLUB_MAP[trimmed]) return CLUB_MAP[trimmed];
   return trimmed;
 }
+function stats(p) {
+  const allCompleted = p.rounds.filter((x) => x.status !== "pending" && x.status !== "unknown");
+  const r = p.rounds.filter((x) => x.status === "played" && x.score !== null);
+  const wins = p.rounds.filter((x) => x.score === 1).length;
+  const draws = p.rounds.filter((x) => x.score === 0.5).length;
+  const losses = p.rounds.filter((x) => x.score === 0).length;
+  const white = p.rounds.filter((x) => x.color === "white").length;
+  const black = p.rounds.filter((x) => x.color === "black").length;
+  const totalPlayed = allCompleted.length > 0 ? allCompleted.length : r.length;
+  return {
+    played: totalPlayed,
+    wins,
+    draws,
+    losses,
+    white,
+    black,
+    unknown: r.filter((x) => x.color === null).length,
+    special: p.rounds.filter((x) => ["bye", "forfeit"].includes(x.status)).length,
+    winRate: totalPlayed > 0 ? wins / totalPlayed * 100 : null
+  };
+}
+function getMedal(rank, group, prizes) {
+  if (!rank || rank <= 0) return null;
+  if (prizes && prizes.length > 0) {
+    const match = prizes.find((p) => p.rank === rank && (!group || normalize(p.group) === "tat ca" || normalize(p.group) === normalize(group)));
+    if (match) {
+      const medalIcon = match.medal === "gold" || rank === 1 ? "\u{1F947}" : match.medal === "silver" || rank === 2 ? "\u{1F948}" : match.medal === "bronze" || rank === 3 ? "\u{1F949}" : "\u{1F3C6}";
+      return { medal: medalIcon, label: match.prizeName };
+    }
+  }
+  if (rank === 1) return { medal: "\u{1F947}", label: "Huy ch\u01B0\u01A1ng V\xE0ng" };
+  if (rank === 2) return { medal: "\u{1F948}", label: "Huy ch\u01B0\u01A1ng B\u1EA1c" };
+  if (rank === 3) return { medal: "\u{1F949}", label: "Huy ch\u01B0\u01A1ng \u0110\u1ED3ng" };
+  return null;
+}
+function getNextMatch(p) {
+  if (!p.rounds || !p.rounds.length) return null;
+  const pending = p.rounds.find((r) => r.status === "pending");
+  if (pending) return pending;
+  return null;
+}
 
 // lib/chess-source.ts
 var HOSTS = /* @__PURE__ */ new Set(["chess-results.com", "www.chess-results.com", "s1.chess-results.com", "s2.chess-results.com", "s3.chess-results.com"]);
@@ -584,28 +625,65 @@ function createApi(db2, sourceParam = {}) {
             }
           }
           if (!t || !p) return json({ error: "H\u1ED3 s\u01A1 kh\xF4ng t\u1ED3n t\u1EA1i ho\u1EB7c gi\u1EA3i \u0111ang \u1EA9n." }, 404, {}, req);
+          const rank = p.rank ?? t.players.findIndex((x) => x.id === pid) + 1;
+          const totalPlayers = t.players ? t.players.length : 0;
+          const club = p.club || formatClubName(p.federation || "");
+          let playerObj;
           const r = await db2.prepare("SELECT payload FROM details WHERE tid = ? AND pid = ? AND revision = ?").bind(id, pid, t.updated).first();
-          if (r) return json({ player: JSON.parse(r.payload) }, 200, {}, req);
-          if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429, {}, req);
-          const player = await source.player(t, p);
-          try {
-            for (const rd of player.rounds) {
-              const matchId = `${player.id}-rd${rd.round}`;
-              await db2.prepare(`
-                INSERT INTO matches (id, category_id, player_id, player_white, player_black, round, board, result, score, color, opponent_id, opponent_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                  player_white = excluded.player_white,
-                  player_black = excluded.player_black,
-                  board = excluded.board,
-                  result = excluded.result,
-                  score = excluded.score
-              `).bind(matchId, p.categoryId || t.id, player.id, rd.playerWhite || null, rd.playerBlack || null, rd.round, rd.board || null, rd.result || null, rd.score, rd.color || null, rd.opponentId || null, rd.opponent || null).run();
+          if (r) {
+            playerObj = JSON.parse(r.payload);
+          } else {
+            if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429, {}, req);
+            playerObj = await source.player(t, p);
+            try {
+              for (const rd of playerObj.rounds) {
+                const matchId = `${playerObj.id}-rd${rd.round}`;
+                await db2.prepare(`
+                  INSERT INTO matches (id, category_id, player_id, player_white, player_black, round, board, result, score, color, opponent_id, opponent_name)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET
+                    player_white = excluded.player_white,
+                    player_black = excluded.player_black,
+                    board = excluded.board,
+                    result = excluded.result,
+                    score = excluded.score
+                `).bind(matchId, p.categoryId || t.id, playerObj.id, rd.playerWhite || null, rd.playerBlack || null, rd.round, rd.board || null, rd.result || null, rd.score, rd.color || null, rd.opponentId || null, rd.opponent || null).run();
+              }
+            } catch {
             }
-          } catch {
+            await db2.prepare("INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload").bind(id, pid, t.updated, JSON.stringify(playerObj)).run();
           }
-          await db2.prepare("INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload").bind(id, pid, t.updated, JSON.stringify(player)).run();
-          return json({ player }, 200, {}, req);
+          const s2 = stats(playerObj);
+          const nextMatch = getNextMatch(playerObj);
+          const medalPrediction = getMedal(rank, p.ageGroup || t.group, t.prizes);
+          const fullPlayer = {
+            ...playerObj,
+            rank,
+            totalPlayers,
+            club,
+            games: s2.played,
+            whiteGames: s2.white,
+            blackGames: s2.black,
+            wins: s2.wins,
+            draws: s2.draws,
+            losses: s2.losses,
+            nextMatch,
+            medalPrediction
+          };
+          return json({
+            player: fullPlayer,
+            rank,
+            totalPlayers,
+            club,
+            games: s2.played,
+            whiteGames: s2.white,
+            blackGames: s2.black,
+            wins: s2.wins,
+            draws: s2.draws,
+            losses: s2.losses,
+            nextMatch,
+            medalPrediction
+          }, 200, {}, req);
         }
         return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404, {}, req);
       }
