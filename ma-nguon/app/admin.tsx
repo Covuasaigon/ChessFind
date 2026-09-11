@@ -1950,38 +1950,72 @@ export default function Admin({ onChanged }: AdminProps) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!remove} onOpenChange={(v: boolean) => { if (!v && !busy) setRemove(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
+      <Dialog open={!!remove} onOpenChange={(v: boolean) => { if (!v && !busy) setRemove(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
             <DialogTitle>Xóa giải đấu?</DialogTitle>
-            <AlertDialogDescription>Giải “{remove?.name}” và toàn bộ dữ liệu kỳ thủ của giải sẽ bị xóa. Nhập đúng tên giải bên dưới để xác nhận.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <label className="saas-label">Tên giải cần xóa<input className="saas-input" style={{ paddingLeft: 16 }} value={confirmName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmName(e.target.value)} autoComplete="off" /></label>
-          {error && <p className="notice warning" role="alert">{error}</p>}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={!!busy}>Hủy</AlertDialogCancel>
-            <button className="primary danger-delete" disabled={!!busy || confirmName !== remove?.name} onClick={async () => { if (await action('delete', { id: remove?.id, confirmName })) setRemove(null); }}>
-              {busy ? 'Đang xóa…' : 'Xóa giải'}
-            </button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            <DialogDescription>
+              Hành động này sẽ xóa giải đấu và toàn bộ dữ liệu liên quan khỏi hệ thống.
+            </DialogDescription>
+          </DialogHeader>
+          {remove && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: 14, color: '#991B1B' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: '#7F1D1D' }}>
+                  ⚠️ Cảnh báo xóa dữ liệu:
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <li><strong>Tên giải đấu:</strong> {remove.name}</li>
+                  <li><strong>Số lượng kỳ thủ:</strong> {remove.players ? remove.players.length : 0} kỳ thủ</li>
+                  <li>Toàn bộ thông tin ván đấu, kết quả thi đấu và bốc thăm của giải đấu này sẽ bị xóa vĩnh viễn và không thể khôi phục.</li>
+                </ul>
+              </div>
 
-      <AlertDialog open={!!deleteBanner} onOpenChange={(v: boolean) => { if (!v && !busy) setDeleteBanner(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
+              <label className="saas-label">
+                Nhập tên giải <span style={{ color: '#DC2626', fontWeight: 700 }}>"{remove.name}"</span> để xác nhận xóa:
+                <input
+                  className="saas-input"
+                  style={{ paddingLeft: 16, marginTop: 6 }}
+                  value={confirmName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmName(e.target.value)}
+                  placeholder="Nhập đúng tên giải đấu"
+                  autoComplete="off"
+                />
+              </label>
+              {error && <p className="notice warning" role="alert">{error}</p>}
+              <div className="dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
+                <button type="button" className="outline" disabled={!!busy} onClick={() => setRemove(null)}>
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  className="primary danger-delete"
+                  disabled={!!busy || confirmName !== remove.name}
+                  onClick={async () => { if (await action('delete', { id: remove.id, confirmName })) setRemove(null); }}
+                >
+                  {busy ? 'Đang xóa…' : 'Xóa giải'}
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteBanner} onOpenChange={(v: boolean) => { if (!v && !busy) setDeleteBanner(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
             <DialogTitle>Xóa Banner này?</DialogTitle>
-            <AlertDialogDescription>Banner “{deleteBanner?.title}” sẽ bị xóa vĩnh viễn khỏi hệ thống.</AlertDialogDescription>
-          </AlertDialogHeader>
+            <DialogDescription>Banner “{deleteBanner?.title}” sẽ bị xóa vĩnh viễn khỏi hệ thống.</DialogDescription>
+          </DialogHeader>
           {error && <p className="notice warning" role="alert">{error}</p>}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={!!busy}>Hủy</AlertDialogCancel>
-            <button className="primary danger-delete" disabled={!!busy} onClick={async () => { if (await action('banner_delete', { id: deleteBanner?.id })) setDeleteBanner(null); }}>
+          <div className="dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
+            <button type="button" className="outline" disabled={!!busy} onClick={() => setDeleteBanner(null)}>Hủy</button>
+            <button type="button" className="primary danger-delete" disabled={!!busy} onClick={async () => { if (await action('banner_delete', { id: deleteBanner?.id })) setDeleteBanner(null); }}>
               {busy ? 'Đang xóa…' : 'Xóa Banner'}
             </button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
