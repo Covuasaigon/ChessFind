@@ -1024,7 +1024,7 @@ function openDatabase(file, migrations) {
 // server.ts
 var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
-var host = process.env.HOST || "127.0.0.1";
+var host = process.env.HOST || "0.0.0.0";
 var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
 var db = openDatabase(resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite"), resolve3(root, "migrations"));
 var api = createApi(db);
