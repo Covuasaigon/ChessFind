@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Search, Trophy, Home, Bookmark, ChevronRight, ArrowLeft, ArrowUpRight, Users, ShieldCheck, RefreshCw, Share2, Printer, Check, Minus, X, LayoutDashboard, Link as LinkIcon, Plus, Info, Clock, Medal, BarChart3, Download, TrendingUp, PieChart as PieIcon } from 'lucide-react';
+import { Search, Trophy, Home, Bookmark, ChevronRight, ChevronLeft, ArrowLeft, ArrowUpRight, Users, ShieldCheck, RefreshCw, Share2, Printer, Check, Minus, X, LayoutDashboard, Link as LinkIcon, Plus, Info, Clock, Medal, BarChart3, Download, TrendingUp, PieChart as PieIcon } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -123,6 +123,8 @@ export default function ChessApp() {
         return (
           <>
             <HeroSection q={q} setQ={setQ} onSearch={e => { e.preventDefault(); go('search'); }} config={heroConfig} />
+
+            <TournamentSlideCarousel />
 
             <section className="section">
               <div className="section-heading">
@@ -856,6 +858,316 @@ function TournamentInfoSlides({ tournamentId }: { tournamentId: string }) {
               src={activeImage.url}
               alt={activeImage.title}
               style={{ maxWidth: '92vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 12, boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '2px solid rgba(255,255,255,0.2)' }}
+            />
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TournamentSlideCarousel() {
+  const [slides, setSlides] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [activeImage, setActiveImage] = useState<{ url: string; title: string } | null>(null);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  useEffect(() => {
+    let dead = false;
+    apiFetch('/api/slides/home')
+      .then(r => r.json())
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data.slides || []);
+        if (!dead && list.length > 0) {
+          setSlides(list);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!dead) setLoading(false);
+      });
+    return () => { dead = true; };
+  }, []);
+
+  // Auto-slide every 5 seconds
+  useEffect(() => {
+    if (slides.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIndex(prev => (prev + 1) % slides.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [slides.length]);
+
+  if (loading || slides.length === 0) return null;
+
+  const currentSlide = slides[currentIndex] || slides[0];
+
+  const handlePrev = () => {
+    setCurrentIndex(prev => (prev - 1 + slides.length) % slides.length);
+  };
+
+  const handleNext = () => {
+    setCurrentIndex(prev => (prev + 1) % slides.length);
+  };
+
+  const minSwipeDistance = 40;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    if (distance > minSwipeDistance) {
+      handleNext();
+    } else if (distance < -minSwipeDistance) {
+      handlePrev();
+    }
+  };
+
+  const slideTypeIcons: Record<string, string> = {
+    'Banner chính': '🖼️',
+    'Điều lệ giải đấu': '📄',
+    'Hướng dẫn thi đấu': '📜',
+    'Cơ cấu giải thưởng': '🎁',
+    'Lịch thi đấu': '📅',
+    'Địa điểm tổ chức': '📍',
+    'Thông báo quan trọng': '📢',
+    'Nhà tài trợ': '🤝',
+    'Khác': '📌'
+  };
+
+  return (
+    <section className="section" style={{ maxWidth: 1200, margin: '0 auto 28px auto', width: '100%', padding: '0 16px' }}>
+      <div className="section-heading" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <span className="eyebrow muted" style={{ letterSpacing: '0.05em', fontSize: 11, fontWeight: 800, color: '#145DA0', display: 'block', marginBottom: 4 }}>
+            THÔNG TIN NỔI BẬT
+          </span>
+          <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#062B4F', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Info size={22} style={{ color: '#145DA0' }} />
+            <span>Thông tin giải đấu</span>
+          </h2>
+          <p style={{ fontSize: 13, color: '#64748B', marginTop: 4, marginBottom: 0 }}>
+            Cập nhật điều lệ, hướng dẫn thi đấu, lịch thi đấu và thông tin quan trọng
+          </p>
+        </div>
+        {slides.length > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={handlePrev}
+              aria-label="Slide trước"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: '50%',
+                border: '1px solid #CBD5E1',
+                background: '#FFFFFF',
+                color: '#062B4F',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#64748B', minWidth: 42, textAlign: 'center' }}>
+              {currentIndex + 1} / {slides.length}
+            </span>
+            <button
+              onClick={handleNext}
+              aria-label="Slide tiếp theo"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: '50%',
+                border: '1px solid #CBD5E1',
+                background: '#FFFFFF',
+                color: '#062B4F',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          background: '#FFFFFF',
+          borderRadius: 20,
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 20px rgba(6,43,79,0.08)',
+          overflow: 'hidden',
+          position: 'relative',
+          width: '100%'
+        }}
+      >
+        {/* Slide Image Box */}
+        <div
+          onClick={() => setActiveImage({ url: currentSlide.image_url, title: currentSlide.title })}
+          style={{
+            position: 'relative',
+            width: '100%',
+            background: '#041E38',
+            cursor: 'pointer',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            aspectRatio: '16 / 9',
+            maxHeight: '520px'
+          }}
+        >
+          <img
+            src={currentSlide.image_url}
+            alt={currentSlide.title}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: 'block'
+            }}
+            loading="lazy"
+          />
+
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 12,
+              right: 12,
+              background: 'rgba(6, 43, 79, 0.8)',
+              backdropFilter: 'blur(4px)',
+              color: '#FFFFFF',
+              padding: '6px 12px',
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            <Search size={14} /> Phóng to hình ảnh
+          </div>
+        </div>
+
+        {/* Slide Card Info below image */}
+        <div style={{ padding: '16px 20px', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 12px',
+                borderRadius: 8,
+                background: '#EFF6FF',
+                color: '#1D4ED8',
+                fontSize: 12,
+                fontWeight: 700,
+                marginBottom: 6
+              }}
+            >
+              <span>{slideTypeIcons[currentSlide.slide_type] || '📌'}</span>
+              <span>{currentSlide.slide_type || 'Thông tin giải đấu'}</span>
+            </span>
+            <h3 style={{ fontSize: 17, fontWeight: 800, color: '#062B4F', margin: 0, lineHeight: 1.3 }}>
+              {currentSlide.title}
+            </h3>
+            {currentSlide.tournament_name && (
+              <span style={{ fontSize: 12, color: '#64748B', marginTop: 4, display: 'block' }}>
+                Giải đấu: <strong>{currentSlide.tournament_name}</strong>
+              </span>
+            )}
+          </div>
+
+          {/* Indicators */}
+          {slides.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {slides.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentIndex(idx)}
+                  aria-label={`Chuyển slide ${idx + 1}`}
+                  style={{
+                    width: idx === currentIndex ? 24 : 8,
+                    height: 8,
+                    borderRadius: 4,
+                    background: idx === currentIndex ? '#145DA0' : '#CBD5E1',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Lightbox Modal */}
+      {activeImage && (
+        <div
+          onClick={() => setActiveImage(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 99999,
+            background: 'rgba(6, 43, 79, 0.94)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            backdropFilter: 'blur(6px)'
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ position: 'relative', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 12, color: '#FFFFFF' }}>
+              <span style={{ fontSize: 16, fontWeight: 800, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '80vw' }}>
+                {activeImage.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveImage(null)}
+                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#FFFFFF', borderRadius: 99, padding: '6px 16px', cursor: 'pointer', fontWeight: 800, fontSize: 14 }}
+              >
+                ✕ Đóng
+              </button>
+            </div>
+
+            <img
+              src={activeImage.url}
+              alt={activeImage.title}
+              style={{ maxWidth: '94vw', maxHeight: '82vh', objectFit: 'contain', borderRadius: 12, boxShadow: '0 20px 50px rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.2)' }}
             />
           </div>
         </div>

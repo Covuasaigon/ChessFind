@@ -644,10 +644,12 @@ function createApi(db2, sourceParam = {}) {
           }
           return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
         }
-        if (path === "/api/slides") {
+        if (path === "/api/slides" || path === "/api/slides/home") {
           const tid = u.searchParams.get("tournament_id") || u.searchParams.get("t") || "";
           try {
-            let sqlStr = "SELECT * FROM tournament_slides WHERE status = 'active'";
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            let sqlStr = "SELECT * FROM tournament_slides WHERE status = 'active' OR is_active = 1";
             const params = [];
             if (tid) {
               sqlStr += " AND tournament_id = ?";
@@ -655,8 +657,18 @@ function createApi(db2, sourceParam = {}) {
             }
             sqlStr += " ORDER BY display_order ASC, created_at DESC";
             const r = params.length > 0 ? await db2.prepare(sqlStr).bind(...params).all() : await db2.prepare(sqlStr).all();
-            return json({ slides: r.results || [] }, 200, {}, req);
+            const slidesList = (r.results || []).map((item) => ({
+              ...item,
+              tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
+            }));
+            if (path === "/api/slides/home") {
+              return json(slidesList, 200, {}, req);
+            }
+            return json({ slides: slidesList }, 200, {}, req);
           } catch {
+            if (path === "/api/slides/home") {
+              return json([], 200, {}, req);
+            }
             return json({ slides: [] }, 200, {}, req);
           }
         }
