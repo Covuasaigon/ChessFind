@@ -18,7 +18,7 @@ export interface BannerItem {
 const DEFAULT_BANNERS: BannerItem[] = [
   {
     id: 'default-1',
-    title: 'Cờ Vua Sài Gòn — Đào tạo & Thi đấu',
+    title: 'Cờ Vua Sài Gòn — Đào Tạo & Thi Đấu',
     description: 'Tra cứu thành tích và hành trình phát triển trí tuệ của các kỳ thủ trẻ.',
     image_url: '/hero-chess-king.png',
     button_text: 'Xem kết quả',
@@ -46,6 +46,8 @@ export interface DynamicBannerProps {
 export default function DynamicBanner({ banners, onNavigate }: DynamicBannerProps) {
   const list = banners && banners.length > 0 ? banners : DEFAULT_BANNERS;
   const [index, setIndex] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
   useEffect(() => {
     if (list.length <= 1) return;
@@ -66,23 +68,54 @@ export default function DynamicBanner({ banners, onNavigate }: DynamicBannerProp
     }
   };
 
+  const minSwipeDistance = 40;
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    if (distance > minSwipeDistance) {
+      setIndex(prev => (prev + 1) % list.length);
+    } else if (distance < -minSwipeDistance) {
+      setIndex(prev => (prev - 1 + list.length) % list.length);
+    }
+  };
+
   return (
-    <div className="promo-banner-container">
+    <div
+      className="promo-banner-container"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
       {list.map((item, idx) => {
         const isActive = idx === index;
         return (
           <div
             key={item.id}
             className={`promo-banner-slide ${isActive ? 'active' : ''}`}
-            style={{
-              opacity: isActive ? 1 : 0,
-              pointerEvents: isActive ? 'auto' : 'none',
-              transform: isActive ? 'scale(1)' : 'scale(0.98)',
-              transition: 'opacity 500ms ease, transform 500ms ease'
-            }}
           >
             <div className="promo-banner-content-wrapper">
-              {/* LEFT 45%: Text Content */}
+              {/* IMAGE FIRST ON MOBILE, RIGHT ON DESKTOP */}
+              <div className="promo-banner-right">
+                <div className="promo-banner-img-frame">
+                  <img
+                    src={item.image_url || '/hero-chess-king.png'}
+                    alt={item.title}
+                    className="promo-banner-img"
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+
+              {/* TEXT & BUTTON SECOND ON MOBILE, LEFT ON DESKTOP */}
               <div className="promo-banner-left">
                 <div className="banner-badge">
                   <Sparkles size={14} className="gold-sparkle" />
@@ -97,21 +130,9 @@ export default function DynamicBanner({ banners, onNavigate }: DynamicBannerProp
                     onClick={() => handleAction(item.button_link || '/')}
                   >
                     <span>{item.button_text}</span>
-                    <ArrowRight size={17} />
+                    <ArrowRight size={16} />
                   </button>
                 )}
-              </div>
-
-              {/* RIGHT 55%: Dedicated Image Container with object-fit: contain (100% visible, no crop) */}
-              <div className="promo-banner-right">
-                <div className="promo-banner-img-frame">
-                  <img
-                    src={item.image_url || '/hero-chess-king.png'}
-                    alt={item.title}
-                    className="promo-banner-img"
-                    loading="lazy"
-                  />
-                </div>
               </div>
             </div>
           </div>
