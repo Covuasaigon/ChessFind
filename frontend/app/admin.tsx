@@ -149,7 +149,7 @@ export default function Admin({ onChanged }: AdminProps) {
     status: 'active' | 'hidden';
   }>({
     id: '',
-    tournament_id: '',
+    tournament_id: 'global',
     title: '',
     slide_type: 'Điều lệ giải đấu',
     image_url: '',
@@ -164,18 +164,10 @@ export default function Admin({ onChanged }: AdminProps) {
       toast.error('Dung lượng hình ảnh quá lớn (Tối đa 8MB).');
       return;
     }
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
-      toast.error('Chỉ chấp nhận file ảnh: .jpg, .jpeg, .png, .webp.');
-      return;
-    }
-
     setUploadingSlide(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('image', file);
-
       const r = await apiFetch('/api/admin/slides/upload', {
         method: 'POST',
         headers: {
@@ -183,10 +175,8 @@ export default function Admin({ onChanged }: AdminProps) {
         },
         body: formData
       });
-
-      const d = (await r.json()) as { url?: string; error?: string; message?: string };
-      if (!r.ok || !d.url) throw Error(d.error || 'Lỗi upload ảnh slide');
-
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi tải ảnh slide');
       setSlideForm(prev => ({ ...prev, image_url: d.url! }));
       toast.success('Tải ảnh slide thành công!');
     } catch (e) {
@@ -197,10 +187,6 @@ export default function Admin({ onChanged }: AdminProps) {
   }
 
   async function saveSlide() {
-    if (!slideForm.tournament_id) {
-      toast.error('Vui lòng chọn Giải đấu.');
-      return;
-    }
     if (!slideForm.title.trim()) {
       toast.error('Vui lòng nhập Tiêu đề slide.');
       return;
@@ -221,7 +207,7 @@ export default function Admin({ onChanged }: AdminProps) {
           ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
         },
         body: JSON.stringify({
-          tournament_id: slideForm.tournament_id,
+          tournament_id: slideForm.tournament_id || 'global',
           title: slideForm.title.trim(),
           slide_type: slideForm.slide_type,
           image_url: slideForm.image_url.trim(),
@@ -234,7 +220,7 @@ export default function Admin({ onChanged }: AdminProps) {
       toast.success(d.message || (isEdit ? 'Đã cập nhật slide thành công!' : 'Đã tạo slide mới thành công!'));
       setSlideForm({
         id: '',
-        tournament_id: slideForm.tournament_id,
+        tournament_id: 'global',
         title: '',
         slide_type: 'Điều lệ giải đấu',
         image_url: '',
@@ -1045,7 +1031,7 @@ export default function Admin({ onChanged }: AdminProps) {
               onClick={() => {
                 setSlideForm({
                   id: '',
-                  tournament_id: activeTournaments[0]?.id || '',
+                  tournament_id: 'global',
                   title: '',
                   slide_type: 'Điều lệ giải đấu',
                   image_url: '',
