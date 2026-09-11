@@ -1062,22 +1062,27 @@ var server = createServer(async (req, res) => {
     }
     const isCloudHost = requestedHost.endsWith(".onrender.com") || requestedHost.endsWith(".railway.app") || requestedHost.endsWith(".vercel.app");
     if (publicOrigin && !allowedHosts.has(requestedHost) && !isCloudHost && process.env.STRICT_HOST_CHECK === "true") {
+      if (req.url?.startsWith("/api")) {
+        res.writeHead(400, { ...security, "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Host kh\xF4ng h\u1EE3p l\u1EC7. C\u1EA5u h\xECnh PUBLIC_ORIGIN khi d\xF9ng t\xEAn mi\u1EC1n." }));
+        return;
+      }
       res.writeHead(400, security);
       res.end("Host kh\xF4ng h\u1EE3p l\u1EC7. C\u1EA5u h\xECnh PUBLIC_ORIGIN khi d\xF9ng t\xEAn mi\u1EC1n.");
       return;
     }
     const origin = publicOrigin || `http://${requestedHost}`;
     const url = new URL(req.url || "/", origin);
-    if (url.pathname.startsWith("/api/")) {
+    if (url.pathname.startsWith("/api/") || url.pathname === "/api") {
       let body;
       if (req.method !== "GET" && req.method !== "HEAD") {
         const chunks = [];
         let n = 0;
         for await (const chunk of req) {
           n += chunk.length;
-          if (n > 6e6) {
-            res.writeHead(413, security);
-            res.end("Y\xEAu c\u1EA7u qu\xE1 l\u1EDBn.");
+          if (n > 12e6) {
+            res.writeHead(413, { ...security, "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Y\xEAu c\u1EA7u qu\xE1 l\u1EDBn." }));
             return;
           }
           chunks.push(chunk);
@@ -1087,7 +1092,7 @@ var server = createServer(async (req, res) => {
       const headers = new Headers();
       for (const [k, v] of Object.entries(req.headers)) if (v) headers.set(k, Array.isArray(v) ? v.join(",") : v);
       const r = await api(new Request(url, { method: req.method, headers, body }), req.socket.remoteAddress || "unknown");
-      const outgoing = { ...security };
+      const outgoing = { ...security, "Content-Type": "application/json" };
       r.headers.forEach((v, k) => {
         outgoing[k] = v;
       });

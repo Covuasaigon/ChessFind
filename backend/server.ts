@@ -40,6 +40,11 @@ const server = createServer(async (req, res) => {
     }
     const isCloudHost = requestedHost.endsWith('.onrender.com') || requestedHost.endsWith('.railway.app') || requestedHost.endsWith('.vercel.app');
     if (publicOrigin && !allowedHosts.has(requestedHost) && !isCloudHost && process.env.STRICT_HOST_CHECK === 'true') {
+      if (req.url?.startsWith('/api')) {
+        res.writeHead(400, { ...security, 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Host không hợp lệ. Cấu hình PUBLIC_ORIGIN khi dùng tên miền.' }));
+        return;
+      }
       res.writeHead(400, security);
       res.end('Host không hợp lệ. Cấu hình PUBLIC_ORIGIN khi dùng tên miền.');
       return;
@@ -47,16 +52,16 @@ const server = createServer(async (req, res) => {
     const origin = publicOrigin || `http://${requestedHost}`;
     const url = new URL(req.url || '/', origin);
 
-    if (url.pathname.startsWith('/api/')) {
+    if (url.pathname.startsWith('/api/') || url.pathname === '/api') {
       let body: Buffer | undefined;
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         const chunks: Buffer[] = [];
         let n = 0;
         for await (const chunk of req) {
           n += chunk.length;
-          if (n > 6000000) {
-            res.writeHead(413, security);
-            res.end('Yêu cầu quá lớn.');
+          if (n > 12000000) {
+            res.writeHead(413, { ...security, 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Yêu cầu quá lớn.' }));
             return;
           }
           chunks.push(chunk);
@@ -66,7 +71,7 @@ const server = createServer(async (req, res) => {
       const headers = new Headers();
       for (const [k, v] of Object.entries(req.headers)) if (v) headers.set(k, Array.isArray(v) ? v.join(',') : v);
       const r = await api(new Request(url, { method: req.method, headers, body: body as any }), req.socket.remoteAddress || 'unknown');
-      const outgoing: Record<string, string | string[]> = { ...security };
+      const outgoing: Record<string, string | string[]> = { ...security, 'Content-Type': 'application/json' };
       r.headers.forEach((v, k) => { outgoing[k] = v; });
       const setCookies = r.headers.get('set-cookie');
       if (setCookies) outgoing['set-cookie'] = setCookies;
