@@ -124,6 +124,8 @@ export default function ChessApp() {
           <>
             <HeroSection q={q} setQ={setQ} onSearch={e => { e.preventDefault(); go('search'); }} config={heroConfig} />
 
+            <DynamicBanner banners={banners} onNavigate={v => go(v as View)} />
+
             <TournamentSlideCarousel />
 
             <section className="section">
@@ -136,8 +138,6 @@ export default function ChessApp() {
               </div>
               {!tourneys.length && !loading && <p className="subtle below">Chưa có giải đấu được công bố. Quản trị viên có thể dán link Chess-Results trong mục Quản trị.</p>}
             </section>
-
-            <DynamicBanner banners={banners} onNavigate={v => go(v as View)} />
           </>
         );
       })()}
