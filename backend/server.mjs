@@ -361,23 +361,17 @@ function getCorsHeaders(req) {
     } catch {
     }
   }
-  const allowedEnv = [
-    process.env.FRONTEND_URL,
-    process.env.PUBLIC_ORIGIN,
-    process.env.API_URL,
-    process.env.ALLOWED_ORIGINS
-  ].filter(Boolean).flatMap((x) => x.split(",").map((s) => s.trim()));
-  let allowOrigin = "*";
-  if (reqOrigin) {
-    allowOrigin = reqOrigin;
-  }
-  return {
+  const allowOrigin = reqOrigin || "*";
+  const headers = {
     "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-CSRF-Token, X-Admin-Token, X-Requested-With",
     "Access-Control-Max-Age": "86400"
   };
+  if (allowOrigin !== "*") {
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
+  return headers;
 }
 function json(data, status = 200, headers = {}, req) {
   const cors = getCorsHeaders(req);
@@ -510,7 +504,7 @@ function createApi(db2, sourceParam = {}) {
         }
         if (path === "/api/player") {
           const id = u.searchParams.get("t") || "", pid = u.searchParams.get("p") || "";
-          if (!/^\d+$/.test(id) || !/^\d+-\d+$/.test(pid)) return json({ error: "M\xE3 h\u1ED3 s\u01A1 kh\xF4ng h\u1EE3p l\u1EC7." }, 400);
+          if (!/^\d+$/.test(id) || !/^\d+-\d+$/.test(pid)) return json({ error: "M\xE3 h\u1ED3 s\u01A1 kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
           let t = await get(id);
           let p = t?.players.find((p2) => p2.id === pid);
           if (!p) {
@@ -521,10 +515,10 @@ function createApi(db2, sourceParam = {}) {
               p = catTour.players.find((x) => x.id === pid);
             }
           }
-          if (!t || !p) return json({ error: "H\u1ED3 s\u01A1 kh\xF4ng t\u1ED3n t\u1EA1i ho\u1EB7c gi\u1EA3i \u0111ang \u1EA9n." }, 404);
+          if (!t || !p) return json({ error: "H\u1ED3 s\u01A1 kh\xF4ng t\u1ED3n t\u1EA1i ho\u1EB7c gi\u1EA3i \u0111ang \u1EA9n." }, 404, {}, req);
           const r = await db2.prepare("SELECT payload FROM details WHERE tid = ? AND pid = ? AND revision = ?").bind(id, pid, t.updated).first();
-          if (r) return json({ player: JSON.parse(r.payload) });
-          if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429);
+          if (r) return json({ player: JSON.parse(r.payload) }, 200, {}, req);
+          if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429, {}, req);
           const player = await source.player(t, p);
           try {
             for (const rd of player.rounds) {
@@ -543,7 +537,7 @@ function createApi(db2, sourceParam = {}) {
           } catch {
           }
           await db2.prepare("INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload").bind(id, pid, t.updated, JSON.stringify(player)).run();
-          return json({ player });
+          return json({ player }, 200, {}, req);
         }
         return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404);
       }

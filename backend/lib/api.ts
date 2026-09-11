@@ -23,25 +23,19 @@ function getCorsHeaders(req?: Request): Record<string, string> {
     try { reqOrigin = new URL(req.headers.get('referer')!).origin; } catch {}
   }
 
-  const allowedEnv = [
-    process.env.FRONTEND_URL,
-    process.env.PUBLIC_ORIGIN,
-    process.env.API_URL,
-    process.env.ALLOWED_ORIGINS
-  ].filter(Boolean).flatMap(x => x!.split(',').map(s => s.trim()));
-
-  let allowOrigin = '*';
-  if (reqOrigin) {
-    allowOrigin = reqOrigin;
-  }
-
-  return {
+  const allowOrigin = reqOrigin || '*';
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token, X-Admin-Token, X-Requested-With',
     'Access-Control-Max-Age': '86400'
   };
+
+  if (allowOrigin !== '*') {
+    headers['Access-Control-Allow-Credentials'] = 'true';
+  }
+
+  return headers;
 }
 
 export function json(data: unknown, status = 200, headers: Record<string, string> = {}, req?: Request) {
@@ -172,7 +166,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         }
         if (path === '/api/player') {
           const id = u.searchParams.get('t') || '', pid = u.searchParams.get('p') || '';
-          if (!/^\d+$/.test(id) || !/^\d+-\d+$/.test(pid)) return json({ error: 'Mã hồ sơ không hợp lệ.' }, 400);
+          if (!/^\d+$/.test(id) || !/^\d+-\d+$/.test(pid)) return json({ error: 'Mã hồ sơ không hợp lệ.' }, 400, {}, req);
 
           let t = await get(id);
           let p = t?.players.find(p => p.id === pid);
@@ -187,12 +181,12 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             }
           }
 
-          if (!t || !p) return json({ error: 'Hồ sơ không tồn tại hoặc giải đang ẩn.' }, 404);
+          if (!t || !p) return json({ error: 'Hồ sơ không tồn tại hoặc giải đang ẩn.' }, 404, {}, req);
 
           const r = await db.prepare('SELECT payload FROM details WHERE tid = ? AND pid = ? AND revision = ?').bind(id, pid, t.updated).first<{ payload: string }>();
-          if (r) return json({ player: JSON.parse(r.payload) });
+          if (r) return json({ player: JSON.parse(r.payload) }, 200, {}, req);
 
-          if (!await lock('detail:' + id, 3)) return json({ error: 'Nguồn đang được tải. Hãy thử lại sau vài giây.' }, 429);
+          if (!await lock('detail:' + id, 3)) return json({ error: 'Nguồn đang được tải. Hãy thử lại sau vài giây.' }, 429, {}, req);
           const player = await source.player(t, p);
 
           // Save matches to matches table
@@ -213,7 +207,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           } catch { }
 
           await db.prepare('INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload').bind(id, pid, t.updated, JSON.stringify(player)).run();
-          return json({ player });
+          return json({ player }, 200, {}, req);
         }
         return json({ error: 'Không tìm thấy chức năng.' }, 404);
       }
