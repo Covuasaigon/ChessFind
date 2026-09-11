@@ -20,6 +20,7 @@ export type Player = {
   snr: string;
   name: string;
   fideId?: string | null;
+  federation?: string | null;
   club: string;
   country?: string | null;
   rating: number | null;

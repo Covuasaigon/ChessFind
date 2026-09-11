@@ -1,4 +1,4 @@
-import { num, normalize, type Tournament, type Player, type Round } from './chess';
+import { num, normalize, formatClubName, type Tournament, type Player, type Round } from './chess';
 
 const HOSTS = new Set(['chess-results.com', 'www.chess-results.com', 's1.chess-results.com', 's2.chess-results.com', 's3.chess-results.com']);
 
@@ -106,7 +106,8 @@ export function parseRanking(html: string, source: string, group: string): Tourn
   const si = findCol(h, ['sno', 'no']);
   const pi = findCol(h, ['pts', 'points']);
   const rating = findCol(h, ['rtg', 'rating', 'rtgi', 'elo']);
-  const club = findCol(h, ['club/city', 'club', 'club/country', 'team', 'city', 'club/city/fed', 'federation', 'fed', 'land']);
+  const fedCol = findCol(h, ['fed', 'federation', 'ld', 'ldo', 'land']);
+  const clubCol = findCol(h, ['clubcity', 'clbtinh', 'clb/tinh', 'club/city', 'club/country', 'team/city', 'club', 'clb', 'team', 'city']);
   const fideIdCol = findCol(h, ['fideid', 'fide', 'id', 'identnumber', 'ident']);
   const sexCol = findCol(h, ['sex', 'gender', 'gioitinh']);
   const typCol = findCol(h, ['typ', 'gr', 'group', 'typgr', 'kat', 'cat', 'category']);
@@ -138,12 +139,17 @@ export function parseRanking(html: string, source: string, group: string): Tourn
     const rowTyp = typCol >= 0 ? row[typCol]?.text : '';
     const ageGroupMatch = group.match(/(?:U\d+|Trẻ|Nhi|Tiểu học|THCS|THPT)/i)?.[0] || rowTyp || 'Toàn giải';
 
+    const rawFed = fedCol >= 0 ? row[fedCol]?.text || null : null;
+    const rawClub = clubCol >= 0 ? row[clubCol]?.text || '' : '';
+    const finalClub = rawClub || (rawFed ? formatClubName(rawFed) : '');
+
     players.push({
       id: `${id}-${snr}`,
       snr,
       name: row[ni].text,
       fideId: fideIdCol >= 0 ? row[fideIdCol]?.text || null : null,
-      club: club >= 0 ? row[club].text : '',
+      federation: rawFed,
+      club: finalClub,
       rating: rating >= 0 ? num(row[rating].text) : null,
       rank: finalRank,
       points: pi >= 0 ? num(row[pi].text) : null,

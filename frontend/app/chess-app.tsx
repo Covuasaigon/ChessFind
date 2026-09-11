@@ -219,7 +219,7 @@ export default function ChessApp() {
           <div className="profile-name">
             <span className="eyebrow">Bảng đấu: {player.ageGroup || current.group}</span>
             <h1>{player.name}</h1>
-            <p>{formatClubName(player.club)} <span className="desktop-only">· SBD {player.snr}</span> {player.fideId ? `· FIDE ID: ${player.fideId}` : ''}</p>
+            <p>{player.club || formatClubName(player.federation || '')}{player.federation && player.federation !== player.club ? ` (LĐ: ${player.federation})` : ''} <span className="desktop-only">· SBD {player.snr}</span> {player.fideId ? `· FIDE ID: ${player.fideId}` : ''}</p>
           </div>
           <button className={'save-btn ' + (saved.includes(current.id + ':' + player.id) ? 'saved' : '')} onClick={() => bookmark(current, player)} aria-label="Lưu kỳ thủ">
             <Bookmark size={21} fill={saved.includes(current.id + ':' + player.id) ? 'currentColor' : 'none'} />
@@ -253,7 +253,7 @@ export default function ChessApp() {
                   </div>
                 </div>
                 <span className="soft-badge" style={{ background: 'rgba(212, 175, 55, 0.2)', color: '#D4AF37', border: '1px solid rgba(212, 175, 55, 0.4)', fontWeight: 700 }}>
-                  CLB: {formatClubName(player.club)}
+                  CLB/Tỉnh: {player.club || formatClubName(player.federation || '')}
                 </span>
               </div>
 
@@ -279,8 +279,8 @@ export default function ChessApp() {
                   <span className="dash-stat-sub">thống kê màu quân thực đấu</span>
                 </div>
                 <div className="dash-stat">
-                  <span className="dash-stat-label">Đơn vị / CLB</span>
-                  <span className="dash-stat-val" style={{ fontSize: 14, wordBreak: 'break-word' }}>{formatClubName(player.club)}</span>
+                  <span className="dash-stat-label">Đơn vị / CLB/Tỉnh</span>
+                  <span className="dash-stat-val" style={{ fontSize: 14, wordBreak: 'break-word' }}>{player.club || formatClubName(player.federation || '')}</span>
                   <span className="dash-stat-sub">đơn vị đăng ký thi đấu</span>
                 </div>
                 <div className="dash-stat">
@@ -633,8 +633,8 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onO
         <TableRow>
           <TableHead>Hạng</TableHead>
           <TableHead>Họ và tên kỳ thủ</TableHead>
+          <TableHead>CLB / Tỉnh</TableHead>
           <TableHead>SBD</TableHead>
-          <TableHead>Đơn vị / CLB</TableHead>
           <TableHead>Điểm</TableHead>
           <TableHead>Buchholz (BH)</TableHead>
           <TableHead>Sonneborn Berger (SB)</TableHead>
@@ -649,7 +649,7 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onO
           const sbVal = p.sonnebornBerger ?? p.ties['SB'] ?? p.ties['Sonneborn'] ?? p.ties['SB.'] ?? p.ties['TB3'] ?? p.ties['TB5'] ?? null;
           const rpVal = p.performance ?? p.ties['Rp'] ?? p.ties['Performance'] ?? p.ties['RP'] ?? null;
           const gamesCount = p.detailsLoaded ? `${stats(p).played} ván` : (t.rounds ? `${t.rounds} ván` : '—');
-          const clubName = formatClubName(p.club);
+          const clubName = p.club || formatClubName(p.federation || '');
 
           return (
             <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
@@ -659,8 +659,8 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onO
                   <b>{p.name}</b>
                 </button>
               </TableCell>
-              <TableCell>{p.snr}</TableCell>
               <TableCell>{clubName}</TableCell>
+              <TableCell>{p.snr}</TableCell>
               <TableCell className="points">{fmt(p.points)}</TableCell>
               <TableCell>{fmt(bhVal)}</TableCell>
               <TableCell>{fmt(sbVal)}</TableCell>

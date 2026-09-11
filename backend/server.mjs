@@ -10,6 +10,42 @@ var num = (s) => {
   const v = s.trim().replace(/½/g, ".5").replace(",", ".");
   return v !== "" && /^\d+(?:\.\d+)?$|^\.5$/.test(v) ? Number(v) : null;
 };
+var CLUB_MAP = {
+  "HDC": "CLB C\u1EDD Vua HDC",
+  "TPC": "CLB C\u1EDD Vua TPC (T\xE2n B\xECnh)",
+  "TBC": "CLB C\u1EDD Vua TBC",
+  "RTC": "CLB C\u1EDD Vua R\u1ED3ng Tr\u1EBB (RTC)",
+  "BTC": "CLB C\u1EDD Vua B\u1EBFn Th\xE0nh (BTC)",
+  "ONL": "CLB C\u1EDD Vua Online (ONL)",
+  "DHC": "CLB C\u1EDD Vua DHC",
+  "KDC": "CLB C\u1EDD Vua KDC",
+  "Q1": "Qu\u1EADn 1 - TP.HCM",
+  "Q2": "Qu\u1EADn 2 - TP.HCM",
+  "Q3": "Qu\u1EADn 3 - TP.HCM",
+  "Q4": "Qu\u1EADn 4 - TP.HCM",
+  "Q5": "Qu\u1EADn 5 - TP.HCM",
+  "Q6": "Qu\u1EADn 6 - TP.HCM",
+  "Q7": "Qu\u1EADn 7 - TP.HCM",
+  "Q8": "Qu\u1EADn 8 - TP.HCM",
+  "Q9": "Qu\u1EADn 9 - TP.HCM",
+  "Q10": "Qu\u1EADn 10 - TP.HCM",
+  "Q11": "Qu\u1EADn 11 - TP.HCM",
+  "Q12": "Qu\u1EADn 12 - TP.HCM",
+  "TD": "TP. Th\u1EE7 \u0110\u1EE9c",
+  "GV": "Qu\u1EADn G\xF2 V\u1EA5p",
+  "TB": "Qu\u1EADn T\xE2n B\xECnh",
+  "BT": "Qu\u1EADn B\xECnh Th\u1EA1nh",
+  "PN": "Qu\u1EADn Ph\xFA Nhu\u1EADn",
+  "TP": "Th\xE0nh ph\u1ED1 H\u1ED3 Ch\xED Minh"
+};
+function formatClubName(club) {
+  if (!club || !club.trim()) return "T\u1EF1 do / Ch\u01B0a r\xF5";
+  const trimmed = club.trim();
+  const upper = trimmed.toUpperCase();
+  if (CLUB_MAP[upper]) return CLUB_MAP[upper];
+  if (CLUB_MAP[trimmed]) return CLUB_MAP[trimmed];
+  return trimmed;
+}
 
 // lib/chess-source.ts
 var HOSTS = /* @__PURE__ */ new Set(["chess-results.com", "www.chess-results.com", "s1.chess-results.com", "s2.chess-results.com", "s3.chess-results.com"]);
@@ -115,7 +151,8 @@ function parseRanking(html, source, group) {
   const si = findCol(h, ["sno", "no"]);
   const pi = findCol(h, ["pts", "points"]);
   const rating = findCol(h, ["rtg", "rating", "rtgi", "elo"]);
-  const club = findCol(h, ["club/city", "club", "club/country", "team", "city", "club/city/fed", "federation", "fed", "land"]);
+  const fedCol = findCol(h, ["fed", "federation", "ld", "ldo", "land"]);
+  const clubCol = findCol(h, ["clubcity", "clbtinh", "clb/tinh", "club/city", "club/country", "team/city", "club", "clb", "team", "city"]);
   const fideIdCol = findCol(h, ["fideid", "fide", "id", "identnumber", "ident"]);
   const sexCol = findCol(h, ["sex", "gender", "gioitinh"]);
   const typCol = findCol(h, ["typ", "gr", "group", "typgr", "kat", "cat", "category"]);
@@ -140,12 +177,16 @@ function parseRanking(html, source, group) {
     const gender = /f|w|nữ|nu|female/i.test(rowSex) || /nữ/i.test(group) ? "N\u1EEF" : "Nam";
     const rowTyp = typCol >= 0 ? row[typCol]?.text : "";
     const ageGroupMatch = group.match(/(?:U\d+|Trẻ|Nhi|Tiểu học|THCS|THPT)/i)?.[0] || rowTyp || "To\xE0n gi\u1EA3i";
+    const rawFed = fedCol >= 0 ? row[fedCol]?.text || null : null;
+    const rawClub = clubCol >= 0 ? row[clubCol]?.text || "" : "";
+    const finalClub = rawClub || (rawFed ? formatClubName(rawFed) : "");
     players.push({
       id: `${id}-${snr}`,
       snr,
       name: row[ni].text,
       fideId: fideIdCol >= 0 ? row[fideIdCol]?.text || null : null,
-      club: club >= 0 ? row[club].text : "",
+      federation: rawFed,
+      club: finalClub,
       rating: rating >= 0 ? num(row[rating].text) : null,
       rank: finalRank,
       points: pi >= 0 ? num(row[pi].text) : null,
