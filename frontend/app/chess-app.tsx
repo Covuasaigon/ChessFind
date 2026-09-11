@@ -339,6 +339,7 @@ export default function ChessApp() {
         <Tabs value={tab} onValueChange={setTab} className="profile-tabs">
           <TabsList className="main-tabs">
             <TabsTrigger value="overview">Tổng quan</TabsTrigger>
+            <TabsTrigger value="info">Thông tin giải đấu</TabsTrigger>
             <TabsTrigger value="results">Chi tiết ván đấu</TabsTrigger>
             <TabsTrigger value="ranking">Bảng xếp hạng</TabsTrigger>
             <TabsTrigger value="charts">Biểu đồ thi đấu</TabsTrigger>
@@ -376,6 +377,12 @@ export default function ChessApp() {
                 <Rounds p={player} loading={detailLoading} error={detailError} compact onOpponent={id => { const p = current.players.find(p => p.id === id); if (p) open(current, p) }} />
               </section>
             </div>
+
+            <TournamentInfoSlides tournamentId={current.id} />
+          </TabsContent>
+
+          <TabsContent value="info">
+            <TournamentInfoSlides tournamentId={current.id} />
           </TabsContent>
 
           <TabsContent value="results">
@@ -697,4 +704,162 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onO
     {!ps.length && <p className="empty-text">Không có kết quả phù hợp.</p>}
     <p className="subtle below">{t.demo ? 'Bảng xếp hạng minh họa.' : 'Thứ hạng và các hệ số theo phiên đồng bộ Chess-Results mới nhất.'}</p>
   </section>
+}
+
+function TournamentInfoSlides({ tournamentId }: { tournamentId: string }) {
+  const [slides, setSlides] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeImage, setActiveImage] = useState<{ url: string; title: string } | null>(null);
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true);
+    apiFetch(`/api/slides?tournament_id=${encodeURIComponent(tournamentId)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!dead && data.slides) setSlides(data.slides);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!dead) setLoading(false);
+      });
+    return () => { dead = true; };
+  }, [tournamentId]);
+
+  if (loading) return null;
+  if (!slides || slides.length === 0) return null;
+
+  const slideTypesOrder = [
+    'Banner chính',
+    'Điều lệ giải đấu',
+    'Hướng dẫn thi đấu',
+    'Cơ cấu giải thưởng',
+    'Lịch thi đấu',
+    'Địa điểm tổ chức',
+    'Thông báo quan trọng',
+    'Nhà tài trợ',
+    'Khác'
+  ];
+
+  const typeIcons: Record<string, string> = {
+    'Banner chính': '🖼️',
+    'Điều lệ giải đấu': '🏆',
+    'Hướng dẫn thi đấu': '📜',
+    'Cơ cấu giải thưởng': '🎁',
+    'Lịch thi đấu': '📅',
+    'Địa điểm tổ chức': '📍',
+    'Thông báo quan trọng': '📢',
+    'Nhà tài trợ': '🤝',
+    'Khác': '📌'
+  };
+
+  const grouped: Record<string, any[]> = {};
+  for (const s of slides) {
+    const st = s.slide_type || 'Khác';
+    if (!grouped[st]) grouped[st] = [];
+    grouped[st].push(s);
+  }
+
+  return (
+    <section className="panel" style={{ marginTop: 20 }}>
+      <div className="section-heading">
+        <h2><Info size={20} style={{ marginRight: 6 }} /> Thông tin giải đấu</h2>
+        <span className="soft-badge">{slides.length} hình ảnh / slide thông tin</span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {slideTypesOrder.map(type => {
+          const list = grouped[type];
+          if (!list || list.length === 0) return null;
+
+          return (
+            <div key={type} style={{ background: '#F8FAFC', padding: 18, borderRadius: 16, border: '1px solid #CBD5E1' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>{typeIcons[type] || '📌'}</span>
+                <span>{type}</span>
+                <small style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>({list.length} hình ảnh)</small>
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+                {list.map((item: any) => (
+                  <div
+                    key={item.id}
+                    onClick={() => setActiveImage({ url: item.image_url, title: item.title })}
+                    style={{
+                      background: '#FFFFFF',
+                      borderRadius: 12,
+                      border: '1px solid #E2E8F0',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(6,43,79,0.06)',
+                      transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                    }}
+                  >
+                    <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#062B4F' }}>
+                      <img
+                        src={item.image_url}
+                        alt={item.title}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+                        loading="lazy"
+                      />
+                    </div>
+                    <div style={{ padding: 12 }}>
+                      <strong style={{ fontSize: 13, color: '#062B4F', display: 'block', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {item.title}
+                      </strong>
+                      <span style={{ fontSize: 11, color: '#145DA0', fontWeight: 700, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <span>Xem kích thước đầy đủ 🔍</span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {activeImage && (
+        <div
+          onClick={() => setActiveImage(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 99999,
+            background: 'rgba(6, 43, 79, 0.92)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            backdropFilter: 'blur(4px)'
+          }}
+        >
+          <div style={{ position: 'relative', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10, color: '#FFFFFF' }}>
+              <span style={{ fontSize: 16, fontWeight: 800, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '80vw' }}>
+                {activeImage.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveImage(null)}
+                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#FFFFFF', borderRadius: 99, padding: '6px 14px', cursor: 'pointer', fontWeight: 800, fontSize: 14 }}
+              >
+                ✕ Đóng
+              </button>
+            </div>
+
+            <img
+              src={activeImage.url}
+              alt={activeImage.title}
+              style={{ maxWidth: '92vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 12, boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '2px solid rgba(255,255,255,0.2)' }}
+            />
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }

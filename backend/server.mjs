@@ -617,6 +617,7 @@ function createApi(db2, sourceParam = {}) {
           if (!s2) return json({ admin: false }, 200, {}, req);
           let bannersList = [];
           let prizesList = [];
+          let slidesList = [];
           try {
             bannersList = (await db2.prepare("SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC").all()).results;
           } catch {
@@ -631,7 +632,57 @@ function createApi(db2, sourceParam = {}) {
             }));
           } catch {
           }
-          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            const r = await db2.prepare("SELECT * FROM tournament_slides ORDER BY display_order ASC, created_at DESC").all();
+            slidesList = (r.results || []).map((item) => ({
+              ...item,
+              tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
+            }));
+          } catch {
+          }
+          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
+        }
+        if (path === "/api/slides") {
+          const tid = u.searchParams.get("tournament_id") || u.searchParams.get("t") || "";
+          try {
+            let sqlStr = "SELECT * FROM tournament_slides WHERE status = 'active'";
+            const params = [];
+            if (tid) {
+              sqlStr += " AND tournament_id = ?";
+              params.push(tid);
+            }
+            sqlStr += " ORDER BY display_order ASC, created_at DESC";
+            const r = params.length > 0 ? await db2.prepare(sqlStr).bind(...params).all() : await db2.prepare(sqlStr).all();
+            return json({ slides: r.results || [] }, 200, {}, req);
+          } catch {
+            return json({ slides: [] }, 200, {}, req);
+          }
+        }
+        if (path === "/api/admin/slides") {
+          const s2 = await session(req);
+          if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n." }, 401, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            const tid = u.searchParams.get("tournament_id") || u.searchParams.get("t") || "";
+            let sqlStr = "SELECT * FROM tournament_slides";
+            const params = [];
+            if (tid) {
+              sqlStr += " WHERE tournament_id = ?";
+              params.push(tid);
+            }
+            sqlStr += " ORDER BY display_order ASC, created_at DESC";
+            const r = params.length > 0 ? await db2.prepare(sqlStr).bind(...params).all() : await db2.prepare(sqlStr).all();
+            const slides = (r.results || []).map((item) => ({
+              ...item,
+              tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
+            }));
+            return json({ slides }, 200, {}, req);
+          } catch {
+            return json({ slides: [] }, 200, {}, req);
+          }
         }
         if (path === "/api/admin/prizes") {
           const s2 = await session(req);
@@ -747,7 +798,7 @@ function createApi(db2, sourceParam = {}) {
           return json({ error: "Y\xEAu c\u1EA7u kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y thao t\xE1c trong \u1EE9ng d\u1EE5ng." }, 403, {}, req);
         }
       }
-      if (path === "/api/admin/upload-image") {
+      if (path === "/api/admin/upload-image" || path === "/api/admin/slides/upload") {
         const s2 = await session(req);
         if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401, {}, req);
         if (req.headers.get("x-csrf-token") !== s2.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
@@ -758,9 +809,9 @@ function createApi(db2, sourceParam = {}) {
         if (contentType.includes("multipart/form-data")) {
           try {
             const formData = await req.formData();
-            const file = formData.get("image");
+            const file = formData.get("image") || formData.get("file");
             if (!file) return json({ error: "Kh\xF4ng t\xECm th\u1EA5y file \u1EA3nh trong y\xEAu c\u1EA7u." }, 400, {}, req);
-            originalName = file.name || "image.png";
+            originalName = file.name || "slide.png";
             fileBuffer = new Uint8Array(await file.arrayBuffer());
           } catch (e) {
             return json({ error: "L\u1ED7i \u0111\u1ECDc file upload: " + e.message }, 400, {}, req);
@@ -783,8 +834,8 @@ function createApi(db2, sourceParam = {}) {
         if (!fileBuffer || fileBuffer.length === 0) {
           return json({ error: "D\u1EEF li\u1EC7u h\xECnh \u1EA3nh kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
         }
-        if (fileBuffer.length > 5 * 1024 * 1024) {
-          return json({ error: "Dung l\u01B0\u1EE3ng h\xECnh \u1EA3nh qu\xE1 l\u1EDBn (T\u1ED1i \u0111a 5MB)." }, 400, {}, req);
+        if (fileBuffer.length > 8 * 1024 * 1024) {
+          return json({ error: "Dung l\u01B0\u1EE3ng h\xECnh \u1EA3nh qu\xE1 l\u1EDBn (T\u1ED1i \u0111a 8MB)." }, 400, {}, req);
         }
         if (!fileExt) {
           fileExt = originalName.split(".").pop()?.toLowerCase() || "";
@@ -803,7 +854,7 @@ function createApi(db2, sourceParam = {}) {
         }
         const safeExt = isPng ? "png" : isJpg ? "jpg" : "webp";
         const mimeType = isPng ? "image/png" : isJpg ? "image/jpeg" : "image/webp";
-        const filename = `${crypto.randomUUID()}.${safeExt}`;
+        const filename = `${path.includes("slides") ? "slide_" : ""}${crypto.randomUUID()}.${safeExt}`;
         let publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
         if (!publicUrl) {
           const base64Str = Buffer.from(fileBuffer).toString("base64");
@@ -811,11 +862,11 @@ function createApi(db2, sourceParam = {}) {
         }
         try {
           const targetDirs = [
-            resolve(process.cwd(), "../web/uploads/banner"),
-            resolve(process.cwd(), "web/uploads/banner"),
-            resolve(process.cwd(), "public/uploads/banner"),
-            resolve(process.cwd(), "../public/uploads/banner"),
-            resolve(process.cwd(), "release/web/uploads/banner")
+            resolve(process.cwd(), "../web/uploads/slides"),
+            resolve(process.cwd(), "web/uploads/slides"),
+            resolve(process.cwd(), "public/uploads/slides"),
+            resolve(process.cwd(), "../public/uploads/slides"),
+            resolve(process.cwd(), "release/web/uploads/slides")
           ];
           for (const dir of targetDirs) {
             try {
@@ -826,7 +877,7 @@ function createApi(db2, sourceParam = {}) {
           }
         } catch {
         }
-        await log(true, `Upload banner image th\xE0nh c\xF4ng: ${publicUrl.startsWith("data:") ? "Embedded Data URL" : publicUrl}`);
+        await log(true, `Upload image th\xE0nh c\xF4ng: ${publicUrl.startsWith("data:") ? "Embedded Data URL" : publicUrl}`);
         return json({ url: publicUrl, message: "Upload \u1EA3nh th\xE0nh c\xF4ng!" }, 200, {}, req);
       }
       if (Number(req.headers.get("content-length") || 0) > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413, {}, req);
@@ -861,6 +912,44 @@ function createApi(db2, sourceParam = {}) {
       if (!s) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401, {}, req);
       if (req.headers.get("x-csrf-token") !== s.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
       authorized = true;
+      if (path === "/api/admin/slides" || path.startsWith("/api/admin/slides/")) {
+        const slideId = path.replace(/^\/api\/admin\/slides\/?/, "");
+        if (req.method === "DELETE" || b.action === "slide_delete") {
+          const targetId = slideId || String(b.id || "");
+          if (!targetId) return json({ error: "M\xE3 slide kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+          await db2.prepare("DELETE FROM tournament_slides WHERE id = ?").bind(targetId).run();
+          await log(true, `\u0110\xE3 x\xF3a slide id: ${targetId}`);
+          return json({ message: "\u0110\xE3 x\xF3a slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng." }, 200, {}, req);
+        }
+        const tournament_id = String(b.tournament_id || b.tournamentId || "").trim();
+        const title = String(b.title || "").trim();
+        const slide_type = String(b.slide_type || b.slideType || "\u0110i\u1EC1u l\u1EC7 gi\u1EA3i \u0111\u1EA5u").trim();
+        const image_url = String(b.image_url || b.imageUrl || "").trim();
+        const display_order = Number(b.display_order ?? b.displayOrder ?? 0);
+        const status = b.status === "hidden" || b.status === 0 || b.status === false ? "hidden" : "active";
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        if (!tournament_id) return json({ error: "Vui l\xF2ng ch\u1ECDn Gi\u1EA3i \u0111\u1EA5u." }, 400, {}, req);
+        if (!title) return json({ error: "Vui l\xF2ng nh\u1EADp Ti\xEAu \u0111\u1EC1 slide." }, 400, {}, req);
+        if (!image_url) return json({ error: "Vui l\xF2ng t\u1EA3i l\xEAn h\xECnh \u1EA3nh slide." }, 400, {}, req);
+        if (req.method === "PUT" || slideId && slideId !== "" || b.action === "slide_update") {
+          const targetId = slideId || String(b.id || "");
+          if (!targetId) return json({ error: "M\xE3 slide kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+          await db2.prepare(`
+            UPDATE tournament_slides
+            SET tournament_id = ?, title = ?, slide_type = ?, image_url = ?, display_order = ?, status = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(tournament_id, title, slide_type, image_url, display_order, status, now, targetId).run();
+          await log(true, `C\u1EADp nh\u1EADt slide: ${title}`);
+          return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt slide th\xE0nh c\xF4ng." }, 200, {}, req);
+        }
+        const id = crypto.randomUUID();
+        await db2.prepare(`
+          INSERT INTO tournament_slides (id, tournament_id, title, slide_type, image_url, display_order, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, tournament_id, title, slide_type, image_url, display_order, status, now, now).run();
+        await log(true, `T\u1EA1o slide m\u1EDBi: ${title}`);
+        return json({ message: "\u0110\xE3 t\u1EA1o slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng.", id }, 200, {}, req);
+      }
       if (path === "/api/admin/prizes" || path.startsWith("/api/admin/prizes/")) {
         const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, "");
         if (req.method === "DELETE" || b.action === "prize_delete") {

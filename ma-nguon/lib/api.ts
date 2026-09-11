@@ -160,6 +160,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           if (!s) return json({ admin: false }, 200, {}, req);
           let bannersList: any[] = [];
           let prizesList: any[] = [];
+          let slidesList: any[] = [];
           try {
             bannersList = (await db.prepare('SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC').all()).results;
           } catch {}
@@ -172,7 +173,56 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
               tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
             }));
           } catch {}
-          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const r = await db.prepare('SELECT * FROM tournament_slides ORDER BY display_order ASC, created_at DESC').all<any>();
+            slidesList = (r.results || []).map(item => ({
+              ...item,
+              tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
+            }));
+          } catch {}
+          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
+        }
+        if (path === '/api/slides') {
+          const tid = u.searchParams.get('tournament_id') || u.searchParams.get('t') || '';
+          try {
+            let sqlStr = "SELECT * FROM tournament_slides WHERE status = 'active'";
+            const params: any[] = [];
+            if (tid) {
+              sqlStr += ' AND tournament_id = ?';
+              params.push(tid);
+            }
+            sqlStr += ' ORDER BY display_order ASC, created_at DESC';
+            const r = params.length > 0 ? await db.prepare(sqlStr).bind(...params).all<any>() : await db.prepare(sqlStr).all<any>();
+            return json({ slides: r.results || [] }, 200, {}, req);
+          } catch {
+            return json({ slides: [] }, 200, {}, req);
+          }
+        }
+        if (path === '/api/admin/slides') {
+          const s = await session(req);
+          if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn.' }, 401, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const tid = u.searchParams.get('tournament_id') || u.searchParams.get('t') || '';
+            let sqlStr = 'SELECT * FROM tournament_slides';
+            const params: any[] = [];
+            if (tid) {
+              sqlStr += ' WHERE tournament_id = ?';
+              params.push(tid);
+            }
+            sqlStr += ' ORDER BY display_order ASC, created_at DESC';
+            const r = params.length > 0 ? await db.prepare(sqlStr).bind(...params).all<any>() : await db.prepare(sqlStr).all<any>();
+            const slides = (r.results || []).map(item => ({
+              ...item,
+              tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
+            }));
+            return json({ slides }, 200, {}, req);
+          } catch {
+            return json({ slides: [] }, 200, {}, req);
+          }
         }
         if (path === '/api/admin/prizes') {
           const s = await session(req);
@@ -305,7 +355,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       }
 
 
-      if (path === '/api/admin/upload-image') {
+      if (path === '/api/admin/upload-image' || path === '/api/admin/slides/upload') {
         const s = await session(req);
         if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' }, 401, {}, req);
         if (req.headers.get('x-csrf-token') !== s.csrf) return json({ error: 'Phiên xác thực không hợp lệ. Hãy tải lại trang.' }, 403, {}, req);
@@ -319,10 +369,10 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         if (contentType.includes('multipart/form-data')) {
           try {
             const formData = await req.formData();
-            const file = formData.get('image') as File | null;
+            const file = (formData.get('image') || formData.get('file')) as File | null;
             if (!file) return json({ error: 'Không tìm thấy file ảnh trong yêu cầu.' }, 400, {}, req);
 
-            originalName = file.name || 'image.png';
+            originalName = file.name || 'slide.png';
             fileBuffer = new Uint8Array(await file.arrayBuffer());
           } catch (e) {
             return json({ error: 'Lỗi đọc file upload: ' + (e as Error).message }, 400, {}, req);
@@ -346,12 +396,11 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           return json({ error: 'Dữ liệu hình ảnh không hợp lệ.' }, 400, {}, req);
         }
 
-        // 1. Validate size (Max 5MB = 5,242,880 bytes)
-        if (fileBuffer.length > 5 * 1024 * 1024) {
-          return json({ error: 'Dung lượng hình ảnh quá lớn (Tối đa 5MB).' }, 400, {}, req);
+        // Validate size (Max 8MB)
+        if (fileBuffer.length > 8 * 1024 * 1024) {
+          return json({ error: 'Dung lượng hình ảnh quá lớn (Tối đa 8MB).' }, 400, {}, req);
         }
 
-        // 2. Extension validation
         if (!fileExt) {
           fileExt = originalName.split('.').pop()?.toLowerCase() || '';
         }
@@ -362,7 +411,6 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           return json({ error: 'Chỉ chấp nhận các định dạng ảnh: .jpg, .jpeg, .png, .webp (Không cho phép .exe, .js, .php, .svg).' }, 400, {}, req);
         }
 
-        // 3. Security: Magic bytes verification
         const head = fileBuffer.slice(0, 12);
         const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4E && head[3] === 0x47;
         const isJpg = head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF;
@@ -374,25 +422,22 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
         const safeExt = isPng ? 'png' : isJpg ? 'jpg' : 'webp';
         const mimeType = isPng ? 'image/png' : isJpg ? 'image/jpeg' : 'image/webp';
-        const filename = `${crypto.randomUUID()}.${safeExt}`;
+        const filename = `${path.includes('slides') ? 'slide_' : ''}${crypto.randomUUID()}.${safeExt}`;
 
-        // 1. Primary: Upload to Supabase Storage if configured
         let publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
 
-        // 2. Fallback: If Supabase credentials are not set or upload fails, store as persistent Data URL in database
         if (!publicUrl) {
           const base64Str = Buffer.from(fileBuffer).toString('base64');
           publicUrl = `data:${mimeType};base64,${base64Str}`;
         }
 
-        // Also write to local disk as best effort (without breaking if read-only)
         try {
           const targetDirs = [
-            resolve(process.cwd(), '../web/uploads/banner'),
-            resolve(process.cwd(), 'web/uploads/banner'),
-            resolve(process.cwd(), 'public/uploads/banner'),
-            resolve(process.cwd(), '../public/uploads/banner'),
-            resolve(process.cwd(), 'release/web/uploads/banner')
+            resolve(process.cwd(), '../web/uploads/slides'),
+            resolve(process.cwd(), 'web/uploads/slides'),
+            resolve(process.cwd(), 'public/uploads/slides'),
+            resolve(process.cwd(), '../public/uploads/slides'),
+            resolve(process.cwd(), 'release/web/uploads/slides')
           ];
           for (const dir of targetDirs) {
             try {
@@ -402,7 +447,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           }
         } catch {}
 
-        await log(true, `Upload banner image thành công: ${publicUrl.startsWith('data:') ? 'Embedded Data URL' : publicUrl}`);
+        await log(true, `Upload image thành công: ${publicUrl.startsWith('data:') ? 'Embedded Data URL' : publicUrl}`);
         return json({ url: publicUrl, message: 'Upload ảnh thành công!' }, 200, {}, req);
       }
 
@@ -440,6 +485,53 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' }, 401, {}, req);
       if (req.headers.get('x-csrf-token') !== s.csrf) return json({ error: 'Phiên xác thực không hợp lệ. Hãy tải lại trang.' }, 403, {}, req);
       authorized = true;
+
+      if (path === '/api/admin/slides' || path.startsWith('/api/admin/slides/')) {
+        const slideId = path.replace(/^\/api\/admin\/slides\/?/, '');
+
+        if (req.method === 'DELETE' || b.action === 'slide_delete') {
+          const targetId = slideId || String(b.id || '');
+          if (!targetId) return json({ error: 'Mã slide không hợp lệ.' }, 400, {}, req);
+          await db.prepare('DELETE FROM tournament_slides WHERE id = ?').bind(targetId).run();
+          await log(true, `Đã xóa slide id: ${targetId}`);
+          return json({ message: 'Đã xóa slide giải đấu thành công.' }, 200, {}, req);
+        }
+
+        const tournament_id = String(b.tournament_id || b.tournamentId || '').trim();
+        const title = String(b.title || '').trim();
+        const slide_type = String(b.slide_type || b.slideType || 'Điều lệ giải đấu').trim();
+        const image_url = String(b.image_url || b.imageUrl || '').trim();
+        const display_order = Number(b.display_order ?? b.displayOrder ?? 0);
+        const status = (b.status === 'hidden' || b.status === 0 || b.status === false) ? 'hidden' : 'active';
+        const now = new Date().toISOString();
+
+        if (!tournament_id) return json({ error: 'Vui lòng chọn Giải đấu.' }, 400, {}, req);
+        if (!title) return json({ error: 'Vui lòng nhập Tiêu đề slide.' }, 400, {}, req);
+        if (!image_url) return json({ error: 'Vui lòng tải lên hình ảnh slide.' }, 400, {}, req);
+
+        if (req.method === 'PUT' || (slideId && slideId !== '') || b.action === 'slide_update') {
+          const targetId = slideId || String(b.id || '');
+          if (!targetId) return json({ error: 'Mã slide không hợp lệ.' }, 400, {}, req);
+          await db.prepare(`
+            UPDATE tournament_slides
+            SET tournament_id = ?, title = ?, slide_type = ?, image_url = ?, display_order = ?, status = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(tournament_id, title, slide_type, image_url, display_order, status, now, targetId).run();
+
+          await log(true, `Cập nhật slide: ${title}`);
+          return json({ message: 'Đã cập nhật slide thành công.' }, 200, {}, req);
+        }
+
+        // POST / Create
+        const id = crypto.randomUUID();
+        await db.prepare(`
+          INSERT INTO tournament_slides (id, tournament_id, title, slide_type, image_url, display_order, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, tournament_id, title, slide_type, image_url, display_order, status, now, now).run();
+
+        await log(true, `Tạo slide mới: ${title}`);
+        return json({ message: 'Đã tạo slide giải đấu thành công.', id }, 200, {}, req);
+      }
 
       if (path === '/api/admin/prizes' || path.startsWith('/api/admin/prizes/')) {
         const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, '');

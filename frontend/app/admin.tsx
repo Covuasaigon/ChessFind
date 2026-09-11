@@ -67,6 +67,19 @@ export interface PrizeRuleItem {
   updated_at?: string;
 }
 
+export interface TournamentSlideItem {
+  id?: string;
+  tournament_id: string;
+  tournament_name?: string;
+  title: string;
+  slide_type: string;
+  image_url: string;
+  display_order: number;
+  status: 'active' | 'hidden' | string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface AdminState {
   admin: boolean;
   username?: string;
@@ -74,6 +87,7 @@ export interface AdminState {
   tournaments?: Tournament[];
   banners?: BannerItem[];
   prizes?: PrizeRuleItem[];
+  slides?: TournamentSlideItem[];
   logs?: AdminLog[];
 }
 
@@ -124,7 +138,166 @@ export default function Admin({ onChanged }: AdminProps) {
   const [deleteBanner, setDeleteBanner] = useState<BannerItem | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showManualUrl, setShowManualUrl] = useState(false);
-  const [activeTab, setActiveTab] = useState<'tournaments' | 'prizes' | 'banners'>('tournaments');
+  const [activeTab, setActiveTab] = useState<'tournaments' | 'slides' | 'prizes' | 'banners'>('tournaments');
+  const [slideForm, setSlideForm] = useState<{
+    id?: string;
+    tournament_id: string;
+    title: string;
+    slide_type: string;
+    image_url: string;
+    display_order: number | string;
+    status: 'active' | 'hidden';
+  }>({
+    id: '',
+    tournament_id: '',
+    title: '',
+    slide_type: 'Điều lệ giải đấu',
+    image_url: '',
+    display_order: 1,
+    status: 'active'
+  });
+  const [uploadingSlide, setUploadingSlide] = useState(false);
+
+  async function handleSlideFileUpload(file: File) {
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Dung lượng hình ảnh quá lớn (Tối đa 8MB).');
+      return;
+    }
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+      toast.error('Chỉ chấp nhận file ảnh: .jpg, .jpeg, .png, .webp.');
+      return;
+    }
+
+    setUploadingSlide(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('image', file);
+
+      const r = await apiFetch('/api/admin/slides/upload', {
+        method: 'POST',
+        headers: {
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        },
+        body: formData
+      });
+
+      const d = (await r.json()) as { url?: string; error?: string; message?: string };
+      if (!r.ok || !d.url) throw Error(d.error || 'Lỗi upload ảnh slide');
+
+      setSlideForm(prev => ({ ...prev, image_url: d.url! }));
+      toast.success('Tải ảnh slide thành công!');
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setUploadingSlide(false);
+    }
+  }
+
+  async function saveSlide() {
+    if (!slideForm.tournament_id) {
+      toast.error('Vui lòng chọn Giải đấu.');
+      return;
+    }
+    if (!slideForm.title.trim()) {
+      toast.error('Vui lòng nhập Tiêu đề slide.');
+      return;
+    }
+    if (!slideForm.image_url.trim()) {
+      toast.error('Vui lòng tải ảnh lên hoặc chọn đường dẫn ảnh.');
+      return;
+    }
+
+    setBusy('slide_save');
+    try {
+      const isEdit = !!slideForm.id;
+      const endpoint = isEdit ? `/api/admin/slides/${slideForm.id}` : '/api/admin/slides';
+      const r = await apiFetch(endpoint, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        },
+        body: JSON.stringify({
+          tournament_id: slideForm.tournament_id,
+          title: slideForm.title.trim(),
+          slide_type: slideForm.slide_type,
+          image_url: slideForm.image_url.trim(),
+          display_order: Number(slideForm.display_order || 0),
+          status: slideForm.status
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi lưu slide');
+      toast.success(d.message || (isEdit ? 'Đã cập nhật slide thành công!' : 'Đã tạo slide mới thành công!'));
+      setSlideForm({
+        id: '',
+        tournament_id: slideForm.tournament_id,
+        title: '',
+        slide_type: 'Điều lệ giải đấu',
+        image_url: '',
+        display_order: (state?.slides?.length || 0) + 1,
+        status: 'active'
+      });
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function deleteSlide(id: string) {
+    if (!confirm('Bạn có chắc chắn muốn xóa slide này?')) return;
+    setBusy('slide_delete');
+    try {
+      const r = await apiFetch(`/api/admin/slides/${id}`, {
+        method: 'DELETE',
+        headers: {
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        }
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi xóa slide');
+      toast.success(d.message || 'Đã xóa slide thành công!');
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function toggleSlideStatus(item: TournamentSlideItem) {
+    setBusy('slide_toggle');
+    const newStatus = item.status === 'active' ? 'hidden' : 'active';
+    try {
+      const r = await apiFetch(`/api/admin/slides/${item.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        },
+        body: JSON.stringify({
+          ...item,
+          status: newStatus
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi thay đổi trạng thái');
+      toast.success(newStatus === 'active' ? 'Đã hiển thị slide' : 'Đã ẩn slide');
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
   const [prizeForm, setPrizeForm] = useState<{
     id?: string;
     tournament_id: string;
@@ -547,6 +720,33 @@ export default function Admin({ onChanged }: AdminProps) {
 
         <button
           type="button"
+          onClick={() => setActiveTab('slides')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 20px',
+            borderRadius: 12,
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: 'pointer',
+            border: activeTab === 'slides' ? '1.5px solid #062B4F' : '1px solid #E2E8F0',
+            background: activeTab === 'slides' ? '#062B4F' : '#F8FAFC',
+            color: activeTab === 'slides' ? '#FFFFFF' : '#475569',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <ImageIcon size={18} className={activeTab === 'slides' ? 'text-amber-400' : ''} />
+          <span>🖼 Banner & Slide Giải Đấu</span>
+          {(state?.slides?.length || 0) > 0 && (
+            <span style={{ background: '#D4AF37', color: '#062B4F', padding: '2px 8px', borderRadius: 99, fontSize: 12, fontWeight: 800 }}>
+              {state?.slides?.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('prizes')}
           style={{
             display: 'inline-flex',
@@ -830,6 +1030,280 @@ export default function Admin({ onChanged }: AdminProps) {
           </div>
         )}
       </section>
+
+      {/* TOURNAMENT SLIDE MANAGEMENT SECTION */}
+      {(activeTab === 'slides' || activeTab === 'tournaments') && (
+        <section className="admin-card-section" id="admin-slide-management">
+          <div className="admin-card-title-group">
+            <div>
+              <h2><ImageIcon size={22} className="text-amber-500" /> Quản lý Banner & Slide Giải Đấu</h2>
+              <p>Đăng tải hình ảnh điều lệ, hướng dẫn, lịch thi đấu và thông tin giải.</p>
+            </div>
+            <button
+              className="saas-btn-gold"
+              style={{ height: 40, padding: '0 18px', fontSize: 13 }}
+              onClick={() => {
+                setSlideForm({
+                  id: '',
+                  tournament_id: activeTournaments[0]?.id || '',
+                  title: '',
+                  slide_type: 'Điều lệ giải đấu',
+                  image_url: '',
+                  display_order: (state?.slides?.length || 0) + 1,
+                  status: 'active'
+                });
+                document.getElementById('slide-form-block')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              <Plus size={16} />
+              <span>+ Thêm slide mới</span>
+            </button>
+          </div>
+
+          {/* ADD / EDIT SLIDE FORM */}
+          <div id="slide-form-block" style={{ background: '#F8FAFC', padding: 24, borderRadius: 16, border: '1px solid #CBD5E1', marginBottom: 24 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Plus size={18} className="text-amber-500" />
+              {slideForm.id ? 'Hiệu chỉnh slide thông tin' : 'Thêm slide thông tin giải đấu mới'}
+            </h3>
+
+            <form onSubmit={(e) => { e.preventDefault(); saveSlide(); }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
+                {/* 1. Tournament */}
+                <label className="saas-label">
+                  Giải đấu (*)
+                  <select
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    value={slideForm.tournament_id}
+                    onChange={(e) => setSlideForm({ ...slideForm, tournament_id: e.target.value })}
+                  >
+                    <option value="">-- Chọn giải đấu --</option>
+                    {activeTournaments.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* 2. Slide Type */}
+                <label className="saas-label">
+                  Loại thông tin / Slide Type (*)
+                  <select
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    value={slideForm.slide_type}
+                    onChange={(e) => setSlideForm({ ...slideForm, slide_type: e.target.value })}
+                  >
+                    <option value="Banner chính">Banner chính</option>
+                    <option value="Điều lệ giải đấu">Điều lệ giải đấu</option>
+                    <option value="Hướng dẫn thi đấu">Hướng dẫn thi đấu</option>
+                    <option value="Cơ cấu giải thưởng">Cơ cấu giải thưởng</option>
+                    <option value="Lịch thi đấu">Lịch thi đấu</option>
+                    <option value="Địa điểm tổ chức">Địa điểm tổ chức</option>
+                    <option value="Thông báo quan trọng">Thông báo quan trọng</option>
+                    <option value="Nhà tài trợ">Nhà tài trợ</option>
+                    <option value="Khác">Khác</option>
+                  </select>
+                </label>
+
+                {/* 3. Title */}
+                <label className="saas-label" style={{ gridColumn: 'span 2' }}>
+                  Tiêu đề slide (*)
+                  <input
+                    type="text"
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    placeholder="VD: Điều lệ Giải Cờ Vua Vui Học Hè Cụm 2"
+                    value={slideForm.title}
+                    onChange={(e) => setSlideForm({ ...slideForm, title: e.target.value })}
+                  />
+                </label>
+
+                {/* 4. Display Order */}
+                <label className="saas-label">
+                  Thứ tự hiển thị
+                  <input
+                    type="number"
+                    min={0}
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    value={slideForm.display_order}
+                    onChange={(e) => setSlideForm({ ...slideForm, display_order: e.target.value })}
+                  />
+                </label>
+
+                {/* 5. Status */}
+                <label className="saas-label">
+                  Trạng thái
+                  <select
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    value={slideForm.status}
+                    onChange={(e) => setSlideForm({ ...slideForm, status: e.target.value as any })}
+                  >
+                    <option value="active">🟢 Active (Hiển thị)</option>
+                    <option value="hidden">🔴 Hidden (Đang ẩn)</option>
+                  </select>
+                </label>
+
+                {/* 6. Upload Image */}
+                <label className="saas-label" style={{ gridColumn: '1 / -1' }}>
+                  Hình ảnh slide (Tối đa 8MB, JPG/PNG/WEBP - Khuyến nghị 1920x1080 px, 16:9) (*)
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      style={{ display: 'none' }}
+                      id="slide-image-file-input"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleSlideFileUpload(file);
+                      }}
+                    />
+                    <label
+                      htmlFor="slide-image-file-input"
+                      className="outline"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontWeight: 700 }}
+                    >
+                      {uploadingSlide ? <RefreshCw size={16} className="spin" /> : <Upload size={16} />}
+                      <span>{uploadingSlide ? 'Đang tải ảnh lên...' : 'Chọn file ảnh từ máy tính'}</span>
+                    </label>
+
+                    <span style={{ fontSize: 13, color: '#64748B' }}>hoặc nhập URL trực tiếp:</span>
+
+                    <input
+                      type="text"
+                      className="saas-input"
+                      style={{ flex: 1, minWidth: 200, paddingLeft: 12, height: 42 }}
+                      placeholder="https://example.com/slide.jpg"
+                      value={slideForm.image_url}
+                      onChange={(e) => setSlideForm({ ...slideForm, image_url: e.target.value })}
+                    />
+                  </div>
+                </label>
+              </div>
+
+              {/* Image Preview Box */}
+              {slideForm.image_url && (
+                <div style={{ marginBottom: 16, background: '#FFFFFF', padding: 12, borderRadius: 12, border: '1px solid #CBD5E1', display: 'inline-block' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#062B4F', display: 'block', marginBottom: 6 }}>Xem trước hình ảnh slide (16:9):</span>
+                  <img
+                    src={slideForm.image_url}
+                    alt="Slide preview"
+                    style={{ width: 280, height: 157, objectFit: 'contain', background: '#062B4F', borderRadius: 8, border: '1px solid #E2E8F0' }}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <button type="submit" className="saas-btn-gold" disabled={!!busy || uploadingSlide}>
+                  {busy === 'slide_save' ? <RefreshCw size={17} className="spin" /> : <Sparkles size={17} />}
+                  <span>{slideForm.id ? 'Cập Nhật Slide' : 'Lưu Slide Giải Đấu'}</span>
+                </button>
+
+                {slideForm.id && (
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => setSlideForm({
+                      id: '',
+                      tournament_id: activeTournaments[0]?.id || '',
+                      title: '',
+                      slide_type: 'Điều lệ giải đấu',
+                      image_url: '',
+                      display_order: 1,
+                      status: 'active'
+                    })}
+                  >
+                    Hủy chỉnh sửa
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          {/* SLIDES DISPLAY GRID / CARDS LIST */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+            {(state?.slides || []).map((item: TournamentSlideItem) => (
+              <div key={item.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #CBD5E1', overflow: 'hidden', boxShadow: '0 4px 12px rgba(6,43,79,0.05)', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#062B4F' }}>
+                  <img
+                    src={item.image_url}
+                    alt={item.title}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                  <span className="soft-badge" style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(6,43,79,0.85)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)', fontWeight: 700, fontSize: 11 }}>
+                    {item.slide_type}
+                  </span>
+                  <span className="soft-badge" style={{ position: 'absolute', top: 10, right: 10, background: item.status === 'active' ? '#DCFCE7' : '#FEE2E2', color: item.status === 'active' ? '#15803D' : '#991B1B', fontWeight: 700, fontSize: 11 }}>
+                    {item.status === 'active' ? '🟢 Active' : '🔴 Hidden'}
+                  </span>
+                </div>
+
+                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <h4 style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', margin: '0 0 4px' }}>{item.title}</h4>
+                    <span style={{ fontSize: 12, color: '#145DA0', fontWeight: 600, display: 'block' }}>🏆 {item.tournament_name || item.tournament_id}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid #F1F5F9' }}>
+                    <span style={{ fontSize: 12, color: '#64748B' }}>Thứ tự: <b>{item.display_order}</b></span>
+
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        className="outline"
+                        style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
+                        onClick={() => toggleSlideStatus(item)}
+                        title={item.status === 'active' ? 'Ẩn slide' : 'Hiện slide'}
+                      >
+                        {item.status === 'active' ? <EyeOff size={14} /> : <CheckCircle2 size={14} />}
+                      </button>
+                      <button
+                        className="outline"
+                        style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
+                        onClick={() => {
+                          setSlideForm({
+                            id: item.id,
+                            tournament_id: item.tournament_id,
+                            title: item.title,
+                            slide_type: item.slide_type,
+                            image_url: item.image_url,
+                            display_order: item.display_order,
+                            status: item.status as any
+                          });
+                          setActiveTab('slides');
+                          document.getElementById('slide-form-block')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        title="Sửa slide"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        className="outline danger-btn"
+                        style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
+                        disabled={!!busy}
+                        onClick={() => item.id && deleteSlide(item.id)}
+                        title="Xóa slide"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {!state?.slides?.length && (
+              <div style={{ gridColumn: '1 / -1', padding: 32, textAlign: 'center', background: '#F8FAFC', borderRadius: 16, border: '1px dashed #CBD5E1', color: '#64748B' }}>
+                Chưa có slide giải đấu nào. Nhấn "+ Thêm slide mới" phía trên để đăng tải hình ảnh thông tin giải.
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* 5. TOURNAMENT PRIZE MANAGEMENT MODULE */}
       {(activeTab === 'prizes' || activeTab === 'tournaments') && (
