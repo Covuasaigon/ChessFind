@@ -967,14 +967,13 @@ function createApi(db2, sourceParam = {}) {
           await log(true, `\u0110\xE3 x\xF3a slide id: ${targetId}`);
           return json({ message: "\u0110\xE3 x\xF3a slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng." }, 200, {}, req);
         }
-        const tournament_id = String(b.tournament_id || b.tournamentId || "").trim();
+        const tournament_id = String(b.tournament_id || b.tournamentId || "global").trim() || "global";
         const title = String(b.title || "").trim();
         const slide_type = String(b.slide_type || b.slideType || "\u0110i\u1EC1u l\u1EC7 gi\u1EA3i \u0111\u1EA5u").trim();
         const image_url = String(b.image_url || b.imageUrl || "").trim();
         const display_order = Number(b.display_order ?? b.displayOrder ?? 0);
         const status = b.status === "hidden" || b.status === 0 || b.status === false ? "hidden" : "active";
         const now = (/* @__PURE__ */ new Date()).toISOString();
-        if (!tournament_id) return json({ error: "Vui l\xF2ng ch\u1ECDn Gi\u1EA3i \u0111\u1EA5u." }, 400, {}, req);
         if (!title) return json({ error: "Vui l\xF2ng nh\u1EADp Ti\xEAu \u0111\u1EC1 slide." }, 400, {}, req);
         if (!image_url) return json({ error: "Vui l\xF2ng t\u1EA3i l\xEAn h\xECnh \u1EA3nh slide." }, 400, {}, req);
         if (req.method === "PUT" || slideId && slideId !== "" || b.action === "slide_update") {

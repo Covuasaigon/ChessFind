@@ -1610,12 +1610,25 @@ svg {
 }
 
 .tournament-info-slider-card {
-  height: 280px;
-  aspect-ratio: 16 / 9;
+  width: 100%;
+  min-height: 280px;
+  max-height: 480px;
+  background: #F8FAFC;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 @media (max-width: 768px) {
   .tournament-info-slider-card {
-    height: 180px;
+    height: auto;
+    min-height: 180px;
+    max-height: 380px;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-two-col-grid {
+    grid-template-columns: 1fr !important;
   }
 }
 

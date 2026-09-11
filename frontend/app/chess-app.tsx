@@ -1186,7 +1186,7 @@ function TournamentInfoSlider() {
           style={{
             position: 'relative',
             width: '100%',
-            background: '#041E38',
+            background: '#F8FAFC',
             cursor: 'pointer',
             overflow: 'hidden',
             display: 'flex',

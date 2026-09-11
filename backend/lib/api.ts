@@ -510,7 +510,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           return json({ message: 'Đã xóa slide giải đấu thành công.' }, 200, {}, req);
         }
 
-        const tournament_id = String(b.tournament_id || b.tournamentId || '').trim();
+        const tournament_id = String(b.tournament_id || b.tournamentId || 'global').trim() || 'global';
         const title = String(b.title || '').trim();
         const slide_type = String(b.slide_type || b.slideType || 'Điều lệ giải đấu').trim();
         const image_url = String(b.image_url || b.imageUrl || '').trim();
@@ -518,7 +518,6 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         const status = (b.status === 'hidden' || b.status === 0 || b.status === false) ? 'hidden' : 'active';
         const now = new Date().toISOString();
 
-        if (!tournament_id) return json({ error: 'Vui lòng chọn Giải đấu.' }, 400, {}, req);
         if (!title) return json({ error: 'Vui lòng nhập Tiêu đề slide.' }, 400, {}, req);
         if (!image_url) return json({ error: 'Vui lòng tải lên hình ảnh slide.' }, 400, {}, req);
 

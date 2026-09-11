@@ -1068,25 +1068,8 @@ export default function Admin({ onChanged }: AdminProps) {
             </h3>
 
             <form onSubmit={(e) => { e.preventDefault(); saveSlide(); }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
-                {/* 1. Tournament */}
-                <label className="saas-label">
-                  Giải đấu (*)
-                  <select
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    required
-                    value={slideForm.tournament_id}
-                    onChange={(e) => setSlideForm({ ...slideForm, tournament_id: e.target.value })}
-                  >
-                    <option value="">-- Chọn giải đấu --</option>
-                    {activeTournaments.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </label>
-
-                {/* 2. Slide Type */}
+              <div className="admin-two-col-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 16 }}>
+                {/* 1. Slide Type */}
                 <label className="saas-label">
                   Loại thông tin / Slide Type (*)
                   <select
@@ -1096,46 +1079,48 @@ export default function Admin({ onChanged }: AdminProps) {
                     value={slideForm.slide_type}
                     onChange={(e) => setSlideForm({ ...slideForm, slide_type: e.target.value })}
                   >
-                    <option value="Banner chính">Banner chính</option>
-                    <option value="Điều lệ giải đấu">Điều lệ giải đấu</option>
-                    <option value="Hướng dẫn thi đấu">Hướng dẫn thi đấu</option>
-                    <option value="Cơ cấu giải thưởng">Cơ cấu giải thưởng</option>
-                    <option value="Lịch thi đấu">Lịch thi đấu</option>
-                    <option value="Địa điểm tổ chức">Địa điểm tổ chức</option>
-                    <option value="Thông báo quan trọng">Thông báo quan trọng</option>
-                    <option value="Nhà tài trợ">Nhà tài trợ</option>
-                    <option value="Khác">Khác</option>
+                    <option value="Điều lệ giải đấu">📄 Điều lệ giải đấu</option>
+                    <option value="Hướng dẫn thi đấu">📜 Hướng dẫn thi đấu</option>
+                    <option value="Lịch thi đấu">📅 Lịch thi đấu</option>
+                    <option value="Sơ đồ giải">🗺️ Sơ đồ giải</option>
+                    <option value="Cơ cấu giải thưởng">🎁 Cơ cấu giải thưởng</option>
+                    <option value="Thông tin giải đấu">ℹ️ Thông tin giải đấu</option>
+                    <option value="Banner chính">🖼️ Banner chính</option>
+                    <option value="Địa điểm tổ chức">📍 Địa điểm tổ chức</option>
+                    <option value="Thông báo quan trọng">📢 Thông báo quan trọng</option>
+                    <option value="Nhà tài trợ">🤝 Nhà tài trợ</option>
+                    <option value="Khác">📌 Khác</option>
                   </select>
                 </label>
 
-                {/* 3. Title */}
-                <label className="saas-label" style={{ gridColumn: 'span 2' }}>
-                  Tiêu đề slide (*)
-                  <input
-                    type="text"
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    required
-                    placeholder="VD: Điều lệ Giải Cờ Vua Vui Học Hè Cụm 2"
-                    value={slideForm.title}
-                    onChange={(e) => setSlideForm({ ...slideForm, title: e.target.value })}
-                  />
-                </label>
-
-                {/* 4. Display Order */}
+                {/* 2. Display Order */}
                 <label className="saas-label">
-                  Thứ tự hiển thị
+                  Thứ tự hiển thị (0, 1, 2...)
                   <input
                     type="number"
                     min={0}
                     className="saas-input"
                     style={{ paddingLeft: 12 }}
                     value={slideForm.display_order}
-                    onChange={(e) => setSlideForm({ ...slideForm, display_order: e.target.value })}
+                    onChange={(e) => setSlideForm({ ...slideForm, display_order: Number(e.target.value) })}
                   />
                 </label>
 
-                {/* 5. Status */}
+                {/* 3. Title */}
+                <label className="saas-label" style={{ gridColumn: '1 / -1' }}>
+                  Tiêu đề slide (*)
+                  <input
+                    type="text"
+                    className="saas-input"
+                    style={{ paddingLeft: 12 }}
+                    required
+                    placeholder="VD: Điều lệ & Lịch Thi Đấu Giải Cờ Vua Mới Nhất"
+                    value={slideForm.title}
+                    onChange={(e) => setSlideForm({ ...slideForm, title: e.target.value })}
+                  />
+                </label>
+
+                {/* 4. Status */}
                 <label className="saas-label">
                   Trạng thái
                   <select
@@ -1149,9 +1134,9 @@ export default function Admin({ onChanged }: AdminProps) {
                   </select>
                 </label>
 
-                {/* 6. Upload Image */}
+                {/* 5. Upload Image */}
                 <label className="saas-label" style={{ gridColumn: '1 / -1' }}>
-                  Hình ảnh slide (Tối đa 8MB, JPG/PNG/WEBP - Khuyến nghị 1920x1080 px, 16:9) (*)
+                  Hình ảnh slide (Tối đa 8MB, JPG/PNG/WEBP - Hỗ trợ ảnh ngang & ảnh văn bản dọc) (*)
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
                     <input
                       type="file"
@@ -1188,17 +1173,19 @@ export default function Admin({ onChanged }: AdminProps) {
 
               {/* Image Preview Box */}
               {slideForm.image_url && (
-                <div style={{ marginBottom: 16, background: '#FFFFFF', padding: 12, borderRadius: 12, border: '1px solid #CBD5E1', display: 'inline-block' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#062B4F', display: 'block', marginBottom: 6 }}>Xem trước hình ảnh slide (16:9):</span>
-                  <img
-                    src={slideForm.image_url}
-                    alt="Slide preview"
-                    style={{ width: 280, height: 157, objectFit: 'contain', background: '#062B4F', borderRadius: 8, border: '1px solid #E2E8F0' }}
-                  />
+                <div style={{ marginBottom: 16, background: '#FFFFFF', padding: 14, borderRadius: 12, border: '1px solid #CBD5E1', display: 'block' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#062B4F', display: 'block', marginBottom: 8 }}>Xem trước hình ảnh slide (Hiển thị đầy đủ không bị crop):</span>
+                  <div style={{ width: '100%', maxWidth: 480, height: 260, background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <img
+                      src={slideForm.image_url}
+                      alt="Slide preview"
+                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                    />
+                  </div>
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button type="submit" className="saas-btn-gold" disabled={!!busy || uploadingSlide}>
                   {busy === 'slide_save' ? <RefreshCw size={17} className="spin" /> : <Sparkles size={17} />}
                   <span>{slideForm.id ? 'Cập Nhật Slide' : 'Lưu Slide Giải Đấu'}</span>
@@ -1210,11 +1197,11 @@ export default function Admin({ onChanged }: AdminProps) {
                     className="outline"
                     onClick={() => setSlideForm({
                       id: '',
-                      tournament_id: activeTournaments[0]?.id || '',
+                      tournament_id: 'global',
                       title: '',
                       slide_type: 'Điều lệ giải đấu',
                       image_url: '',
-                      display_order: 1,
+                      display_order: (state?.slides?.length || 0) + 1,
                       status: 'active'
                     })}
                   >
@@ -1226,14 +1213,14 @@ export default function Admin({ onChanged }: AdminProps) {
           </div>
 
           {/* SLIDES DISPLAY GRID / CARDS LIST */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
             {(state?.slides || []).map((item: TournamentSlideItem) => (
               <div key={item.id} style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #CBD5E1', overflow: 'hidden', boxShadow: '0 4px 12px rgba(6,43,79,0.05)', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#062B4F' }}>
+                <div style={{ position: 'relative', width: '100%', height: 200, background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #E2E8F0' }}>
                   <img
                     src={item.image_url}
                     alt={item.title}
-                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain' }}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                   />
                   <span className="soft-badge" style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(6,43,79,0.85)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)', fontWeight: 700, fontSize: 11 }}>
                     {item.slide_type}
@@ -1246,7 +1233,7 @@ export default function Admin({ onChanged }: AdminProps) {
                 <div style={{ padding: 16, display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-between', gap: 12 }}>
                   <div>
                     <h4 style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', margin: '0 0 4px' }}>{item.title}</h4>
-                    <span style={{ fontSize: 12, color: '#145DA0', fontWeight: 600, display: 'block' }}>🏆 {item.tournament_name || item.tournament_id}</span>
+                    <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600, display: 'block' }}>📌 Slide Thông Tin Trang Chủ</span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid #F1F5F9' }}>
@@ -1267,7 +1254,7 @@ export default function Admin({ onChanged }: AdminProps) {
                         onClick={() => {
                           setSlideForm({
                             id: item.id,
-                            tournament_id: item.tournament_id,
+                            tournament_id: item.tournament_id || 'global',
                             title: item.title,
                             slide_type: item.slide_type,
                             image_url: item.image_url,
