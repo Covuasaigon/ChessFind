@@ -6,6 +6,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Toaster, toast } from 'sonner';
 import { Tournament, Player, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getNextMatch } from '@/lib/chess';
+import { apiFetch } from '@/lib/api-client';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell } from 'recharts';
 import Admin from './admin';
 
@@ -27,8 +28,8 @@ export default function ChessApp() {
     setLoading(true);
     try {
       const [r1, r2] = await Promise.all([
-        fetch('/api/tournaments'),
-        fetch('/api/banners')
+        apiFetch('/api/tournaments'),
+        apiFetch('/api/banners')
       ]);
       const d1 = await r1.json() as any;
       const d2 = await r2.json() as any;
@@ -72,7 +73,7 @@ export default function ChessApp() {
     let dead = false;
     setDetailLoading(true);
     setDetailError('');
-    fetch(`/api/player?t=${encodeURIComponent(current.id)}&p=${encodeURIComponent(player.id)}`).then(async r => {
+    apiFetch(`/api/player?t=${encodeURIComponent(current.id)}&p=${encodeURIComponent(player.id)}`).then(async r => {
       const d = await r.json() as any;
       if (!r.ok) throw Error(d.error);
       return d;

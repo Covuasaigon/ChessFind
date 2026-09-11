@@ -31,6 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogFooter } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { normalize, fmt, type Tournament, type Player } from '@/lib/chess';
+import { apiFetch } from '@/lib/api-client';
 
 export interface AdminLog {
   id: string;
@@ -126,7 +127,7 @@ export default function Admin({ onChanged }: AdminProps) {
       const formData = new FormData();
       formData.append('image', file);
 
-      const r = await fetch('/api/admin/upload-image', {
+      const r = await apiFetch('/api/admin/upload-image', {
         method: 'POST',
         headers: {
           ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
@@ -148,7 +149,7 @@ export default function Admin({ onChanged }: AdminProps) {
 
   async function load() {
     try {
-      const r = await fetch('/api/admin');
+      const r = await apiFetch('/api/admin');
       const d = (await r.json()) as AdminState & { error?: string };
       if (!r.ok) throw Error(d.error || 'Lỗi tải trang quản trị');
       setState(d);
@@ -173,7 +174,7 @@ export default function Admin({ onChanged }: AdminProps) {
     }
 
     try {
-      const r = await fetch(type === 'login' ? '/api/auth/login' : type === 'logout' ? '/api/auth/logout' : '/api/admin', {
+      const r = await apiFetch(type === 'login' ? '/api/auth/login' : type === 'logout' ? '/api/auth/logout' : '/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {}) },
         body: JSON.stringify(type === 'login' ? { username, password } : { action: type, url, group, name, ...extra })
@@ -189,6 +190,10 @@ export default function Admin({ onChanged }: AdminProps) {
       if (!r.ok) {
         if (r.status === 401 && type !== 'login') setState({ admin: false });
         throw Error(d.error || 'Thao tác thất bại');
+      }
+
+      if (d.token) {
+        try { localStorage.setItem('sgc_token', d.token); } catch {}
       }
 
       if (type === 'detect') {
@@ -222,6 +227,7 @@ export default function Admin({ onChanged }: AdminProps) {
         }
         if (type === 'login') setPassword('');
         if (type === 'logout') {
+          try { localStorage.removeItem('sgc_token'); } catch {}
           setState({ admin: false });
           setEdit(null);
           setRemove(null);
