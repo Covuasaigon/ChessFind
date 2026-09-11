@@ -1,6 +1,6 @@
-import type { Tournament, Player } from './chess.ts';
-import { importTournament, importPlayer, validateSource, detectCategories, type CategoryDetectResult } from './chess-source.ts';
-import { DEFAULT_ADMIN } from './default-admin.ts';
+import type { Tournament, Player } from './chess';
+import { importTournament, importPlayer, validateSource, detectCategories, type CategoryDetectResult } from './chess-source';
+import { DEFAULT_ADMIN } from './default-admin';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -20,6 +20,63 @@ const digest = async (s: string) => hex(await crypto.subtle.digest('SHA-256', en
 export function json(data: unknown, status = 200, headers: Record<string, string> = {}) { return Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers } }) }
 function message(e: unknown) { const m = e instanceof Error ? e.message : ''; return /SQL|D1|binding|syntax|database|fetch failed/i.test(m) ? 'Kho dữ liệu tạm thời không sẵn sàng. Vui lòng thử lại.' : m || 'Có lỗi xảy ra. Vui lòng thử lại.' }
 async function passwordOK(password: string, c: typeof DEFAULT_ADMIN) { const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']); const actual = hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(c.salt), iterations: c.iterations }, key, 256)); let diff = actual.length ^ c.hash.length; for (let i = 0; i < actual.length; i++)diff |= actual.charCodeAt(i) ^ (c.hash.charCodeAt(i) || 0); return diff === 0 }
+
+async function uploadToSupabaseStorage(fileBuffer: Uint8Array, filename: string, mimeType: string): Promise<string | null> {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const bucket = process.env.SUPABASE_BUCKET || 'banners';
+
+    if (!supabaseUrl || !supabaseKey) {
+      return null;
+    }
+
+    const baseUrl = supabaseUrl.replace(/\/+$/, '');
+    const uploadUrl = `${baseUrl}/storage/v1/object/${bucket}/${filename}`;
+
+    let res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseKey,
+        'Content-Type': mimeType,
+        'x-upsert': 'true'
+      },
+      body: fileBuffer as any
+    });
+
+    if (!res.ok) {
+      const bucketUrl = `${baseUrl}/storage/v1/bucket`;
+      await fetch(bucketUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id: bucket, name: bucket, public: true })
+      }).catch(() => {});
+
+      res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+          'Content-Type': mimeType,
+          'x-upsert': 'true'
+        },
+        body: fileBuffer as any
+      });
+    }
+
+    if (res.ok) {
+      return `${baseUrl}/storage/v1/object/public/${bucket}/${filename}`;
+    }
+  } catch (err) {
+    console.error('Supabase upload error:', err);
+  }
+  return null;
+}
 
 export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   const source = {
@@ -131,25 +188,11 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       const allowedOrigins = new Set([
         u.origin,
         process.env.FRONTEND_URL,
-        process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : '',
         process.env.PUBLIC_ORIGIN,
-        process.env.API_URL,
-        'https://chess-find-m38a.vercel.app',
-        'https://co-vua-sai-gon.vercel.app',
-        'http://localhost:5173',
-        'http://localhost:3000'
+        process.env.API_URL
       ].filter(Boolean));
 
-      const isAllowedOrigin = (orig: string | null) => {
-        if (!orig) return true;
-        const cleanOrig = orig.replace(/\/$/, '');
-        if (allowedOrigins.has(orig) || allowedOrigins.has(cleanOrig)) return true;
-        if (cleanOrig.endsWith('.vercel.app')) return true;
-        if (cleanOrig.includes('localhost') || cleanOrig.includes('127.0.0.1')) return true;
-        return false;
-      };
-
-      if (reqOrigin && !isAllowedOrigin(reqOrigin) && process.env.NODE_ENV === 'production') {
+      if (reqOrigin && !allowedOrigins.has(reqOrigin) && process.env.NODE_ENV === 'production') {
         return json({ error: 'Yêu cầu không hợp lệ. Hãy thao tác trong ứng dụng.' }, 403);
       }
 
@@ -222,9 +265,19 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         }
 
         const safeExt = isPng ? 'png' : isJpg ? 'jpg' : 'webp';
+        const mimeType = isPng ? 'image/png' : isJpg ? 'image/jpeg' : 'image/webp';
         const filename = `${crypto.randomUUID()}.${safeExt}`;
-        const relativeUrl = `/uploads/banner/${filename}`;
 
+        // 1. Primary: Upload to Supabase Storage if configured
+        let publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+
+        // 2. Fallback: If Supabase credentials are not set or upload fails, store as persistent Data URL in database
+        if (!publicUrl) {
+          const base64Str = Buffer.from(fileBuffer).toString('base64');
+          publicUrl = `data:${mimeType};base64,${base64Str}`;
+        }
+
+        // Also write to local disk as best effort (without breaking if read-only)
         try {
           const targetDirs = [
             resolve(process.cwd(), '../web/uploads/banner'),
@@ -233,19 +286,16 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             resolve(process.cwd(), '../public/uploads/banner'),
             resolve(process.cwd(), 'release/web/uploads/banner')
           ];
-
           for (const dir of targetDirs) {
             try {
               mkdirSync(dir, { recursive: true });
               writeFileSync(resolve(dir, filename), fileBuffer);
             } catch {}
           }
-        } catch {
-          return json({ error: 'Không thể lưu file ảnh vào hệ thống.' }, 500);
-        }
+        } catch {}
 
-        await log(true, `Upload banner image thành công: ${relativeUrl}`);
-        return json({ url: relativeUrl, message: 'Upload ảnh thành công!' });
+        await log(true, `Upload banner image thành công: ${publicUrl.startsWith('data:') ? 'Embedded Data URL' : publicUrl}`);
+        return json({ url: publicUrl, message: 'Upload ảnh thành công!' });
       }
 
       if (Number(req.headers.get('content-length') || 0) > 6000000) return json({ error: 'Dữ liệu gửi lên quá lớn.' }, 413);
@@ -261,16 +311,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         if (typeof b.username !== 'string' || typeof b.password !== 'string' || b.password.length > 256) return json({ error: 'Tên đăng nhập hoặc mật khẩu không đúng.' }, 401);
         await db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO NOTHING').bind('admin_credentials', JSON.stringify(DEFAULT_ADMIN)).run();
         const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind('admin_credentials').first<{ value: string }>();
-        let c = row ? JSON.parse(row.value) : DEFAULT_ADMIN;
-        let ok = (b.username === c.username) && (await passwordOK(b.password, c));
-        if (!ok && b.username === 'admin') {
-          const validPass = process.env.ADMIN_PASSWORD || 'Tuan@123';
-          if (b.password === validPass || await passwordOK(b.password, DEFAULT_ADMIN)) {
-            ok = true;
-            await db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind('admin_credentials', JSON.stringify(DEFAULT_ADMIN)).run();
-          }
-        }
-        if (!ok) return json({ error: 'Tên đăng nhập hoặc mật khẩu không đúng.' }, 401);
+        const c = JSON.parse(row!.value);
+        const ok = await passwordOK(b.password, c);
+        if (b.username !== c.username || !ok) return json({ error: 'Tên đăng nhập hoặc mật khẩu không đúng.' }, 401);
         const token = random(), csrf = random();
         await db.batch([db.prepare('DELETE FROM admin_sessions WHERE expires < ?').bind(now), db.prepare('DELETE FROM auth_attempts WHERE key = ?').bind(k), db.prepare('INSERT INTO admin_sessions (hash,csrf,expires) VALUES (?,?,?)').bind(await digest(token), csrf, now + 28800000)]);
         return json({ admin: true, token, csrf, message: 'Đăng nhập thành công.' }, 200, { 'Set-Cookie': cookie(req, token) });

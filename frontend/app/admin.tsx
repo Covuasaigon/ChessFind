@@ -31,7 +31,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogFooter } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { normalize, fmt, type Tournament, type Player } from '@/lib/chess';
-import { getApiUrl, getImageUrl } from '@/lib/api-client';
 
 export interface AdminLog {
   id: string;
@@ -126,9 +125,8 @@ export default function Admin({ onChanged }: AdminProps) {
       const formData = new FormData();
       formData.append('image', file);
 
-      const r = await fetch(getApiUrl('/api/admin/upload-image'), {
+      const r = await fetch('/api/admin/upload-image', {
         method: 'POST',
-        credentials: 'include',
         headers: {
           ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
         },
@@ -149,14 +147,7 @@ export default function Admin({ onChanged }: AdminProps) {
 
   async function load() {
     try {
-      const savedToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
-      const headers: Record<string, string> = {};
-      if (savedToken) headers['Authorization'] = `Bearer ${savedToken}`;
-
-      const r = await fetch(getApiUrl('/api/admin'), {
-        credentials: 'include',
-        headers
-      });
+      const r = await fetch('/api/admin');
       const d = (await r.json()) as AdminState & { error?: string };
       if (!r.ok) throw Error(d.error || 'Lỗi tải trang quản trị');
       setState(d);
@@ -181,17 +172,9 @@ export default function Admin({ onChanged }: AdminProps) {
     }
 
     try {
-      const savedToken = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {}),
-        ...(savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {})
-      };
-
-      const r = await fetch(getApiUrl(type === 'login' ? '/api/auth/login' : type === 'logout' ? '/api/auth/logout' : '/api/admin'), {
+      const r = await fetch(type === 'login' ? '/api/auth/login' : type === 'logout' ? '/api/auth/logout' : '/api/admin', {
         method: 'POST',
-        credentials: 'include',
-        headers,
+        headers: { 'Content-Type': 'application/json', ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {}) },
         body: JSON.stringify(type === 'login' ? { username, password } : { action: type, url, group, name, ...extra })
       });
       const d = (await r.json()) as {
@@ -200,14 +183,10 @@ export default function Admin({ onChanged }: AdminProps) {
         detected?: DetectedInfo;
         tournament?: Tournament;
         token?: string;
-        csrf?: string;
       };
 
       if (!r.ok) {
-        if (r.status === 401 && type !== 'login') {
-          if (typeof window !== 'undefined') localStorage.removeItem('admin_token');
-          setState({ admin: false });
-        }
+        if (r.status === 401 && type !== 'login') setState({ admin: false });
         throw Error(d.error || 'Thao tác thất bại');
       }
 
@@ -240,20 +219,8 @@ export default function Admin({ onChanged }: AdminProps) {
           setName('');
           setGroup('');
         }
-        if (type === 'login') {
-          if (d.token && typeof window !== 'undefined') {
-            localStorage.setItem('admin_token', d.token);
-          }
-          if (d.csrf) {
-            setState(prev => ({ ...(prev || {}), admin: true, csrf: d.csrf }));
-          }
-          setPassword('');
-          if (typeof window !== 'undefined' && location.pathname !== '/admin') {
-            history.pushState({}, '', '/admin');
-          }
-        }
+        if (type === 'login') setPassword('');
         if (type === 'logout') {
-          if (typeof window !== 'undefined') localStorage.removeItem('admin_token');
           setState({ admin: false });
           setEdit(null);
           setRemove(null);
@@ -800,18 +767,34 @@ export default function Admin({ onChanged }: AdminProps) {
 
                 {bannerModal.image_url ? (
                   <div style={{ borderRadius: 14, border: '1.5px solid #CBD5E1', background: '#FFFFFF', padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ position: 'relative', width: '100%', height: 160, borderRadius: 12, overflow: 'hidden', border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
-                      <img
-                        src={getImageUrl(bannerModal.image_url || '')}
-                        alt="Banner Preview"
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
+                    <div style={{ position: 'relative', width: '100%', height: 130, borderRadius: 10, overflow: 'hidden', background: '#062B4F' }}>
+                      <img src={bannerModal.image_url} alt="Preview banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <div style={{ position: 'absolute', bottom: 8, left: 12, color: '#FFFFFF', fontSize: 11, fontWeight: 700, background: 'rgba(6,43,79,0.85)', padding: '2px 8px', borderRadius: 4 }}>
+                        Preview Ảnh Banner (24px Radius)
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <label className="outline" style={{ cursor: 'pointer', padding: '6px 14px', fontSize: 12, fontWeight: 700, margin: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {uploading ? <RefreshCw size={14} className="spin" /> : <Upload size={14} />}
+                        <span>{uploading ? 'Đang tải…' : 'Thay ảnh'}</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/jpg"
+                          style={{ display: 'none' }}
+                          disabled={uploading}
+                          onChange={e => {
+                            if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
+                          }}
+                        />
+                      </label>
                       <button
                         type="button"
-                        onClick={() => setBannerModal(prev => ({ ...(prev || {}), image_url: '' }))}
-                        style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(239,68,68,0.9)', color: '#FFF', border: 0, borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                        className="outline danger-btn"
+                        style={{ padding: '6px 14px', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        onClick={() => setBannerModal({ ...bannerModal, image_url: '' })}
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={14} />
                         <span>Xóa ảnh</span>
                       </button>
                     </div>
@@ -831,7 +814,7 @@ export default function Admin({ onChanged }: AdminProps) {
                         style={{ display: 'none' }}
                         disabled={uploading}
                         onChange={e => {
-                          if (e.target.files?.[0]) handleFileSelect(e);
+                          if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
                         }}
                       />
                     </label>
@@ -895,7 +878,7 @@ export default function Admin({ onChanged }: AdminProps) {
             <div style={{ margin: '10px 0' }}>
               <div className="promo-banner-container" style={{ minHeight: 180, marginTop: 0 }}>
                 <div className="promo-banner-slide active" style={{ opacity: 1 }}>
-                  {previewBanner.image_url && <div className="banner-bg-image" style={{ backgroundImage: `url(${getImageUrl(previewBanner.image_url)})` }} />}
+                  {previewBanner.image_url && <div className="banner-bg-image" style={{ backgroundImage: `url(${previewBanner.image_url})` }} />}
                   <div className="banner-overlay" />
                   <div className="banner-content">
                     <div className="banner-badge"><span>XEM TRƯỚC BANNER</span></div>

@@ -146,13 +146,13 @@ export default function ChessApp() {
             <h1>{view === 'saved' ? 'Kỳ thủ đã lưu' : 'Tìm kiếm kỳ thủ'}</h1>
             <p>{view === 'saved' ? 'Danh sách được lưu riêng trên thiết bị này.' : 'Tìm kiếm nhanh kết quả thi đấu của kỳ thủ'}</p>
           </div>
-          <Search className="heading-icon" size={40} />
+          <Search className="heading-icon pointer-events-none" size={40} />
         </div>
 
         <div className="filter-bar">
           <div className="input-wrap">
-            <Search size={20} />
-            <input aria-label="Tìm kỳ thủ" value={q} onChange={e => setQ(e.target.value)} placeholder="Nhập tên kỳ thủ, SBD hoặc mã FIDE" />
+            <Search size={20} className="pointer-events-none" />
+            <input aria-label="Tìm kỳ thủ" value={q} onChange={e => setQ(e.target.value)} placeholder="Nhập tên kỳ thủ" />
             {q && <button onClick={() => setQ('')} aria-label="Xóa tìm kiếm"><X size={18} /></button>}
           </div>
           <Select value={filter} onValueChange={setFilter}>

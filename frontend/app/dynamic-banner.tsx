@@ -2,8 +2,6 @@
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, ArrowRight, Sparkles } from 'lucide-react';
 
-import { getImageUrl } from '@/lib/api-client';
-
 export interface BannerItem {
   id: string;
   title: string;
@@ -108,7 +106,7 @@ export default function DynamicBanner({ banners, onNavigate }: DynamicBannerProp
               <div className="promo-banner-right">
                 <div className="promo-banner-img-frame">
                   <img
-                    src={getImageUrl(item.image_url) || '/hero-chess-king.png'}
+                    src={item.image_url || '/hero-chess-king.png'}
                     alt={item.title}
                     className="promo-banner-img"
                     loading="lazy"

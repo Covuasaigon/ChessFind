@@ -1,4 +1,4 @@
-import { num, normalize, type Tournament, type Player, type Round } from './chess.ts';
+import { num, normalize, type Tournament, type Player, type Round } from './chess';
 
 const HOSTS = new Set(['chess-results.com', 'www.chess-results.com', 's1.chess-results.com', 's2.chess-results.com', 's3.chess-results.com']);
 

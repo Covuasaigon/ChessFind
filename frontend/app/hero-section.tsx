@@ -24,7 +24,7 @@ export default function HeroSection({ q, setQ, onSearch, config }: HeroSectionPr
   const titleLine1 = config?.titleLine1 || 'Mỗi ván cờ,';
   const titleHighlight = config?.titleHighlight || 'một bước trưởng thành.';
   const subtitle = config?.subtitle || 'Tra cứu thành tích thi đấu nhanh chóng, chính xác.';
-  const placeholder = config?.searchPlaceholder || 'Nhập tên kỳ thủ, SBD hoặc mã FIDE';
+  const placeholder = config?.searchPlaceholder || 'Nhập tên kỳ thủ';
   const heroImage = config?.heroImage || '/hero-chess-king.png';
   const buttonText = config?.buttonText || 'Tìm kiếm';
 
@@ -59,7 +59,7 @@ export default function HeroSection({ q, setQ, onSearch, config }: HeroSectionPr
           {/* 4. Search Box Container */}
           <form className="hero-search-box animate-slide-up delay-300" onSubmit={onSearch}>
             <div className="hero-search-input-group">
-              <Search size={20} className="hero-search-icon" />
+              <Search size={20} className="hero-search-icon pointer-events-none" />
               <input
                 type="text"
                 aria-label={placeholder}
@@ -70,9 +70,9 @@ export default function HeroSection({ q, setQ, onSearch, config }: HeroSectionPr
               />
             </div>
             <button type="submit" className="hero-search-btn">
-              <Search size={16} className="mobile-search-btn-icon" />
+              <Search size={16} className="mobile-search-btn-icon pointer-events-none" />
               <span>{buttonText}</span>
-              <ChevronRight size={16} className="desktop-search-btn-icon" />
+              <ChevronRight size={16} className="desktop-search-btn-icon pointer-events-none" />
             </button>
           </form>
         </div>

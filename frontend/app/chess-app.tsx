@@ -11,7 +11,6 @@ import Admin from './admin';
 
 import DynamicBanner, { type BannerItem } from './dynamic-banner';
 import HeroSection from './hero-section';
-import { getApiUrl } from '@/lib/api-client';
 
 type View = 'home' | 'search' | 'tournaments' | 'saved' | 'player' | 'admin';
 const demo = makeDemo();
@@ -28,8 +27,8 @@ export default function ChessApp() {
     setLoading(true);
     try {
       const [r1, r2] = await Promise.all([
-        fetch(getApiUrl('/api/tournaments'), { credentials: 'include' }),
-        fetch(getApiUrl('/api/banners'), { credentials: 'include' })
+        fetch('/api/tournaments'),
+        fetch('/api/banners')
       ]);
       const d1 = await r1.json() as any;
       const d2 = await r2.json() as any;
@@ -73,7 +72,7 @@ export default function ChessApp() {
     let dead = false;
     setDetailLoading(true);
     setDetailError('');
-    fetch(getApiUrl(`/api/player?t=${encodeURIComponent(current.id)}&p=${encodeURIComponent(player.id)}`), { credentials: 'include' }).then(async r => {
+    fetch(`/api/player?t=${encodeURIComponent(current.id)}&p=${encodeURIComponent(player.id)}`).then(async r => {
       const d = await r.json() as any;
       if (!r.ok) throw Error(d.error);
       return d;
@@ -147,13 +146,13 @@ export default function ChessApp() {
             <h1>{view === 'saved' ? 'Kỳ thủ đã lưu' : 'Tìm kiếm kỳ thủ'}</h1>
             <p>{view === 'saved' ? 'Danh sách được lưu riêng trên thiết bị này.' : 'Tìm kiếm nhanh kết quả thi đấu của kỳ thủ'}</p>
           </div>
-          <Search className="heading-icon" size={40} />
+          <Search className="heading-icon pointer-events-none" size={40} />
         </div>
 
         <div className="filter-bar">
           <div className="input-wrap">
-            <Search size={20} />
-            <input aria-label="Tìm kỳ thủ" value={q} onChange={e => setQ(e.target.value)} placeholder="Nhập tên kỳ thủ, SBD hoặc mã FIDE" />
+            <Search size={20} className="pointer-events-none" />
+            <input aria-label="Tìm kỳ thủ" value={q} onChange={e => setQ(e.target.value)} placeholder="Nhập tên kỳ thủ" />
             {q && <button onClick={() => setQ('')} aria-label="Xóa tìm kiếm"><X size={18} /></button>}
           </div>
           <Select value={filter} onValueChange={setFilter}>
@@ -493,40 +492,38 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onO
       </div>
       <button className="outline" onClick={() => { setQ(''); setTimeout(() => document.getElementById('selected-player')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>Vị trí của con</button>
     </div>
-    <div className="saas-table-container scrollbar-thin">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Hạng</TableHead>
-            <TableHead>Họ và tên kỳ thủ</TableHead>
-            <TableHead>SBD</TableHead>
-            <TableHead>Đơn vị / CLB</TableHead>
-            <TableHead>Điểm</TableHead>
-            <TableHead>Buchholz (BH)</TableHead>
-            <TableHead>Sonneborn Berger (SB)</TableHead>
-            <TableHead>Performance (RP)</TableHead>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Hạng</TableHead>
+          <TableHead>Họ và tên kỳ thủ</TableHead>
+          <TableHead>SBD</TableHead>
+          <TableHead>Đơn vị / CLB</TableHead>
+          <TableHead>Điểm</TableHead>
+          <TableHead>Buchholz (BH)</TableHead>
+          <TableHead>Sonneborn Berger (SB)</TableHead>
+          <TableHead>Performance (RP)</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {ps.map(p =>
+          <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
+            <TableCell><span className={p.rank && p.rank <= 3 ? 'rank-medal' : 'rank-number'}>{fmt(p.rank)}</span></TableCell>
+            <TableCell>
+              <button className="rank-player" onClick={() => onOpen(p)}>
+                <b>{p.name}</b>
+              </button>
+            </TableCell>
+            <TableCell>{p.snr}</TableCell>
+            <TableCell>{p.club || '—'}</TableCell>
+            <TableCell className="points">{fmt(p.points)}</TableCell>
+            <TableCell>{fmt(p.buchholz ?? p.ties['BH'] ?? p.ties['Buchholz'])}</TableCell>
+            <TableCell>{fmt(p.sonnebornBerger ?? p.ties['SB'])}</TableCell>
+            <TableCell>{fmt(p.performance ?? p.ties['Rp'] ?? p.ties['Performance'])}</TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {ps.map(p =>
-            <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
-              <TableCell><span className={p.rank && p.rank <= 3 ? 'rank-medal' : 'rank-number'}>{fmt(p.rank)}</span></TableCell>
-              <TableCell>
-                <button className="rank-player" onClick={() => onOpen(p)}>
-                  <b>{p.name}</b>
-                </button>
-              </TableCell>
-              <TableCell>{p.snr}</TableCell>
-              <TableCell>{p.club || '—'}</TableCell>
-              <TableCell className="points">{fmt(p.points)}</TableCell>
-              <TableCell>{fmt(p.buchholz ?? p.ties['BH'] ?? p.ties['Buchholz'])}</TableCell>
-              <TableCell>{fmt(p.sonnebornBerger ?? p.ties['SB'])}</TableCell>
-              <TableCell>{fmt(p.performance ?? p.ties['Rp'] ?? p.ties['Performance'])}</TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+        )}
+      </TableBody>
+    </Table>
     {!ps.length && <p className="empty-text">Không có kết quả phù hợp.</p>}
     <p className="subtle below">{t.demo ? 'Bảng xếp hạng minh họa.' : 'Thứ hạng và các hệ số theo phiên đồng bộ Chess-Results mới nhất.'}</p>
   </section>

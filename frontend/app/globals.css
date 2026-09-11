@@ -71,17 +71,9 @@
   --font-sans: 'Be Vietnam Pro', sans-serif;
 }
 
-html, body {
-  overflow-x: hidden !important;
-  max-width: 100vw;
-  width: 100%;
-}
-
 *, body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, .card {
   box-sizing: border-box;
   font-family: 'Be Vietnam Pro', sans-serif !important;
-  overflow-wrap: break-word;
-  word-break: break-word;
 }
 
 body {
@@ -1009,6 +1001,7 @@ svg {
 
 .heading-icon {
   color: #145DA0;
+  pointer-events: none;
 }
 
 .filter-bar {
@@ -1912,161 +1905,34 @@ label .input-wrap {
 
 .print-rounds { display: none; }
 
-/* Pointer Event & Overlay Safety for Inputs and Buttons */
-.hero-bg-pattern, .hero-ambient-light, .hero-ambient-gold-glow {
-  pointer-events: none !important;
-  z-index: 0 !important;
-}
-
-.hero-content-wrapper {
-  position: relative;
-  z-index: 2;
-}
-
-.hero-search-box {
-  position: relative;
-  z-index: 10;
-  pointer-events: auto !important;
-}
-
-.hero-search-input-group {
-  position: relative;
-  z-index: 2;
-  pointer-events: auto !important;
-  flex: 1;
-  min-width: 0;
-}
-
-.hero-search-icon, .mobile-search-btn-icon, .desktop-search-btn-icon, svg {
-  pointer-events: none !important;
-}
-
-.hero-search-input {
-  position: relative;
-  z-index: 5;
-  pointer-events: auto !important;
-  cursor: text !important;
-}
-
-.hero-search-btn {
-  position: relative;
-  z-index: 10;
-  pointer-events: auto !important;
-  cursor: pointer !important;
-  touch-action: manipulation;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-/* Responsive Media Queries (Mobile: 320-480px | Tablet: 481-1024px | Desktop: >1024px) */
-@media (max-width: 1024px) {
-  .header-inner { padding: 0 16px; min-height: 60px; }
-  .app-main { padding: 16px 14px 90px 14px; }
+/* Responsive Media Queries */
+@media(max-width: 1024px) {
+  .header-inner { padding: 0 20px; }
+  .app-main { padding: 24px 20px; }
   .profile-grid { grid-template-columns: 1fr; }
-  .import-panel form { grid-template-columns: 1fr; }
+  .import-panel form { grid-template-columns: 1fr 1fr; }
   .import-panel label:first-child { grid-column: 1/-1; }
   .admin-summary { grid-template-columns: 1fr 1fr; }
   .admin-summary > div:last-child { grid-column: 1/-1; }
-  .tournament-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
-  .player-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
 }
 
-@media (max-width: 480px) {
-  body { padding-bottom: 85px !important; font-size: 13px !important; line-height: 1.45 !important; }
-  .app-main { padding: 10px 8px 90px 8px !important; }
-  
-  /* Headings & Typography Mobile (-20% to -30%) */
-  h1 { font-size: 20px !important; line-height: 1.2 !important; letter-spacing: -0.3px !important; }
-  h2 { font-size: 16px !important; line-height: 1.25 !important; letter-spacing: -0.2px !important; }
-  h3 { font-size: 14px !important; }
-  .subtle { font-size: 12px !important; }
-
-  /* Compact Mobile Header (52px height, no overflow, touch friendly) */
-  .app-header { border-bottom-width: 2px; }
-  .header-inner { min-height: 52px !important; height: 52px !important; padding: 0 8px !important; gap: 6px; }
+@media(max-width: 768px) {
+  body { padding-bottom: 74px; }
+  .header-inner { min-height: 72px; padding: 0 16px; }
   .desktop-nav { display: none; }
-  .brand { gap: 6px; min-width: 0; flex-shrink: 1; }
-  .company-logo { width: 34px !important; height: 32px !important; padding: 2px; border-radius: 6px; object-fit: contain !important; }
-  .brand b { font-size: 13px !important; line-height: 1.15; max-width: 160px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-  .brand small { font-size: 8.5px !important; letter-spacing: 0.2px; line-height: 1.1; }
+  .admin-link span { display: none; }
+  .admin-link { padding: 8px 12px; }
+  .lookup-hero { padding: 28px 24px; border-radius: 16px; }
+  .lookup-hero h1 { font-size: 30px; margin: 12px 0 10px; }
+  .lookup-hero > p { font-size: 14px; }
+  .search-box { flex-wrap: wrap; padding: 12px; gap: 10px; margin-top: 22px; }
+  .search-box input { width: calc(100% - 40px); font-size: 15px; }
+  .search-box .primary { width: 100%; margin-top: 4px; padding: 12px; }
+  .tournament-grid { grid-template-columns: 1fr; }
+  .player-grid { grid-template-columns: 1fr; }
+  .filter-bar { flex-direction: column; align-items: stretch; gap: 12px; }
+  .filter-bar .picker { max-width: 100% !important; min-width: 100% !important; width: 100% !important; }
   
-  .admin-link { padding: 4px 9px !important; font-size: 11px !important; height: 30px; border-radius: 99px; gap: 4px; white-space: nowrap; flex-shrink: 0; }
-  .admin-link span { display: inline-block; }
-  
-  /* Hero Section Typography & Search Box Fix Mobile */
-  .hero-card-container { padding: 14px 12px !important; border-radius: 14px !important; margin-bottom: 14px !important; }
-  .hero-badge { padding: 3px 8px !important; margin-bottom: 8px !important; }
-  .hero-badge-text { font-size: 9.5px !important; letter-spacing: 0.8px !important; }
-  .hero-heading { font-size: 20px !important; line-height: 1.2 !important; margin-bottom: 6px !important; }
-  .hero-subtitle { font-size: 12.5px !important; line-height: 1.4 !important; margin-bottom: 10px !important; }
-  
-  .hero-search-box {
-    height: 44px !important;
-    min-height: 44px !important;
-    padding: 3px 3px 3px 10px !important;
-    border-radius: 10px !important;
-    margin-bottom: 0 !important;
-    gap: 6px !important;
-    position: relative !important;
-    z-index: 10 !important;
-    pointer-events: auto !important;
-  }
-  
-  .hero-search-input-group { gap: 6px !important; flex: 1 !important; min-width: 0 !important; }
-  .hero-search-input { font-size: 13px !important; width: 100% !important; z-index: 5 !important; pointer-events: auto !important; }
-  .hero-search-btn { height: 38px !important; padding: 0 12px !important; font-size: 12px !important; border-radius: 8px !important; z-index: 10 !important; pointer-events: auto !important; cursor: pointer !important; }
-
-  /* Hero & Banner Image Containers: Full Image Visible, No Crop (object-fit: contain) */
-  .hero-image-frame {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: 150px !important;
-    max-height: 170px !important;
-    min-height: 130px !important;
-    padding: 6px !important;
-    border-radius: 12px !important;
-    background: rgba(6, 43, 79, 0.5) !important;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
-  }
-  .hero-king-image {
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: contain !important;
-    object-position: center !important;
-    border-radius: 8px !important;
-  }
-
-  /* Layout & Section Spacing Mobile */
-  .section { margin-top: 14px !important; }
-  .section-heading { margin-bottom: 10px !important; gap: 6px; }
-  .panel { padding: 12px 10px !important; border-radius: 12px !important; margin-bottom: 12px !important; }
-  
-  /* Tournament Cards: Compact 1 Column Mobile */
-  .tournament-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
-  .tournament-card { border-radius: 12px !important; }
-  .tournament-banner { min-height: auto !important; padding: 10px 12px !important; gap: 8px !important; }
-  .tournament-banner strong { font-size: 14.5px !important; line-height: 1.25 !important; margin: 2px 0 !important; }
-  .tournament-banner span:last-child { font-size: 11px !important; }
-  .tournament-banner svg { width: 28px !important; height: 28px !important; }
-  .tournament-body { padding: 10px 12px !important; }
-  .tournament-meta { gap: 12px !important; font-size: 11.5px !important; }
-  .tournament-meta svg { width: 14px !important; height: 14px !important; }
-  .card-bottom { margin-top: 8px !important; }
-  .card-bottom .soft-badge { padding: 3px 8px !important; font-size: 10.5px !important; border-radius: 4px !important; }
-  .card-bottom .primary { padding: 5px 10px !important; font-size: 11.5px !important; border-radius: 6px !important; height: 32px !important; }
-
-  /* Player Grid: Compact 1 Column Mobile */
-  .player-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
-  .player-card { padding: 10px 12px !important; gap: 10px !important; border-radius: 12px !important; }
-  .avatar { width: 40px !important; height: 40px !important; font-size: 14px !important; border-width: 2px !important; }
-  .player-info strong { font-size: 14px !important; }
-  .player-info > span:not(.tournament-link) { font-size: 11.5px !important; }
-  .player-info small, .player-info .tournament-link { font-size: 11px !important; }
-  .card-score b { font-size: 17px !important; }
-  .card-score small { font-size: 10px !important; }
-  .card-score svg { width: 15px !important; height: 15px !important; margin-top: 4px !important; }
-  
-  /* Compact Bottom Navigation Mobile (Height 50px, 4 Tabs Preserved) */
   .mobile-nav {
     display: flex;
     position: fixed;
@@ -2076,32 +1942,22 @@ label .input-wrap {
     background: #0B2A4A;
     border-top: 2px solid #D4AF37;
     z-index: 50;
-    height: 50px;
-    padding: 3px 4px max(3px, env(safe-area-inset-bottom));
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
     justify-content: space-around;
-    align-items: center;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
   }
   
   .mobile-nav button {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 2px;
+    gap: 4px;
     color: #92b0d5;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     background: transparent;
     border: 0;
-    padding: 2px 6px;
-    min-height: 42px;
-    touch-action: manipulation;
-  }
-  
-  .mobile-nav button svg {
-    width: 18px;
-    height: 18px;
+    padding: 2px 14px;
   }
   
   .mobile-nav .active {
@@ -2109,10 +1965,10 @@ label .input-wrap {
     font-weight: 700;
   }
 
-  .profile-heading { flex-wrap: wrap; gap: 10px; }
-  .profile-name h1 { font-size: 20px; }
-  .score-top { padding: 14px 12px; }
-  .score-top strong { font-size: 28px; }
+  .profile-heading { flex-wrap: wrap; gap: 16px; }
+  .profile-name h1 { font-size: 26px; }
+  .score-top { padding: 22px 20px; }
+  .score-top strong { font-size: 38px; }
   .import-panel form { display: flex; flex-direction: column; }
   .admin-tournament { flex-direction: column; align-items: stretch; }
   .admin-actions { justify-content: flex-start; }
@@ -2322,103 +2178,38 @@ label .input-wrap {
   border-radius: 10px;
 }
 
-/* Mobile Specific Fix for Dynamic Banner: Display Full Image, No Crop */
 @media (max-width: 768px) {
   .promo-banner-container {
-    aspect-ratio: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    height: auto !important;
-    border-radius: 16px !important;
-    margin-top: 16px !important;
-    margin-bottom: 16px !important;
-    padding: 14px 12px 34px 12px !important;
-    overflow: hidden !important;
+    aspect-ratio: 16 / 9;
+    min-height: 150px;
+    max-height: 220px;
+    border-radius: 16px;
+    margin-top: 24px;
   }
 
   .promo-banner-slide {
-    position: relative !important;
-    inset: auto !important;
-    padding: 0 !important;
-    height: auto !important;
-    min-height: auto !important;
-  }
-
-  .promo-banner-slide:not(.active) {
-    display: none !important;
-  }
-
-  .promo-banner-content-wrapper {
-    flex-direction: column !important;
-    gap: 10px !important;
-    width: 100% !important;
-  }
-
-  .promo-banner-left {
-    flex: 1 1 100% !important;
-    max-width: 100% !important;
-    width: 100% !important;
-  }
-
-  .promo-banner-right {
-    flex: 1 1 100% !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    order: 2 !important;
-  }
-
-  .promo-banner-img-frame {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    min-height: 130px !important;
-    max-height: 180px !important;
-    aspect-ratio: 16 / 9 !important;
-    border-radius: 12px !important;
-    padding: 6px !important;
-    background: rgba(6, 43, 79, 0.4) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-  }
-
-  .promo-banner-img {
-    width: 100% !important;
-    height: 100% !important;
-    max-height: 170px !important;
-    object-fit: contain !important;
-    object-position: center !important;
-    border-radius: 8px !important;
+    padding: 16px 16px 22px;
   }
 
   .banner-side-logo {
-    display: none !important;
+    display: none;
   }
 
   .banner-title {
-    font-size: 15.5px !important;
-    line-height: 1.25 !important;
-    margin-bottom: 4px !important;
+    font-size: 18px;
   }
 
   .banner-description {
-    font-size: 11.5px !important;
-    line-height: 1.35 !important;
+    font-size: 12px;
   }
 
   .banner-cta-btn {
-    padding: 5px 12px !important;
-    font-size: 11.5px !important;
-    height: 32px !important;
-    border-radius: 99px !important;
+    padding: 7px 14px;
+    font-size: 12px;
   }
 
   .banner-nav-btn {
-    display: none !important;
-  }
-
-  .banner-dots {
-    bottom: 6px !important;
+    display: none;
   }
 }
 

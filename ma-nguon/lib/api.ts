@@ -21,6 +21,63 @@ export function json(data: unknown, status = 200, headers: Record<string, string
 function message(e: unknown) { const m = e instanceof Error ? e.message : ''; return /SQL|D1|binding|syntax|database|fetch failed/i.test(m) ? 'Kho dữ liệu tạm thời không sẵn sàng. Vui lòng thử lại.' : m || 'Có lỗi xảy ra. Vui lòng thử lại.' }
 async function passwordOK(password: string, c: typeof DEFAULT_ADMIN) { const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']); const actual = hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(c.salt), iterations: c.iterations }, key, 256)); let diff = actual.length ^ c.hash.length; for (let i = 0; i < actual.length; i++)diff |= actual.charCodeAt(i) ^ (c.hash.charCodeAt(i) || 0); return diff === 0 }
 
+async function uploadToSupabaseStorage(fileBuffer: Uint8Array, filename: string, mimeType: string): Promise<string | null> {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const bucket = process.env.SUPABASE_BUCKET || 'banners';
+
+    if (!supabaseUrl || !supabaseKey) {
+      return null;
+    }
+
+    const baseUrl = supabaseUrl.replace(/\/+$/, '');
+    const uploadUrl = `${baseUrl}/storage/v1/object/${bucket}/${filename}`;
+
+    let res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseKey,
+        'Content-Type': mimeType,
+        'x-upsert': 'true'
+      },
+      body: fileBuffer as any
+    });
+
+    if (!res.ok) {
+      const bucketUrl = `${baseUrl}/storage/v1/bucket`;
+      await fetch(bucketUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id: bucket, name: bucket, public: true })
+      }).catch(() => {});
+
+      res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+          'Content-Type': mimeType,
+          'x-upsert': 'true'
+        },
+        body: fileBuffer as any
+      });
+    }
+
+    if (res.ok) {
+      return `${baseUrl}/storage/v1/object/public/${bucket}/${filename}`;
+    }
+  } catch (err) {
+    console.error('Supabase upload error:', err);
+  }
+  return null;
+}
+
 export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   const source = {
     tournament: sourceParam.tournament ?? importTournament,
@@ -208,9 +265,19 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         }
 
         const safeExt = isPng ? 'png' : isJpg ? 'jpg' : 'webp';
+        const mimeType = isPng ? 'image/png' : isJpg ? 'image/jpeg' : 'image/webp';
         const filename = `${crypto.randomUUID()}.${safeExt}`;
-        const relativeUrl = `/uploads/banner/${filename}`;
 
+        // 1. Primary: Upload to Supabase Storage if configured
+        let publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+
+        // 2. Fallback: If Supabase credentials are not set or upload fails, store as persistent Data URL in database
+        if (!publicUrl) {
+          const base64Str = Buffer.from(fileBuffer).toString('base64');
+          publicUrl = `data:${mimeType};base64,${base64Str}`;
+        }
+
+        // Also write to local disk as best effort (without breaking if read-only)
         try {
           const targetDirs = [
             resolve(process.cwd(), '../web/uploads/banner'),
@@ -219,19 +286,16 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             resolve(process.cwd(), '../public/uploads/banner'),
             resolve(process.cwd(), 'release/web/uploads/banner')
           ];
-
           for (const dir of targetDirs) {
             try {
               mkdirSync(dir, { recursive: true });
               writeFileSync(resolve(dir, filename), fileBuffer);
             } catch {}
           }
-        } catch {
-          return json({ error: 'Không thể lưu file ảnh vào hệ thống.' }, 500);
-        }
+        } catch {}
 
-        await log(true, `Upload banner image thành công: ${relativeUrl}`);
-        return json({ url: relativeUrl, message: 'Upload ảnh thành công!' });
+        await log(true, `Upload banner image thành công: ${publicUrl.startsWith('data:') ? 'Embedded Data URL' : publicUrl}`);
+        return json({ url: publicUrl, message: 'Upload ảnh thành công!' });
       }
 
       if (Number(req.headers.get('content-length') || 0) > 6000000) return json({ error: 'Dữ liệu gửi lên quá lớn.' }, 413);
