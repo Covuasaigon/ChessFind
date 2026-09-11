@@ -69,7 +69,15 @@ export default function HeroSection({ q, setQ, onSearch, config }: HeroSectionPr
                 className="hero-search-input"
               />
             </div>
-            <button type="submit" className="hero-search-btn">
+            <button
+              type="submit"
+              className="hero-search-btn"
+              onClick={(e) => {
+                if (onSearch) {
+                  onSearch(e as any);
+                }
+              }}
+            >
               <Search size={16} className="mobile-search-btn-icon pointer-events-none" />
               <span>{buttonText}</span>
               <ChevronRight size={16} className="desktop-search-btn-icon pointer-events-none" />

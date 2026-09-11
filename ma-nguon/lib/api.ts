@@ -17,7 +17,45 @@ const enc = new TextEncoder(); const hex = (b: ArrayBuffer | Uint8Array) => [...
 const unhex = (s: string) => Uint8Array.from(s.match(/.{2}/g)!.map(x => parseInt(x, 16)));
 const random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
 const digest = async (s: string) => hex(await crypto.subtle.digest('SHA-256', enc.encode(s)));
-export function json(data: unknown, status = 200, headers: Record<string, string> = {}) { return Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers } }) }
+function getCorsHeaders(req?: Request): Record<string, string> {
+  const reqOrigin = req?.headers.get('origin');
+  const allowedEnv = [
+    process.env.FRONTEND_URL,
+    process.env.PUBLIC_ORIGIN,
+    process.env.API_URL,
+    process.env.ALLOWED_ORIGINS
+  ].filter(Boolean).flatMap(x => x!.split(',').map(s => s.trim()));
+
+  let allowOrigin = '*';
+  if (reqOrigin) {
+    if (allowedEnv.includes(reqOrigin) || reqOrigin.endsWith('.vercel.app') || process.env.NODE_ENV !== 'production' || allowedEnv.includes('*')) {
+      allowOrigin = reqOrigin;
+    } else {
+      allowOrigin = reqOrigin;
+    }
+  }
+
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CSRF-Token, X-Admin-Token, X-Requested-With',
+    'Access-Control-Max-Age': '86400'
+  };
+}
+
+export function json(data: unknown, status = 200, headers: Record<string, string> = {}, req?: Request) {
+  const cors = getCorsHeaders(req);
+  return Response.json(data, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      ...cors,
+      ...headers
+    }
+  });
+}
 function message(e: unknown) { const m = e instanceof Error ? e.message : ''; return /SQL|D1|binding|syntax|database|fetch failed/i.test(m) ? 'Kho dữ liệu tạm thời không sẵn sàng. Vui lòng thử lại.' : m || 'Có lỗi xảy ra. Vui lòng thử lại.' }
 async function passwordOK(password: string, c: typeof DEFAULT_ADMIN) { const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']); const actual = hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(c.salt), iterations: c.iterations }, key, 256)); let diff = actual.length ^ c.hash.length; for (let i = 0; i < actual.length; i++)diff |= actual.charCodeAt(i) ^ (c.hash.charCodeAt(i) || 0); return diff === 0 }
 
@@ -180,20 +218,28 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         return json({ error: 'Không tìm thấy chức năng.' }, 404);
       }
       if (req.method === 'OPTIONS') {
-        return new Response(null, { status: 204 });
+        return new Response(null, { status: 204, headers: getCorsHeaders(req) });
       }
-      if (req.method !== 'POST') return json({ error: 'Phương thức không hợp lệ.' }, 405);
+      if (req.method !== 'POST') return json({ error: 'Phương thức không hợp lệ.' }, 405, {}, req);
 
       const reqOrigin = req.headers.get('origin');
-      const allowedOrigins = new Set([
-        u.origin,
-        process.env.FRONTEND_URL,
-        process.env.PUBLIC_ORIGIN,
-        process.env.API_URL
-      ].filter(Boolean));
+      if (reqOrigin && process.env.NODE_ENV === 'production') {
+        const allowedSet = new Set([
+          u.origin,
+          ...[
+            process.env.FRONTEND_URL,
+            process.env.PUBLIC_ORIGIN,
+            process.env.API_URL,
+            process.env.ALLOWED_ORIGINS
+          ].filter(Boolean).flatMap(x => x!.split(',').map(s => s.trim()))
+        ]);
 
-      if (reqOrigin && !allowedOrigins.has(reqOrigin) && process.env.NODE_ENV === 'production') {
-        return json({ error: 'Yêu cầu không hợp lệ. Hãy thao tác trong ứng dụng.' }, 403);
+        const isVercelApp = reqOrigin.endsWith('.vercel.app');
+        const isAllowed = allowedSet.has('*') || allowedSet.has(reqOrigin) || isVercelApp || reqOrigin === u.origin;
+
+        if (!isAllowed) {
+          return json({ error: 'Yêu cầu không hợp lệ. Hãy thao tác trong ứng dụng.' }, 403, {}, req);
+        }
       }
 
 

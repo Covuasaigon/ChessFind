@@ -353,8 +353,41 @@ var hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0
 var unhex = (s) => Uint8Array.from(s.match(/.{2}/g).map((x) => parseInt(x, 16)));
 var random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
 var digest = async (s) => hex(await crypto.subtle.digest("SHA-256", enc.encode(s)));
-function json(data, status = 200, headers = {}) {
-  return Response.json(data, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...headers } });
+function getCorsHeaders(req) {
+  const reqOrigin = req?.headers.get("origin");
+  const allowedEnv = [
+    process.env.FRONTEND_URL,
+    process.env.PUBLIC_ORIGIN,
+    process.env.API_URL,
+    process.env.ALLOWED_ORIGINS
+  ].filter(Boolean).flatMap((x) => x.split(",").map((s) => s.trim()));
+  let allowOrigin = "*";
+  if (reqOrigin) {
+    if (allowedEnv.includes(reqOrigin) || reqOrigin.endsWith(".vercel.app") || process.env.NODE_ENV !== "production" || allowedEnv.includes("*")) {
+      allowOrigin = reqOrigin;
+    } else {
+      allowOrigin = reqOrigin;
+    }
+  }
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-CSRF-Token, X-Admin-Token, X-Requested-With",
+    "Access-Control-Max-Age": "86400"
+  };
+}
+function json(data, status = 200, headers = {}, req) {
+  const cors = getCorsHeaders(req);
+  return Response.json(data, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      ...cors,
+      ...headers
+    }
+  });
 }
 function message(e) {
   const m = e instanceof Error ? e.message : "";
@@ -513,18 +546,25 @@ function createApi(db2, sourceParam = {}) {
         return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404);
       }
       if (req.method === "OPTIONS") {
-        return new Response(null, { status: 204 });
+        return new Response(null, { status: 204, headers: getCorsHeaders(req) });
       }
-      if (req.method !== "POST") return json({ error: "Ph\u01B0\u01A1ng th\u1EE9c kh\xF4ng h\u1EE3p l\u1EC7." }, 405);
+      if (req.method !== "POST") return json({ error: "Ph\u01B0\u01A1ng th\u1EE9c kh\xF4ng h\u1EE3p l\u1EC7." }, 405, {}, req);
       const reqOrigin = req.headers.get("origin");
-      const allowedOrigins = new Set([
-        u.origin,
-        process.env.FRONTEND_URL,
-        process.env.PUBLIC_ORIGIN,
-        process.env.API_URL
-      ].filter(Boolean));
-      if (reqOrigin && !allowedOrigins.has(reqOrigin) && process.env.NODE_ENV === "production") {
-        return json({ error: "Y\xEAu c\u1EA7u kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y thao t\xE1c trong \u1EE9ng d\u1EE5ng." }, 403);
+      if (reqOrigin && process.env.NODE_ENV === "production") {
+        const allowedSet = /* @__PURE__ */ new Set([
+          u.origin,
+          ...[
+            process.env.FRONTEND_URL,
+            process.env.PUBLIC_ORIGIN,
+            process.env.API_URL,
+            process.env.ALLOWED_ORIGINS
+          ].filter(Boolean).flatMap((x) => x.split(",").map((s2) => s2.trim()))
+        ]);
+        const isVercelApp = reqOrigin.endsWith(".vercel.app");
+        const isAllowed = allowedSet.has("*") || allowedSet.has(reqOrigin) || isVercelApp || reqOrigin === u.origin;
+        if (!isAllowed) {
+          return json({ error: "Y\xEAu c\u1EA7u kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y thao t\xE1c trong \u1EE9ng d\u1EE5ng." }, 403, {}, req);
+        }
       }
       if (path === "/api/admin/upload-image") {
         const s2 = await session(req);
@@ -1011,7 +1051,15 @@ var security = {
 var server = createServer(async (req, res) => {
   try {
     const requestedHost = req.headers.host || `localhost:${port}`;
-    if (publicOrigin ? requestedHost !== new URL(publicOrigin).host : !(/* @__PURE__ */ new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`])).has(requestedHost)) {
+    const allowedHosts = /* @__PURE__ */ new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]);
+    if (publicOrigin) {
+      try {
+        allowedHosts.add(new URL(publicOrigin).host);
+      } catch {
+      }
+    }
+    const isCloudHost = requestedHost.endsWith(".onrender.com") || requestedHost.endsWith(".railway.app") || requestedHost.endsWith(".vercel.app");
+    if (publicOrigin && !allowedHosts.has(requestedHost) && !isCloudHost && process.env.STRICT_HOST_CHECK === "true") {
       res.writeHead(400, security);
       res.end("Host kh\xF4ng h\u1EE3p l\u1EC7. C\u1EA5u h\xECnh PUBLIC_ORIGIN khi d\xF9ng t\xEAn mi\u1EC1n.");
       return;

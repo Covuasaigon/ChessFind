@@ -34,7 +34,12 @@ const security = {
 const server = createServer(async (req, res) => {
   try {
     const requestedHost = req.headers.host || `localhost:${port}`;
-    if (publicOrigin ? requestedHost !== new URL(publicOrigin).host : !new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]).has(requestedHost)) {
+    const allowedHosts = new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]);
+    if (publicOrigin) {
+      try { allowedHosts.add(new URL(publicOrigin).host); } catch {}
+    }
+    const isCloudHost = requestedHost.endsWith('.onrender.com') || requestedHost.endsWith('.railway.app') || requestedHost.endsWith('.vercel.app');
+    if (publicOrigin && !allowedHosts.has(requestedHost) && !isCloudHost && process.env.STRICT_HOST_CHECK === 'true') {
       res.writeHead(400, security);
       res.end('Host không hợp lệ. Cấu hình PUBLIC_ORIGIN khi dùng tên miền.');
       return;
