@@ -1011,15 +1011,33 @@ function TournamentInfoSlider() {
 
   useEffect(() => {
     let dead = false;
-    apiFetch('/api/slides/home')
+    apiFetch('/api/home/slides')
       .then(r => r.json())
       .then(data => {
         const list = Array.isArray(data) ? data : (data.slides || []);
         if (!dead && list.length > 0) {
           setSlides(list);
+        } else if (!dead) {
+          apiFetch('/api/slides/home')
+            .then(r2 => r2.json())
+            .then(data2 => {
+              const list2 = Array.isArray(data2) ? data2 : (data2.slides || []);
+              if (!dead && list2.length > 0) setSlides(list2);
+            })
+            .catch(() => {});
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!dead) {
+          apiFetch('/api/slides/home')
+            .then(r2 => r2.json())
+            .then(data2 => {
+              const list2 = Array.isArray(data2) ? data2 : (data2.slides || []);
+              if (!dead && list2.length > 0) setSlides(list2);
+            })
+            .catch(() => {});
+        }
+      })
       .finally(() => {
         if (!dead) setLoading(false);
       });

@@ -184,12 +184,12 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           } catch {}
           return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
         }
-        if (path === '/api/slides' || path === '/api/slides/home') {
+        if (path === '/api/slides' || path === '/api/slides/home' || path === '/api/home/slides') {
           const tid = u.searchParams.get('tournament_id') || u.searchParams.get('t') || '';
           try {
             const tList = await list(true);
             const tourMap = new Map(tList.map(t => [t.id, t.name]));
-            let sqlStr = "SELECT * FROM tournament_slides WHERE status = 'active' OR is_active = 1";
+            let sqlStr = "SELECT * FROM tournament_slides WHERE status = 'active'";
             const params: any[] = [];
             if (tid) {
               sqlStr += ' AND tournament_id = ?';
@@ -201,12 +201,13 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
               ...item,
               tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
             }));
-            if (path === '/api/slides/home') {
+            if (path === '/api/slides/home' || path === '/api/home/slides') {
               return json(slidesList, 200, {}, req);
             }
             return json({ slides: slidesList }, 200, {}, req);
-          } catch {
-            if (path === '/api/slides/home') {
+          } catch (err) {
+            console.error('Error fetching tournament_slides:', err);
+            if (path === '/api/slides/home' || path === '/api/home/slides') {
               return json([], 200, {}, req);
             }
             return json({ slides: [] }, 200, {}, req);

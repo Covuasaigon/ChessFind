@@ -1611,10 +1611,11 @@ svg {
 
 .tournament-info-slider-card {
   height: 280px;
+  aspect-ratio: 16 / 9;
 }
 @media (max-width: 768px) {
   .tournament-info-slider-card {
-    height: 200px;
+    height: 180px;
   }
 }
 
