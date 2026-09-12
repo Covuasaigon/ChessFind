@@ -328,7 +328,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
                     player_black = excluded.player_black,
                     board = excluded.board,
                     result = excluded.result,
-                    score = excluded.score
+                    score = excluded.score,
+                    color = excluded.color
                 `).bind(matchId, p.categoryId || t.id, playerObj.id, rd.playerWhite || null, rd.playerBlack || null, rd.round, rd.board || null, rd.result || null, rd.score, rd.color || null, rd.opponentId || null, rd.opponent || null).run();
               }
             } catch { }
@@ -346,8 +347,14 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             totalPlayers,
             club,
             games: s.played,
-            whiteGames: s.white,
-            blackGames: s.black,
+            whiteGames: s.whiteGames,
+            blackGames: s.blackGames,
+            whiteWins: s.whiteWins,
+            whiteDraws: s.whiteDraws,
+            whiteLosses: s.whiteLosses,
+            blackWins: s.blackWins,
+            blackDraws: s.blackDraws,
+            blackLosses: s.blackLosses,
             wins: s.wins,
             draws: s.draws,
             losses: s.losses,
@@ -361,8 +368,14 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             totalPlayers,
             club,
             games: s.played,
-            whiteGames: s.white,
-            blackGames: s.black,
+            whiteGames: s.whiteGames,
+            blackGames: s.blackGames,
+            whiteWins: s.whiteWins,
+            whiteDraws: s.whiteDraws,
+            whiteLosses: s.whiteLosses,
+            blackWins: s.blackWins,
+            blackDraws: s.blackDraws,
+            blackLosses: s.blackLosses,
             wins: s.wins,
             draws: s.draws,
             losses: s.losses,

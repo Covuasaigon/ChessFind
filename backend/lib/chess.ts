@@ -4,7 +4,7 @@ export type Round = {
   opponentId?: string;
   opponent: string;
   rating: number | null;
-  color: 'white' | 'black' | null;
+  color: 'WHITE' | 'BLACK' | 'white' | 'black' | null;
   score: number | null;
   status: 'played' | 'pending' | 'bye' | 'forfeit' | 'unknown';
   raw?: string;
@@ -38,6 +38,12 @@ export type Player = {
   games?: number;
   whiteGames?: number;
   blackGames?: number;
+  whiteWins?: number;
+  whiteDraws?: number;
+  whiteLosses?: number;
+  blackWins?: number;
+  blackDraws?: number;
+  blackLosses?: number;
   wins?: number;
   draws?: number;
   losses?: number;
@@ -150,7 +156,7 @@ export function stats(p: Player) {
     }
   }
   const uniqueRounds = Array.from(uniqueRoundsMap.values());
-  const playedRounds = uniqueRounds.filter(r => r.status === 'played' && r.score !== null && (r.color === 'white' || r.color === 'black'));
+  const playedRounds = uniqueRounds.filter(r => r.status === 'played' && r.score !== null && r.color != null && (r.color.toUpperCase() === 'WHITE' || r.color.toUpperCase() === 'BLACK'));
 
   let white = 0;
   let whiteWins = 0;
@@ -163,12 +169,13 @@ export function stats(p: Player) {
   let blackLosses = 0;
 
   for (const rd of playedRounds) {
-    if (rd.color === 'white') {
+    const c = rd.color?.toUpperCase();
+    if (c === 'WHITE') {
       white++;
       if (rd.score === 1) whiteWins++;
       else if (rd.score === 0.5) whiteDraws++;
       else if (rd.score === 0) whiteLosses++;
-    } else if (rd.color === 'black') {
+    } else if (c === 'BLACK') {
       black++;
       if (rd.score === 1) blackWins++;
       else if (rd.score === 0.5) blackDraws++;
@@ -187,10 +194,12 @@ export function stats(p: Player) {
     draws,
     losses,
     white,
+    whiteGames: white,
     whiteWins,
     whiteDraws,
     whiteLosses,
     black,
+    blackGames: black,
     blackWins,
     blackDraws,
     blackLosses,

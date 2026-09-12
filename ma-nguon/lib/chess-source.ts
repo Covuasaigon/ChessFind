@@ -322,63 +322,155 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
 
 export function parsePlayer(html: string, p: Player, t: Tournament): Player {
   const rows = rowsOf(html);
-  const hi = rows.findIndex(r => findCol(r, ['rd', 'round']) >= 0 && findCol(r, ['name']) >= 0 && findCol(r, ['res', 'result']) >= 0);
+  
+  // Try pairing table detection first (e.g. art=79 where pairings of all rounds are listed)
+  let hi = rows.findIndex(r => findCol(r, ['rd', 'round', 'vong']) >= 0 && (findCol(r, ['res', 'result', 'kd', 'ketqua']) >= 0 || findCol(r, ['bo', 'board', 'ban']) >= 0));
+  if (hi < 0) {
+    hi = rows.findIndex(r => findCol(r, ['rd', 'round']) >= 0 && findCol(r, ['name']) >= 0);
+  }
   if (hi < 0) throw Error('Chưa đọc được chi tiết từng vòng từ nguồn. Điểm và thứ hạng vẫn được giữ theo bảng đã đồng bộ.');
 
   const h = rows[hi];
-  const ni = findCol(h, ['name']);
-  const ri = findCol(h, ['rd', 'round']);
+  const ri = findCol(h, ['rd', 'round', 'vong']);
   const boCol = findCol(h, ['bo', 'board', 'ban']);
-  const rating = findCol(h, ['rtg', 'rating']);
-  const res = findCol(h, ['res', 'result']);
+  const ratingCol = findCol(h, ['rtg', 'rating', 'elo']);
+  const resCol = findCol(h, ['res', 'result', 'kd', 'ketqua']);
   const colorCol = findCol(h, ['wb', 'w/b', 'color', 'mau', 'mauquan', 'ks', 'k/s']);
+  const nameCols = h.map((c, i) => ({ i, key: key(c.text) })).filter(c => c.key === 'name' || c.key === 'ten' || c.key === 'hoten').map(c => c.i);
 
   const rounds: Round[] = [];
   const seenRounds = new Set<number>();
 
+  const normPName = normalize(p.name);
+
   for (const r of rows.slice(hi + 1)) {
+    if (r.length < 3) continue;
     const rd = num(r[ri]?.text || '');
-    if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
+    if (rd === null || rd < 1 || rd > 100) continue;
     if (seenRounds.has(rd)) continue;
+
+    // Check if this row is for player p
+    let pColIdx = -1;
+
+    // First check snr match in links
+    for (let i = 0; i < r.length; i++) {
+      const snrMatch = r[i].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
+      if (snrMatch && snrMatch === p.snr) {
+        pColIdx = i;
+        break;
+      }
+    }
+
+    // Next check name text match if snr link not found
+    if (pColIdx < 0 && normPName) {
+      for (let i = 0; i < r.length; i++) {
+        const cellNorm = normalize(r[i].text);
+        if (cellNorm && (cellNorm === normPName || cellNorm.includes(normPName) || normPName.includes(cellNorm))) {
+          pColIdx = i;
+          break;
+        }
+      }
+    }
+
+    // If parsing a player-specific page (art=9), all rows are for player p
+    const isPlayerPage = nameCols.length <= 1 && findCol(h, ['name']) >= 0;
+    if (pColIdx < 0 && !isPlayerPage) continue;
 
     const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
 
-    let rawCellText = res >= 0 ? (r[res]?.text || '').trim() : '';
+    // Find result cell
+    let rIdx = resCol >= 0 ? resCol : -1;
+    if (rIdx < 0 || (r[rIdx] && /^\(?[wb]\.?\)?$/i.test(r[rIdx].text.trim()))) {
+      const foundIdx = r.findIndex((c, i) => i !== ri && i !== boCol && (/^\s*(\d(?:\.5|½)?|\+|-|\*|\½)\s*[:\-–—]\s*(\d(?:\.5|½)?|\+|-|\*|\½)\s*$/i.test(c.text.trim()) || (/^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()) && !/^\(?[wb]\.?\)?$/i.test(c.text.trim()))));
+      if (foundIdx >= 0) rIdx = foundIdx;
+    }
+
+    let rawCellText = rIdx >= 0 && rIdx !== ri && r[rIdx] && !/^\(?[wb]\.?\)?$/i.test(r[rIdx].text.trim()) ? r[rIdx].text.trim() : '';
     if (!rawCellText) {
-      const scoreCell = r.find(c => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
+      const scoreCell = r.find((c, i) => i !== ri && i !== boCol && (/^\s*(\d(?:\.5|½)?|\+|-|\*|\½)\s*[:\-–—]\s*(\d(?:\.5|½)?|\+|-|\*|\½)\s*$/i.test(c.text.trim()) || (/^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()) && !/^\(?[wb]\.?\)?$/i.test(c.text.trim()))));
       rawCellText = scoreCell?.text.trim() || '';
     }
 
-    let colorStr = colorCol >= 0 ? (r[colorCol]?.text || '').trim() : '';
-    if (!colorStr) {
-      const colorCell = r.find(c => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
-      colorStr = colorCell?.text || '';
+    // Color detection
+    let color: 'WHITE' | 'BLACK' | null = null;
+
+    // Requirement 2: Detect color by side in pairing table (art=79)
+    if (rIdx >= 0 && pColIdx >= 0) {
+      if (pColIdx < rIdx) {
+        color = 'WHITE';
+      } else if (pColIdx > rIdx) {
+        color = 'BLACK';
+      }
     }
-    const colorClean = colorStr.trim().toLowerCase();
-    const isWhite = /^w|\(w\)/i.test(colorClean) || colorClean === 'white' || colorClean === 'trắng';
-    const isBlack = /^b|\(b\)/i.test(colorClean) || colorClean === 'black' || colorClean === 'đen';
-    const color = isWhite ? 'white' : isBlack ? 'black' : null;
+
+    // Fallback: Check explicit color column or cell text if not determined by side
+    if (!color) {
+      let colorStr = colorCol >= 0 ? (r[colorCol]?.text || '').trim() : '';
+      if (!colorStr) {
+        const colorCell = r.find(c => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
+        colorStr = colorCell?.text || '';
+      }
+      const colorClean = colorStr.trim().toLowerCase();
+      if (/^w|\(w\)/i.test(colorClean) || colorClean === 'white' || colorClean === 'trắng') {
+        color = 'WHITE';
+      } else if (/^b|\(b\)/i.test(colorClean) || colorClean === 'black' || colorClean === 'đen') {
+        color = 'BLACK';
+      }
+    }
 
     let raw = rawCellText.replace(/\b[wb]\b/ig, '').trim();
 
-    const opponent = r[ni].text;
-    const snr = r[ni].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
+    // Determine opponent
+    let opponent = '';
+    let oppSnr: string | undefined;
+
+    if (isPlayerPage) {
+      const ni = findCol(h, ['name']);
+      opponent = ni >= 0 ? r[ni]?.text || '' : '';
+      oppSnr = ni >= 0 ? r[ni]?.raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1] : undefined;
+    } else if (rIdx >= 0) {
+      // In pairing table, opponent is on the other side of result cell
+      const isPWhite = color === 'WHITE';
+      for (let i = 0; i < r.length; i++) {
+        if (i === pColIdx || i === rIdx) continue;
+        if (isPWhite && i < rIdx) continue; // Opponent is on right side
+        if (!isPWhite && i > rIdx) continue; // Opponent is on left side
+        const cellSnr = r[i].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
+        if (cellSnr || (r[i].text && r[i].text.length > 2 && !/^\d+$/.test(r[i].text))) {
+          opponent = r[i].text;
+          oppSnr = cellSnr;
+          break;
+        }
+      }
+    }
+
     let status: Round['status'] = 'unknown', score: number | null = null;
 
-    if (/bye|not paired|unpaired|spielfrei/i.test(opponent)) {
+    if (/bye|not paired|unpaired|spielfrei|miễn đấu/i.test(opponent)) {
       status = 'bye'; score = num(raw);
     } else if (/^[+−-]$|[kK]$|forfeit/i.test(raw)) {
       status = 'forfeit'; score = raw === '+' ? 1 : /^[−-]$/.test(raw) ? 0 : num(raw.replace(/[kK]/g, ''));
     } else if (raw === '' || raw === '*') {
       status = 'pending';
     } else {
-      score = num(raw);
+      // Score parsing based on format e.g. "1 - 0", "0 - 1", "½ - ½" or single score
+      if (raw.includes('-') || raw.includes(':')) {
+        const parts = raw.split(/[\:\-–—]/).map(s => num(s.trim()));
+        if (parts.length === 2 && parts[0] !== null && parts[1] !== null) {
+          if (color === 'WHITE') score = parts[0];
+          else if (color === 'BLACK') score = parts[1];
+          else score = parts[0]; // fallback
+        } else {
+          score = num(raw);
+        }
+      } else {
+        score = num(raw);
+      }
       if (score !== null && [0, .5, 1].includes(score)) status = 'played';
       else score = null;
     }
 
     seenRounds.add(rd);
-
     if (rounds.some(x => x.round === rd)) continue;
 
     const resFmt = score === 1 ? '1 - 0' : score === 0.5 ? '½ - ½' : score === 0 ? '0 - 1' : raw || '—';
@@ -389,20 +481,20 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     if (status === 'bye' || /bye|not paired|unpaired|spielfrei/i.test(opponent)) {
       playerWhite = p.name;
       playerBlack = 'Miễn đấu (Bye)';
-    } else if (color === 'black') {
-      playerWhite = opponent;
+    } else if (color === 'BLACK') {
+      playerWhite = opponent || 'Đối thủ';
       playerBlack = p.name;
     } else {
       playerWhite = p.name;
-      playerBlack = opponent;
+      playerBlack = opponent || 'Đối thủ';
     }
 
     rounds.push({
       round: rd,
       board: bo,
-      opponentId: snr ? `${t.id}-${snr}` : undefined,
-      opponent,
-      rating: rating >= 0 ? num(r[rating]?.text || '') : null,
+      opponentId: oppSnr ? `${t.id}-${oppSnr}` : undefined,
+      opponent: opponent || 'Đối thủ',
+      rating: ratingCol >= 0 ? num(r[ratingCol]?.text || '') : null,
       color,
       status,
       score,
@@ -416,14 +508,39 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
   if (!rounds.length) throw Error('Nguồn chưa có chi tiết các ván đấu.');
   rounds.sort((a, b) => a.round - b.round);
 
+  if (p.points !== null && p.points !== undefined) {
+    const sumPlayed = rounds.reduce((acc, r) => acc + (r.score ?? 0), 0);
+    if (Math.abs(sumPlayed - p.points) > 0.01) {
+      throw Error('Điểm tổng số không khớp với chi tiết các ván đấu.');
+    }
+  }
+
   return { ...p, rounds, detailsLoaded: true };
 }
 
 export async function importPlayer(t: Tournament, p: Player) {
   const { url } = validateSource(t.source);
+
+  // Requirement 1: Use Chess-Results art=79 pairing data as single source for color information
   url.searchParams.set('lan', '1');
-  url.searchParams.set('art', '9');
-  url.searchParams.set('snr', p.snr);
+  url.searchParams.set('art', '79');
+  url.searchParams.set('zeilen', '99999');
+  url.searchParams.delete('snr');
   url.searchParams.delete('rd');
-  return parsePlayer(await fetchSource(url), p, t);
+
+  try {
+    const html79 = await fetchSource(url);
+    const res79 = parsePlayer(html79, p, t);
+    if (res79.rounds && res79.rounds.length > 0) {
+      return res79;
+    }
+  } catch {}
+
+  // Fallback to art=9 (individual player page)
+  const url9 = new URL(t.source);
+  url9.searchParams.set('lan', '1');
+  url9.searchParams.set('art', '9');
+  url9.searchParams.set('snr', p.snr);
+  url9.searchParams.delete('rd');
+  return parsePlayer(await fetchSource(url9), p, t);
 }
