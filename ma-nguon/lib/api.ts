@@ -282,11 +282,58 @@ async function migrateLocalImagesToPermanent(db: Database) {
   }
 }
 
+async function ensureSyncLogsTableSchema(db: Database) {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS sync_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        tournament_id TEXT,
+        tournament_name TEXT,
+        url TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        status TEXT NOT NULL,
+        players_updated INTEGER DEFAULT 0 NOT NULL,
+        message TEXT NOT NULL
+      )
+    `).run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_sync_logs_created ON sync_logs (created_at);').run();
+  } catch (e) {
+    console.error('Error ensuring sync_logs table schema:', e);
+  }
+}
+
 export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   const source = {
     tournament: sourceParam.tournament ?? importTournament,
     player: sourceParam.player ?? importPlayer,
     detect: sourceParam.detect ?? detectCategories,
+  };
+
+  const logSync = async (item: {
+    tournament_id?: string;
+    tournament_name?: string;
+    url: string;
+    status: 'success' | 'failed';
+    players_updated: number;
+    message: string;
+  }) => {
+    try {
+      await ensureSyncLogsTableSchema(db);
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      await db.prepare(`
+        INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, item.tournament_id || null, item.tournament_name || null, item.url, now, item.status, item.players_updated, item.message.slice(0, 1000)).run();
+
+      await db.prepare(`
+        DELETE FROM sync_logs WHERE id NOT IN (
+          SELECT id FROM sync_logs ORDER BY created_at DESC LIMIT 200
+        )
+      `).run();
+    } catch (e) {
+      console.error('logSync error:', e);
+    }
   };
 
   const log = async (ok: boolean, m: string) => { await db.batch([db.prepare('INSERT INTO logs (id, created, ok, message) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), new Date().toISOString(), ok ? 1 : 0, m.slice(0, 500)), db.prepare('DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY created DESC LIMIT 100)')]) };
@@ -315,7 +362,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   const cookie = (req: Request, value: string, max = 28800) => `sgc_session=${value}; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=${max}`;
 
   return async function handle(req: Request, ip = 'unknown'): Promise<Response> {
-    let action = ''; let authorized = false; try {
+    let action = ''; let authorized = false; let b: any = {}; try {
       const u = new URL(req.url); const path = u.pathname.replace(/\/+$/, '') || '/';
       if (req.method === 'GET') {
         if (path === '/api/tournaments') return json({ tournaments: await list() }, 200, {}, req);
@@ -333,6 +380,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           let bannersList: any[] = [];
           let prizesList: any[] = [];
           let slidesList: any[] = [];
+          let syncLogsList: any[] = [];
           try {
             bannersList = (await db.prepare('SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC').all()).results;
           } catch {}
@@ -354,7 +402,12 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
               tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
             }));
           } catch {}
-          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
+          try {
+            await ensureSyncLogsTableSchema(db);
+            const r = await db.prepare('SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50').all<any>();
+            syncLogsList = r.results || [];
+          } catch {}
+          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
         }
         if (path === '/api/slides' || path === '/api/slides/home' || path === '/api/home/slides') {
           await ensureSlidesTableSchema(db);
@@ -629,7 +682,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       if (Number(req.headers.get('content-length') || 0) > 6000000) return json({ error: 'Dữ liệu gửi lên quá lớn.' }, 413, {}, req);
       const raw = await req.text();
       if (raw.length > 6000000) return json({ error: 'Dữ liệu gửi lên quá lớn.' }, 413, {}, req);
-      let b: any = {};
+      b = {};
       if (raw && raw.trim()) {
         try { b = JSON.parse(raw) } catch { return json({ error: 'Dữ liệu không hợp lệ.' }, 400, {}, req) }
       }
@@ -933,6 +986,14 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         }
 
         await log(true, `Đồng bộ V2 giải đấu: ${mainTournamentTitle} · ${successCount}/${items.length} bảng đấu, tổng ${totalPlayers} kỳ thủ`);
+        await logSync({
+          tournament_id: masterId,
+          tournament_name: mainTournamentTitle,
+          url: items[0]?.url || `https://chess-results.com/tnr${masterId}.aspx?lan=1`,
+          status: 'success',
+          players_updated: totalPlayers,
+          message: `Đồng bộ V2 thành công: ${mainTournamentTitle} (${successCount} bảng, ${totalPlayers} kỳ thủ)`
+        });
         return json({ message: `Đã đồng bộ thành công ${successCount} bảng đấu với ${totalPlayers} kỳ thủ!` }, 200, {}, req);
       }
 
@@ -1053,6 +1114,14 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         if (t.updated !== old.updated || t.id !== old.id) statements.push(db.prepare('DELETE FROM details WHERE tid = ?').bind(old.id));
         await db.batch(statements);
         await log(true, `${action === 'edit' ? 'Sửa' : 'Đồng bộ'} giải: ${t.name}`);
+        await logSync({
+          tournament_id: t.id,
+          tournament_name: t.name,
+          url: t.source,
+          status: 'success',
+          players_updated: t.players.length,
+          message: `Đồng bộ thành công từ Chess-Results: ${t.name} (${t.players.length} kỳ thủ)`
+        });
         return json({ message: action === 'edit' ? 'Đã lưu chỉnh sửa.' : 'Đã cập nhật kết quả mới nhất.' }, 200, {}, req);
       }
 
@@ -1083,7 +1152,19 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       return json({ error: 'Thao tác không được hỗ trợ.' }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info'].includes(action)) try { await log(false, m) } catch { }
+      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info'].includes(action)) {
+        try {
+          await log(false, m);
+          await logSync({
+            tournament_id: b.id || undefined,
+            tournament_name: b.name || undefined,
+            url: b.url || b.source || '',
+            status: 'failed',
+            players_updated: 0,
+            message: `Lỗi đồng bộ Chess-Results: ${m}`
+          });
+        } catch { }
+      }
       return json({ error: m }, 502, {}, req);
     }
   };

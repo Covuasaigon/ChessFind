@@ -80,6 +80,17 @@ export interface TournamentSlideItem {
   updated_at?: string;
 }
 
+export interface SyncLogItem {
+  id: string;
+  tournament_id?: string;
+  tournament_name?: string;
+  url: string;
+  created_at: string;
+  status: 'success' | 'failed' | string;
+  players_updated: number;
+  message: string;
+}
+
 export interface AdminState {
   admin: boolean;
   username?: string;
@@ -89,6 +100,7 @@ export interface AdminState {
   prizes?: PrizeRuleItem[];
   slides?: TournamentSlideItem[];
   logs?: AdminLog[];
+  syncLogs?: SyncLogItem[];
 }
 
 export interface CategoryItem {
@@ -138,7 +150,7 @@ export default function Admin({ onChanged }: AdminProps) {
   const [deleteBanner, setDeleteBanner] = useState<BannerItem | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showManualUrl, setShowManualUrl] = useState(false);
-  const [activeTab, setActiveTab] = useState<'tournaments' | 'slides' | 'prizes' | 'banners'>('tournaments');
+  const [activeTab, setActiveTab] = useState<'tournaments' | 'slides' | 'prizes' | 'banners' | 'sync_logs'>('tournaments');
   const [slideForm, setSlideForm] = useState<{
     id?: string;
     tournament_id: string;
@@ -779,6 +791,33 @@ export default function Admin({ onChanged }: AdminProps) {
         >
           <ImageIcon size={18} />
           <span>🖼️ Banner Trang Chủ</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('sync_logs')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 20px',
+            borderRadius: 12,
+            fontWeight: 700,
+            fontSize: 14,
+            cursor: 'pointer',
+            border: activeTab === 'sync_logs' ? '1.5px solid #062B4F' : '1px solid #E2E8F0',
+            background: activeTab === 'sync_logs' ? '#062B4F' : '#F8FAFC',
+            color: activeTab === 'sync_logs' ? '#FFFFFF' : '#475569',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Activity size={18} className={activeTab === 'sync_logs' ? 'text-amber-400' : ''} />
+          <span>📜 Lịch Sử Đồng Bộ (Sync Log)</span>
+          {(state?.syncLogs?.length || 0) > 0 && (
+            <span style={{ background: '#D4AF37', color: '#062B4F', padding: '2px 8px', borderRadius: 99, fontSize: 12, fontWeight: 800 }}>
+              {state?.syncLogs?.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -1606,6 +1645,65 @@ export default function Admin({ onChanged }: AdminProps) {
           </table>
         </div>
       </section>
+
+      {/* SYNC LOGS HISTORY SECTION */}
+      {(activeTab === 'sync_logs' || activeTab === 'tournaments') && (
+        <section className="admin-card-section">
+          <div className="admin-card-title-group" style={{ marginBottom: 16 }}>
+            <div>
+              <h2><Activity size={22} className="text-amber-500" /> Lịch Sử Đồng Bộ Chess-Results (Sync Log)</h2>
+              <p>Danh sách các phiên đồng bộ dữ liệu từ nguồn Chess-Results chính thức (Single Source of Truth).</p>
+            </div>
+            <span className="soft-badge" style={{ background: '#eef5fc', color: '#145DA0', padding: '6px 14px', borderRadius: 99, fontWeight: 700 }}>
+              {state.syncLogs?.length || 0} phiên đồng bộ
+            </span>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table className="saas-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', textAlign: 'left', borderBottom: '2px solid #E2E8F0' }}>
+                  <th style={{ padding: 12, fontSize: 13, fontWeight: 700 }}>Thời Gian</th>
+                  <th style={{ padding: 12, fontSize: 13, fontWeight: 700 }}>Giải Đấu</th>
+                  <th style={{ padding: 12, fontSize: 13, fontWeight: 700 }}>Trạng Thái</th>
+                  <th style={{ padding: 12, fontSize: 13, fontWeight: 700 }}>Số Kỳ Thủ</th>
+                  <th style={{ padding: 12, fontSize: 13, fontWeight: 700 }}>Chi Tiết Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(state.syncLogs || []).map((item) => (
+                  <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
+                      {new Date(item.created_at).toLocaleString('vi-VN')}
+                    </td>
+                    <td style={{ padding: 12, fontSize: 13, fontWeight: 700, color: '#062B4F' }}>
+                      {item.tournament_name || item.tournament_id || 'Giải đấu'}
+                    </td>
+                    <td style={{ padding: 12 }}>
+                      <span className="soft-badge" style={{ background: item.status === 'success' ? '#DCFCE7' : '#FEE2E2', color: item.status === 'success' ? '#15803D' : '#991B1B', fontWeight: 700 }}>
+                        {item.status === 'success' ? '✓ Thành công' : '✕ Thất bại'}
+                      </span>
+                    </td>
+                    <td style={{ padding: 12, fontSize: 13, fontWeight: 700 }}>
+                      {item.players_updated} kỳ thủ
+                    </td>
+                    <td style={{ padding: 12, fontSize: 13, color: '#475569' }}>
+                      {item.message}
+                    </td>
+                  </tr>
+                ))}
+                {(!state.syncLogs || state.syncLogs.length === 0) && (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 24, textAlign: 'center', color: '#64748B' }}>
+                      Chưa có lịch sử đồng bộ ghi nhận. Nhấn nút "Đồng bộ Chess-Results" ở danh sách giải đấu để thực hiện đồng bộ đầu tiên.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* 6. SYSTEM ACTIVITY LOGS */}
       <section className="admin-card-section">

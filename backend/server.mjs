@@ -763,11 +763,48 @@ async function migrateLocalImagesToPermanent(db2) {
     console.error("Error migrating local images:", e);
   }
 }
+async function ensureSyncLogsTableSchema(db2) {
+  try {
+    await db2.prepare(`
+      CREATE TABLE IF NOT EXISTS sync_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        tournament_id TEXT,
+        tournament_name TEXT,
+        url TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        status TEXT NOT NULL,
+        players_updated INTEGER DEFAULT 0 NOT NULL,
+        message TEXT NOT NULL
+      )
+    `).run();
+    await db2.prepare("CREATE INDEX IF NOT EXISTS idx_sync_logs_created ON sync_logs (created_at);").run();
+  } catch (e) {
+    console.error("Error ensuring sync_logs table schema:", e);
+  }
+}
 function createApi(db2, sourceParam = {}) {
   const source = {
     tournament: sourceParam.tournament ?? importTournament,
     player: sourceParam.player ?? importPlayer,
     detect: sourceParam.detect ?? detectCategories
+  };
+  const logSync = async (item) => {
+    try {
+      await ensureSyncLogsTableSchema(db2);
+      const id = crypto.randomUUID();
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      await db2.prepare(`
+        INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, item.tournament_id || null, item.tournament_name || null, item.url, now, item.status, item.players_updated, item.message.slice(0, 1e3)).run();
+      await db2.prepare(`
+        DELETE FROM sync_logs WHERE id NOT IN (
+          SELECT id FROM sync_logs ORDER BY created_at DESC LIMIT 200
+        )
+      `).run();
+    } catch (e) {
+      console.error("logSync error:", e);
+    }
   };
   const log = async (ok, m) => {
     await db2.batch([db2.prepare("INSERT INTO logs (id, created, ok, message) VALUES (?, ?, ?, ?)").bind(crypto.randomUUID(), (/* @__PURE__ */ new Date()).toISOString(), ok ? 1 : 0, m.slice(0, 500)), db2.prepare("DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY created DESC LIMIT 100)")]);
@@ -795,6 +832,7 @@ function createApi(db2, sourceParam = {}) {
   return async function handle(req, ip = "unknown") {
     let action = "";
     let authorized = false;
+    let b = {};
     try {
       const u = new URL(req.url);
       const path = u.pathname.replace(/\/+$/, "") || "/";
@@ -814,6 +852,7 @@ function createApi(db2, sourceParam = {}) {
           let bannersList = [];
           let prizesList = [];
           let slidesList = [];
+          let syncLogsList = [];
           try {
             bannersList = (await db2.prepare("SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC").all()).results;
           } catch {
@@ -838,7 +877,13 @@ function createApi(db2, sourceParam = {}) {
             }));
           } catch {
           }
-          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
+          try {
+            await ensureSyncLogsTableSchema(db2);
+            const r = await db2.prepare("SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50").all();
+            syncLogsList = r.results || [];
+          } catch {
+          }
+          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
         }
         if (path === "/api/slides" || path === "/api/slides/home" || path === "/api/home/slides") {
           await ensureSlidesTableSchema(db2);
@@ -1080,7 +1125,7 @@ function createApi(db2, sourceParam = {}) {
       if (Number(req.headers.get("content-length") || 0) > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413, {}, req);
       const raw = await req.text();
       if (raw.length > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413, {}, req);
-      let b = {};
+      b = {};
       if (raw && raw.trim()) {
         try {
           b = JSON.parse(raw);
@@ -1341,6 +1386,14 @@ function createApi(db2, sourceParam = {}) {
           }
         }
         await log(true, `\u0110\u1ED3ng b\u1ED9 V2 gi\u1EA3i \u0111\u1EA5u: ${mainTournamentTitle} \xB7 ${successCount}/${items.length} b\u1EA3ng \u0111\u1EA5u, t\u1ED5ng ${totalPlayers} k\u1EF3 th\u1EE7`);
+        await logSync({
+          tournament_id: masterId,
+          tournament_name: mainTournamentTitle,
+          url: items[0]?.url || `https://chess-results.com/tnr${masterId}.aspx?lan=1`,
+          status: "success",
+          players_updated: totalPlayers,
+          message: `\u0110\u1ED3ng b\u1ED9 V2 th\xE0nh c\xF4ng: ${mainTournamentTitle} (${successCount} b\u1EA3ng, ${totalPlayers} k\u1EF3 th\u1EE7)`
+        });
         return json({ message: `\u0110\xE3 \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng ${successCount} b\u1EA3ng \u0111\u1EA5u v\u1EDBi ${totalPlayers} k\u1EF3 th\u1EE7!` }, 200, {}, req);
       }
       if (action === "banner_create") {
@@ -1447,6 +1500,14 @@ function createApi(db2, sourceParam = {}) {
         if (t.updated !== old.updated || t.id !== old.id) statements.push(db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id));
         await db2.batch(statements);
         await log(true, `${action === "edit" ? "S\u1EEDa" : "\u0110\u1ED3ng b\u1ED9"} gi\u1EA3i: ${t.name}`);
+        await logSync({
+          tournament_id: t.id,
+          tournament_name: t.name,
+          url: t.source,
+          status: "success",
+          players_updated: t.players.length,
+          message: `\u0110\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results: ${t.name} (${t.players.length} k\u1EF3 th\u1EE7)`
+        });
         return json({ message: action === "edit" ? "\u0110\xE3 l\u01B0u ch\u1EC9nh s\u1EEDa." : "\u0110\xE3 c\u1EADp nh\u1EADt k\u1EBFt qu\u1EA3 m\u1EDBi nh\u1EA5t." }, 200, {}, req);
       }
       if (action === "tournament_update_info") {
@@ -1469,9 +1530,19 @@ function createApi(db2, sourceParam = {}) {
       return json({ error: "Thao t\xE1c kh\xF4ng \u0111\u01B0\u1EE3c h\u1ED7 tr\u1EE3." }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info"].includes(action)) try {
-        await log(false, m);
-      } catch {
+      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info"].includes(action)) {
+        try {
+          await log(false, m);
+          await logSync({
+            tournament_id: b.id || void 0,
+            tournament_name: b.name || void 0,
+            url: b.url || b.source || "",
+            status: "failed",
+            players_updated: 0,
+            message: `L\u1ED7i \u0111\u1ED3ng b\u1ED9 Chess-Results: ${m}`
+          });
+        } catch {
+        }
       }
       return json({ error: m }, 502, {}, req);
     }
