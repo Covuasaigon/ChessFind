@@ -474,6 +474,7 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     if (rounds.some(x => x.round === rd)) continue;
 
     const resFmt = score === 1 ? '1 - 0' : score === 0.5 ? '½ - ½' : score === 0 ? '0 - 1' : raw || '—';
+    const resultOutcome = score === 1 ? 'WIN' : score === 0.5 ? 'DRAW' : score === 0 ? 'LOSS' : (status === 'bye' ? 'WIN' : status.toUpperCase());
 
     let playerWhite: string;
     let playerBlack: string;
@@ -501,7 +502,8 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
       raw,
       playerWhite,
       playerBlack,
-      result: resFmt
+      result: resFmt,
+      resultOutcome
     });
   }
 
@@ -550,10 +552,11 @@ export async function importPlayer(t: Tournament, p: Player) {
     resultPlayer = parsePlayer(await fetchSource(url9), p, t);
   }
 
-  // Requirement 6: Debug log after import
-  console.log(`\nPlayer:\n${resultPlayer.name}\n\nMatches:`);
+  // Requirement 6: Debug output after import
+  console.log(`\nPlayer:\n${resultPlayer.name}\n`);
   resultPlayer.rounds.forEach(r => {
-    console.log(`Round ${r.round} - ${r.color || 'UNKNOWN'}`);
+    const outcome = r.score === 1 ? 'WIN' : r.score === 0.5 ? 'DRAW' : r.score === 0 ? 'LOSS' : (r.resultOutcome || 'UNKNOWN');
+    console.log(`Round ${r.round}\nBoard:${r.board ?? '—'}\nColor:${r.color || 'UNKNOWN'}\nOpponent:${r.opponent}\nResult:${outcome}\n`);
   });
 
   return resultPlayer;

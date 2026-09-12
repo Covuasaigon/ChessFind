@@ -11,6 +11,7 @@ export type Round = {
   playerWhite?: string;
   playerBlack?: string;
   result?: string;
+  resultOutcome?: 'WIN' | 'DRAW' | 'LOSS' | 'BYE' | 'PENDING' | string;
 };
 
 export type Player = {
