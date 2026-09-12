@@ -230,10 +230,10 @@ function parseRanking(html, source, group) {
     throw Error("Ch\u01B0a nh\u1EADn di\u1EC7n \u0111\u01B0\u1EE3c b\u1EA3ng k\u1EF3 th\u1EE7. Ngu\u1ED3n c\xF3 th\u1EC3 \u0111\u1ED5i c\u1EA5u tr\xFAc ho\u1EB7c ch\u01B0a c\xF4ng b\u1ED1 k\u1EBFt qu\u1EA3.");
   }
   const h = rows[hi];
-  const ni = findCol(h, ["name"]);
-  const ri = findCol(h, ["rk", "rank"]);
-  const si = findCol(h, ["sno", "no"]);
-  const pi = findCol(h, ["pts", "points"]);
+  const ni = findCol(h, ["name", "ten", "namekytthu", "hoten"]);
+  const ri = findCol(h, ["rk", "rank", "pos", "hang", "thuhang"]);
+  const si = findCol(h, ["sno", "stnr", "sbd", "no"]);
+  const pi = findCol(h, ["pts", "points", "diem"]);
   const rating = findCol(h, ["rtg", "rating", "rtgi", "elo"]);
   const fedCol = findCol(h, ["fed", "federation", "ld", "ldo", "land"]);
   const clubCol = findCol(h, ["clubcity", "clbtinh", "clb/tinh", "club/city", "club/country", "team/city", "club", "clb", "team", "city"]);
@@ -247,7 +247,7 @@ function parseRanking(html, source, group) {
     if (findCol(row, ["name"]) >= 0) continue;
     if (row.length < h.length || !row[ni]?.text) continue;
     const link = row[ni].raw.match(/href\s*=\s*["']([^"']+)["']/i)?.[1];
-    const snr = link ? new URL(textOf(link), source).searchParams.get("snr") : row[si]?.text;
+    const snr = link ? new URL(textOf(link), source).searchParams.get("snr") : si >= 0 ? row[si]?.text : null;
     if (!snr || !/^\d+$/.test(snr)) continue;
     if (seen.has(snr)) continue;
     seen.add(snr);
@@ -351,38 +351,23 @@ async function detectCategories(source) {
       if (!tStr || tStr.includes("Tournament-Database") || tStr.includes("Error")) return null;
       const isMatch = tStr.includes(baseName) || baseName.length > 6 && tStr.includes(baseName.slice(0, 15)) || catId === targetId;
       if (!isMatch) return null;
-      let groupName = tStr;
+      seenIds.add(catIdStr);
+      let catGroup = "To\xE0n gi\u1EA3i";
       if (tStr.includes(" - ")) {
         const parts = tStr.split(" - ");
-        if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(parts[0])) {
-          groupName = parts[0].trim();
-        } else {
-          groupName = parts[parts.length - 1].trim();
-        }
-      }
-      let pCount = 0;
-      if (hi >= 0) {
-        const h = pageRows[hi];
-        const ni = findCol(h, ["name"]);
-        const si = findCol(h, ["sno", "no"]);
-        const playerSeen = /* @__PURE__ */ new Set();
-        for (const row of pageRows.slice(hi + 1)) {
-          if (findCol(row, ["name"]) >= 0) continue;
-          if (row.length < h.length || !row[ni]?.text) continue;
-          const link = row[ni].raw.match(/href\s*=\s*["']([^"']+)["']/i)?.[1];
-          const snr = link ? new URL(textOf(link), u.href).searchParams.get("snr") : row[si]?.text;
-          if (snr && /^\d+$/.test(snr) && !playerSeen.has(snr)) {
-            playerSeen.add(snr);
-            pCount++;
+        for (const p of parts) {
+          if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(p) && !p.includes(baseName)) {
+            catGroup = p.trim();
+            break;
           }
         }
       }
-      seenIds.add(catIdStr);
+      const pCount = pageRows.slice(hi + 1).filter((r) => r.length >= 3 && /^\d+$/.test(r[0]?.text || r[1]?.text || "")).length;
       return {
         id: catIdStr,
-        group: groupName,
+        group: catGroup,
         name: tStr,
-        source: `https://chess-results.com/tnr${catId}.aspx?lan=1`,
+        source: u.href,
         playerCount: pCount,
         status: "Ch\u01B0a nh\u1EADp"
       };
@@ -390,16 +375,19 @@ async function detectCategories(source) {
       return null;
     }
   }
-  const range = 35;
-  const scanIds = [];
-  for (let offset = -range; offset <= range; offset++) {
-    scanIds.push(targetId + offset);
+  const promises = [];
+  for (let offset = -20; offset <= 20; offset++) {
+    promises.push(checkTnrId(targetId + offset));
   }
-  const CONCURRENCY = 8;
-  for (let i = 0; i < scanIds.length; i += CONCURRENCY) {
-    const chunk = scanIds.slice(i, i + CONCURRENCY);
-    const chunkResults = await Promise.all(chunk.map((id2) => checkTnrId(id2)));
-    for (const res of chunkResults) {
+  const results = await Promise.all(promises);
+  for (const res of results) {
+    if (res) categories.push(res);
+  }
+  const links = html.matchAll(/href\s*=\s*["']([^"']*tnr(\d+)\.aspx[^"']*)["']/gi);
+  for (const m of links) {
+    const cId = parseInt(m[2], 10);
+    if (!isNaN(cId) && !seenIds.has(String(cId))) {
+      const res = await checkTnrId(cId);
       if (res) categories.push(res);
     }
   }
@@ -428,7 +416,11 @@ function parsePlayer(html, p, t) {
     if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
     if (seenRounds.has(rd)) continue;
     const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
-    let raw = r.slice(res).map((c) => c.text).join(" ").trim();
+    let rawCellText = res >= 0 ? (r[res]?.text || "").trim() : "";
+    if (!rawCellText) {
+      const scoreCell = r.find((c) => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
+      rawCellText = scoreCell?.text.trim() || "";
+    }
     let colorStr = colorCol >= 0 ? (r[colorCol]?.text || "").trim() : "";
     if (!colorStr) {
       const colorCell = r.find((c) => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
@@ -438,7 +430,7 @@ function parsePlayer(html, p, t) {
     const isWhite = /^w|\(w\)/i.test(colorClean) || colorClean === "white" || colorClean === "tr\u1EAFng";
     const isBlack = /^b|\(b\)/i.test(colorClean) || colorClean === "black" || colorClean === "\u0111en";
     const color = isWhite ? "white" : isBlack ? "black" : null;
-    raw = raw.replace(/\b[wb]\b/ig, "").trim();
+    let raw = rawCellText.replace(/\b[wb]\b/ig, "").trim();
     const opponent = r[ni].text;
     const snr = r[ni].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
     let status = "unknown", score = null;
@@ -1469,9 +1461,22 @@ function createApi(db2, sourceParam = {}) {
         await log(true, `\u0110\xE3 x\xF3a gi\u1EA3i: ${old.name}`);
         return json({ message: "\u0110\xE3 x\xF3a gi\u1EA3i v\xE0 to\xE0n b\u1ED9 d\u1EEF li\u1EC7u k\u1EF3 th\u1EE7 c\u1EE7a gi\u1EA3i." }, 200, {}, req);
       }
-      if (action === "edit" || action === "sync") {
+      if (action === "edit" || action === "sync" || action === "force_sync") {
         let t;
-        if (action === "edit") {
+        if (action === "force_sync") {
+          try {
+            await db2.batch([
+              db2.prepare("DELETE FROM details WHERE tid = ? OR tid LIKE ?").bind(old.id, `${old.id}-%`),
+              db2.prepare("DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?").bind(old.id, `${old.id}-%`),
+              db2.prepare("DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?").bind(old.id, `${old.id}-%`),
+              db2.prepare("DELETE FROM players WHERE tournament_id = ? OR category_id = ?").bind(old.id, old.id)
+            ]);
+          } catch (e) {
+            console.error("Error purging old cache for force_sync:", e);
+          }
+          t = await source.tournament(old.source, old.group);
+          t.name = old.name;
+        } else if (action === "edit") {
           const name = String(b.name || "").trim(), group = String(b.group || "").trim(), url = String(b.url || "").trim();
           if (!name || name.length > 240 || group.length > 100) return json({ error: "T\xEAn gi\u1EA3i kh\xF4ng \u0111\u01B0\u1EE3c tr\u1ED1ng v\xE0 ph\u1EA3i d\u01B0\u1EDBi 240 k\xFD t\u1EF1." }, 400, {}, req);
           validateSource(url);
@@ -1497,18 +1502,18 @@ function createApi(db2, sourceParam = {}) {
         } else {
           statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
         }
-        if (t.updated !== old.updated || t.id !== old.id) statements.push(db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id));
+        if (t.updated !== old.updated || t.id !== old.id || action === "force_sync") statements.push(db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id));
         await db2.batch(statements);
-        await log(true, `${action === "edit" ? "S\u1EEDa" : "\u0110\u1ED3ng b\u1ED9"} gi\u1EA3i: ${t.name}`);
+        await log(true, `${action === "edit" ? "S\u1EEDa" : action === "force_sync" ? "\xC9p \u0111\u1ED3ng b\u1ED9" : "\u0110\u1ED3ng b\u1ED9"} gi\u1EA3i: ${t.name}`);
         await logSync({
           tournament_id: t.id,
           tournament_name: t.name,
           url: t.source,
           status: "success",
           players_updated: t.players.length,
-          message: `\u0110\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results: ${t.name} (${t.players.length} k\u1EF3 th\u1EE7)`
+          message: `\u0110\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results (${action}): ${t.name} (${t.players.length} k\u1EF3 th\u1EE7)`
         });
-        return json({ message: action === "edit" ? "\u0110\xE3 l\u01B0u ch\u1EC9nh s\u1EEDa." : "\u0110\xE3 c\u1EADp nh\u1EADt k\u1EBFt qu\u1EA3 m\u1EDBi nh\u1EA5t." }, 200, {}, req);
+        return json({ message: action === "edit" ? "\u0110\xE3 l\u01B0u ch\u1EC9nh s\u1EEDa." : action === "force_sync" ? "\u0110\xE3 \xE9p \u0111\u1ED3ng b\u1ED9 l\u1EA1i v\xE0 l\xE0m s\u1EA1ch cache d\u1EEF li\u1EC7u th\xE0nh c\xF4ng." : "\u0110\xE3 c\u1EADp nh\u1EADt k\u1EBFt qu\u1EA3 m\u1EDBi nh\u1EA5t." }, 200, {}, req);
       }
       if (action === "tournament_update_info") {
         const id = String(b.id || "");

@@ -1084,9 +1084,23 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         return json({ message: 'Đã xóa giải và toàn bộ dữ liệu kỳ thủ của giải.' }, 200, {}, req);
       }
 
-      if (action === 'edit' || action === 'sync') {
+      if (action === 'edit' || action === 'sync' || action === 'force_sync') {
         let t: Tournament;
-        if (action === 'edit') {
+        if (action === 'force_sync') {
+          // Purge all old cached details, matches, rankings, players for this tournament
+          try {
+            await db.batch([
+              db.prepare('DELETE FROM details WHERE tid = ? OR tid LIKE ?').bind(old.id, `${old.id}-%`),
+              db.prepare('DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?').bind(old.id, `${old.id}-%`),
+              db.prepare('DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?').bind(old.id, `${old.id}-%`),
+              db.prepare('DELETE FROM players WHERE tournament_id = ? OR category_id = ?').bind(old.id, old.id),
+            ]);
+          } catch (e) {
+            console.error('Error purging old cache for force_sync:', e);
+          }
+          t = await source.tournament(old.source, old.group);
+          t.name = old.name;
+        } else if (action === 'edit') {
           const name = String(b.name || '').trim(), group = String(b.group || '').trim(), url = String(b.url || '').trim();
           if (!name || name.length > 240 || group.length > 100) return json({ error: 'Tên giải không được trống và phải dưới 240 ký tự.' }, 400, {}, req);
           validateSource(url);
@@ -1110,18 +1124,18 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         } else {
           statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, t.id));
         }
-        if (t.updated !== old.updated || t.id !== old.id) statements.push(db.prepare('DELETE FROM details WHERE tid = ?').bind(old.id));
+        if (t.updated !== old.updated || t.id !== old.id || action === 'force_sync') statements.push(db.prepare('DELETE FROM details WHERE tid = ?').bind(old.id));
         await db.batch(statements);
-        await log(true, `${action === 'edit' ? 'Sửa' : 'Đồng bộ'} giải: ${t.name}`);
+        await log(true, `${action === 'edit' ? 'Sửa' : action === 'force_sync' ? 'Ép đồng bộ' : 'Đồng bộ'} giải: ${t.name}`);
         await logSync({
           tournament_id: t.id,
           tournament_name: t.name,
           url: t.source,
           status: 'success',
           players_updated: t.players.length,
-          message: `Đồng bộ thành công từ Chess-Results: ${t.name} (${t.players.length} kỳ thủ)`
+          message: `Đồng bộ thành công từ Chess-Results (${action}): ${t.name} (${t.players.length} kỳ thủ)`
         });
-        return json({ message: action === 'edit' ? 'Đã lưu chỉnh sửa.' : 'Đã cập nhật kết quả mới nhất.' }, 200, {}, req);
+        return json({ message: action === 'edit' ? 'Đã lưu chỉnh sửa.' : action === 'force_sync' ? 'Đã ép đồng bộ lại và làm sạch cache dữ liệu thành công.' : 'Đã cập nhật kết quả mới nhất.' }, 200, {}, req);
       }
 
       if (action === 'tournament_update_info') {

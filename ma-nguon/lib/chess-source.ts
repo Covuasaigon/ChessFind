@@ -101,10 +101,10 @@ export function parseRanking(html: string, source: string, group: string): Tourn
   }
 
   const h = rows[hi];
-  const ni = findCol(h, ['name']);
-  const ri = findCol(h, ['rk', 'rank']);
-  const si = findCol(h, ['sno', 'no']);
-  const pi = findCol(h, ['pts', 'points']);
+  const ni = findCol(h, ['name', 'ten', 'namekytthu', 'hoten']);
+  const ri = findCol(h, ['rk', 'rank', 'pos', 'hang', 'thuhang']);
+  const si = findCol(h, ['sno', 'stnr', 'sbd', 'no']);
+  const pi = findCol(h, ['pts', 'points', 'diem']);
   const rating = findCol(h, ['rtg', 'rating', 'rtgi', 'elo']);
   const fedCol = findCol(h, ['fed', 'federation', 'ld', 'ldo', 'land']);
   const clubCol = findCol(h, ['clubcity', 'clbtinh', 'clb/tinh', 'club/city', 'club/country', 'team/city', 'club', 'clb', 'team', 'city']);
@@ -120,7 +120,7 @@ export function parseRanking(html: string, source: string, group: string): Tourn
     if (findCol(row, ['name']) >= 0) continue;
     if (row.length < h.length || !row[ni]?.text) continue;
     const link = row[ni].raw.match(/href\s*=\s*["']([^"']+)["']/i)?.[1];
-    const snr = link ? new URL(textOf(link), source).searchParams.get('snr') : row[si]?.text;
+    const snr = link ? new URL(textOf(link), source).searchParams.get('snr') : (si >= 0 ? row[si]?.text : null);
     if (!snr || !/^\d+$/.test(snr)) continue;
     if (seen.has(snr)) continue;
     seen.add(snr);
@@ -260,42 +260,26 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
       const isMatch = tStr.includes(baseName) || (baseName.length > 6 && tStr.includes(baseName.slice(0, 15))) || catId === targetId;
       if (!isMatch) return null;
 
-      // Extract group name
-      let groupName = tStr;
+      seenIds.add(catIdStr);
+
+      let catGroup = 'Toàn giải';
       if (tStr.includes(' - ')) {
         const parts = tStr.split(' - ');
-        if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(parts[0])) {
-          groupName = parts[0].trim();
-        } else {
-          groupName = parts[parts.length - 1].trim();
-        }
-      }
-
-      // Count players
-      let pCount = 0;
-      if (hi >= 0) {
-        const h = pageRows[hi];
-        const ni = findCol(h, ['name']);
-        const si = findCol(h, ['sno', 'no']);
-        const playerSeen = new Set<string>();
-        for (const row of pageRows.slice(hi + 1)) {
-          if (findCol(row, ['name']) >= 0) continue;
-          if (row.length < h.length || !row[ni]?.text) continue;
-          const link = row[ni].raw.match(/href\s*=\s*["']([^"']+)["']/i)?.[1];
-          const snr = link ? new URL(textOf(link), u.href).searchParams.get('snr') : row[si]?.text;
-          if (snr && /^\d+$/.test(snr) && !playerSeen.has(snr)) {
-            playerSeen.add(snr);
-            pCount++;
+        for (const p of parts) {
+          if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(p) && !p.includes(baseName)) {
+            catGroup = p.trim();
+            break;
           }
         }
       }
 
-      seenIds.add(catIdStr);
+      const pCount = pageRows.slice(hi + 1).filter(r => r.length >= 3 && /^\d+$/.test(r[0]?.text || r[1]?.text || '')).length;
+
       return {
         id: catIdStr,
-        group: groupName,
+        group: catGroup,
         name: tStr,
-        source: `https://chess-results.com/tnr${catId}.aspx?lan=1`,
+        source: u.href,
         playerCount: pCount,
         status: 'Chưa nhập'
       };
@@ -304,18 +288,23 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
     }
   }
 
-  // Scan range surrounding targetId
-  const range = 35;
-  const scanIds: number[] = [];
-  for (let offset = -range; offset <= range; offset++) {
-    scanIds.push(targetId + offset);
+  // Scan range around targetId
+  const promises: Promise<CategoryDetectResult | null>[] = [];
+  for (let offset = -20; offset <= 20; offset++) {
+    promises.push(checkTnrId(targetId + offset));
   }
 
-  const CONCURRENCY = 8;
-  for (let i = 0; i < scanIds.length; i += CONCURRENCY) {
-    const chunk = scanIds.slice(i, i + CONCURRENCY);
-    const chunkResults = await Promise.all(chunk.map(id => checkTnrId(id)));
-    for (const res of chunkResults) {
+  const results = await Promise.all(promises);
+  for (const res of results) {
+    if (res) categories.push(res);
+  }
+
+  // Also check links on target HTML page
+  const links = html.matchAll(/href\s*=\s*["']([^"']*tnr(\d+)\.aspx[^"']*)["']/gi);
+  for (const m of links) {
+    const cId = parseInt(m[2], 10);
+    if (!isNaN(cId) && !seenIds.has(String(cId))) {
+      const res = await checkTnrId(cId);
       if (res) categories.push(res);
     }
   }
@@ -354,7 +343,12 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
 
     const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
 
-    let raw = r.slice(res).map(c => c.text).join(' ').trim();
+    let rawCellText = res >= 0 ? (r[res]?.text || '').trim() : '';
+    if (!rawCellText) {
+      const scoreCell = r.find(c => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
+      rawCellText = scoreCell?.text.trim() || '';
+    }
+
     let colorStr = colorCol >= 0 ? (r[colorCol]?.text || '').trim() : '';
     if (!colorStr) {
       const colorCell = r.find(c => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
@@ -364,7 +358,8 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     const isWhite = /^w|\(w\)/i.test(colorClean) || colorClean === 'white' || colorClean === 'trắng';
     const isBlack = /^b|\(b\)/i.test(colorClean) || colorClean === 'black' || colorClean === 'đen';
     const color = isWhite ? 'white' : isBlack ? 'black' : null;
-    raw = raw.replace(/\b[wb]\b/ig, '').trim();
+
+    let raw = rawCellText.replace(/\b[wb]\b/ig, '').trim();
 
     const opponent = r[ni].text;
     const snr = r[ni].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];

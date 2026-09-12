@@ -25,7 +25,8 @@ import {
   BarChart3,
   Sliders,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  RotateCcw
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogFooter } from '@/components/ui/alert-dialog';
@@ -1034,6 +1035,9 @@ export default function Admin({ onChanged }: AdminProps) {
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                         <button className="outline" style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8 }} disabled={!!busy} onClick={() => action('sync', { id: t.id })} title="Đồng bộ lại">
                           <RefreshCw size={14} className={busy === 'sync' ? 'spin' : ''} />
+                        </button>
+                        <button className="outline" style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8, color: '#DC2626', borderColor: '#FCA5A5' }} disabled={!!busy} onClick={() => action('force_sync', { id: t.id })} title="Ép đồng bộ lại (Xóa cache dữ liệu cũ)">
+                          <RotateCcw size={14} className={busy === 'force_sync' ? 'spin' : ''} />
                         </button>
                         <button className="outline" style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8, color: '#B88E1F', borderColor: '#D4AF37' }} disabled={!!busy} onClick={() => { setError(''); setInfoModal({ ...t }); }} title="Quản lý Thông tin & Giải thưởng">
                           <Sparkles size={14} />
