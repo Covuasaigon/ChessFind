@@ -304,14 +304,14 @@ export default function ChessApp() {
                     <span className="dash-stat-sub">Thắng {s.wins} · Hòa {s.draws} · Thua {s.losses}</span>
                   </div>
                   <div className="dash-stat">
-                    <span className="dash-stat-label">⚪ Cầm trắng</span>
+                    <span className="dash-stat-label">⚪ Trắng</span>
                     <span className="dash-stat-val">{(s.whiteGames ?? s.white) ?? 0} ván</span>
-                    <span className="dash-stat-sub">Thắng {s.whiteWins} · Hòa {s.whiteDraws} · Thua {s.whiteLosses}</span>
+                    <span className="dash-stat-sub">Thắng: {s.whiteWins} · Hòa: {s.whiteDraws} · Thua: {s.whiteLosses}</span>
                   </div>
                   <div className="dash-stat">
-                    <span className="dash-stat-label">⚫ Cầm đen</span>
+                    <span className="dash-stat-label">⚫ Đen</span>
                     <span className="dash-stat-val">{(s.blackGames ?? s.black) ?? 0} ván</span>
-                    <span className="dash-stat-sub">Thắng {s.blackWins} · Hòa {s.blackDraws} · Thua {s.blackLosses}</span>
+                    <span className="dash-stat-sub">Thắng: {s.blackWins} · Hòa: {s.blackDraws} · Thua: {s.blackLosses}</span>
                   </div>
                   <div className="dash-stat">
                     <span className="dash-stat-label">📈 Tỷ lệ thắng (Win rate)</span>
@@ -593,7 +593,7 @@ function Statistics({ p }: { p: Player }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="white-piece" style={{ fontSize: 14, fontWeight: 700 }}>⚪ Cầm trắng</span>
+              <span className="white-piece" style={{ fontSize: 14, fontWeight: 700 }}>⚪ Trắng</span>
               <strong style={{ fontSize: 16, fontWeight: 800, color: '#145DA0' }}>{p.detailsLoaded ? `${s.whiteGames ?? s.white} ván` : '—'}</strong>
             </div>
             <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: '#475569', paddingTop: 6, borderTop: '1px dashed #E2E8F0' }}>
@@ -605,7 +605,7 @@ function Statistics({ p }: { p: Player }) {
 
           <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="black-piece" style={{ fontSize: 14, fontWeight: 700 }}>⚫ Cầm đen</span>
+              <span className="black-piece" style={{ fontSize: 14, fontWeight: 700 }}>⚫ Đen</span>
               <strong style={{ fontSize: 16, fontWeight: 800, color: '#0F172A' }}>{p.detailsLoaded ? `${s.blackGames ?? s.black} ván` : '—'}</strong>
             </div>
             <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 600, color: '#475569', paddingTop: 6, borderTop: '1px dashed #E2E8F0' }}>

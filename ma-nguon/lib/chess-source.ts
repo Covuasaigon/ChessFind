@@ -528,19 +528,31 @@ export async function importPlayer(t: Tournament, p: Player) {
   url.searchParams.delete('snr');
   url.searchParams.delete('rd');
 
+  let resultPlayer: Player | null = null;
+
   try {
     const html79 = await fetchSource(url);
     const res79 = parsePlayer(html79, p, t);
     if (res79.rounds && res79.rounds.length > 0) {
-      return res79;
+      resultPlayer = res79;
     }
   } catch {}
 
-  // Fallback to art=9 (individual player page)
-  const url9 = new URL(t.source);
-  url9.searchParams.set('lan', '1');
-  url9.searchParams.set('art', '9');
-  url9.searchParams.set('snr', p.snr);
-  url9.searchParams.delete('rd');
-  return parsePlayer(await fetchSource(url9), p, t);
+  if (!resultPlayer) {
+    // Fallback to art=9 (individual player page)
+    const url9 = new URL(t.source);
+    url9.searchParams.set('lan', '1');
+    url9.searchParams.set('art', '9');
+    url9.searchParams.set('snr', p.snr);
+    url9.searchParams.delete('rd');
+    resultPlayer = parsePlayer(await fetchSource(url9), p, t);
+  }
+
+  // Requirement 6: Debug log after import
+  console.log(`\nPlayer:\n${resultPlayer.name}\n\nMatches:`);
+  resultPlayer.rounds.forEach(r => {
+    console.log(`Round ${r.round} - ${r.color || 'UNKNOWN'}`);
+  });
+
+  return resultPlayer;
 }
