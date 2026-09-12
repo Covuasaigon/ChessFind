@@ -2230,7 +2230,85 @@ label .input-wrap {
   .search-box input { width: calc(100% - 40px); font-size: 15px; }
   .search-box .primary { width: 100%; margin-top: 4px; padding: 12px; }
   .tournament-grid { grid-template-columns: 1fr; }
-  .player-grid { grid-template-columns: 1fr; }
+  .player-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .player-card {
+    height: auto;
+    min-height: 90px;
+    padding: 12px;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .player-card .avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .player-info {
+    flex: 1;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .player-info strong {
+    font-size: 16px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .player-info > span:not(.tournament-link) {
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .player-info small {
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .player-info .tournament-link {
+    display: none;
+  }
+
+  .card-score {
+    flex-shrink: 0;
+    text-align: right;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .card-score b {
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .card-score small {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .card-score svg {
+    display: none;
+  }
   .filter-bar { flex-direction: column; align-items: stretch; gap: 12px; }
   .filter-bar .picker { max-width: 100% !important; min-width: 100% !important; width: 100% !important; }
   
