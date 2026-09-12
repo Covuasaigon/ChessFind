@@ -787,7 +787,15 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
 
 function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onOpen: (p: Player) => void }) {
   const [q, setQ] = useState('');
-  const ps = (t.players || []).filter(p => matchPlayer(p, t.group, q));
+  const ps = (t.players || [])
+    .filter(p => matchPlayer(p, t.group, q))
+    .sort((a, b) => {
+      if (a.rank != null && b.rank != null) return a.rank - b.rank;
+      if ((b.points ?? 0) !== (a.points ?? 0)) return (b.points ?? 0) - (a.points ?? 0);
+      if ((b.buchholz ?? 0) !== (a.buchholz ?? 0)) return (b.buchholz ?? 0) - (a.buchholz ?? 0);
+      if ((b.sonnebornBerger ?? 0) !== (a.sonnebornBerger ?? 0)) return (b.sonnebornBerger ?? 0) - (a.sonnebornBerger ?? 0);
+      return (b.performance ?? 0) - (a.performance ?? 0);
+    });
 
   return <section className="panel ranking">
     <div className="section-heading">

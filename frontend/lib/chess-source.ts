@@ -342,22 +342,27 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
   const boCol = findCol(h, ['bo', 'board', 'ban']);
   const rating = findCol(h, ['rtg', 'rating']);
   const res = findCol(h, ['res', 'result']);
-  const colorCol = findCol(h, ['wb', 'w/b', 'color', 'mau', 'mauquan']);
+  const colorCol = findCol(h, ['wb', 'w/b', 'color', 'mau', 'mauquan', 'ks', 'k/s']);
 
   const rounds: Round[] = [];
+  const seenRounds = new Set<number>();
+
   for (const r of rows.slice(hi + 1)) {
     const rd = num(r[ri]?.text || '');
     if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
+    if (seenRounds.has(rd)) continue;
+
     const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
 
     let raw = r.slice(res).map(c => c.text).join(' ').trim();
-    let colorStr = colorCol >= 0 ? r[colorCol]?.text || '' : '';
+    let colorStr = colorCol >= 0 ? (r[colorCol]?.text || '').trim() : '';
     if (!colorStr) {
-      const colorCell = r.find(c => /^[wb]$/i.test(c.text) || /\b(w|b)\b/i.test(c.text));
+      const colorCell = r.find(c => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
       colorStr = colorCell?.text || '';
     }
-    const isWhite = /w|white|trắng/i.test(colorStr);
-    const isBlack = /b|black|đen/i.test(colorStr);
+    const colorClean = colorStr.trim().toLowerCase();
+    const isWhite = /^w|\(w\)/i.test(colorClean) || colorClean === 'white' || colorClean === 'trắng';
+    const isBlack = /^b|\(b\)/i.test(colorClean) || colorClean === 'black' || colorClean === 'đen';
     const color = isWhite ? 'white' : isBlack ? 'black' : null;
     raw = raw.replace(/\b[wb]\b/ig, '').trim();
 
@@ -376,6 +381,8 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
       if (score !== null && [0, .5, 1].includes(score)) status = 'played';
       else score = null;
     }
+
+    seenRounds.add(rd);
 
     if (rounds.some(x => x.round === rd)) continue;
 

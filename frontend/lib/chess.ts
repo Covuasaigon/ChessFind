@@ -143,11 +143,14 @@ export function formatClubName(club: string | null | undefined): string {
 
 export function stats(p: Player) {
   const rounds = p.rounds || [];
-  const allCompleted = rounds.filter(x => x.status !== 'pending' && x.status !== 'unknown');
-  const r = rounds.filter(x => x.status === 'played' && x.score !== null);
-  const wins = rounds.filter(x => x.score === 1).length;
-  const draws = rounds.filter(x => x.score === 0.5).length;
-  const losses = rounds.filter(x => x.score === 0).length;
+  const uniqueRoundsMap = new Map<number, Round>();
+  for (const r of rounds) {
+    if (r.round != null && !uniqueRoundsMap.has(r.round)) {
+      uniqueRoundsMap.set(r.round, r);
+    }
+  }
+  const uniqueRounds = Array.from(uniqueRoundsMap.values());
+  const playedRounds = uniqueRounds.filter(r => r.status === 'played' && r.score !== null && (r.color === 'white' || r.color === 'black'));
 
   let white = 0;
   let whiteWins = 0;
@@ -159,22 +162,13 @@ export function stats(p: Player) {
   let blackDraws = 0;
   let blackLosses = 0;
 
-  for (const rd of rounds) {
-    let isW = rd.color === 'white';
-    let isB = rd.color === 'black';
-
-    if (!isW && !isB && p.name) {
-      const pNameNorm = p.name.trim().toLowerCase();
-      if (rd.playerWhite && rd.playerWhite.trim().toLowerCase() === pNameNorm) isW = true;
-      else if (rd.playerBlack && rd.playerBlack.trim().toLowerCase() === pNameNorm) isB = true;
-    }
-
-    if (isW) {
+  for (const rd of playedRounds) {
+    if (rd.color === 'white') {
       white++;
       if (rd.score === 1) whiteWins++;
       else if (rd.score === 0.5) whiteDraws++;
       else if (rd.score === 0) whiteLosses++;
-    } else if (isB) {
+    } else if (rd.color === 'black') {
       black++;
       if (rd.score === 1) blackWins++;
       else if (rd.score === 0.5) blackDraws++;
@@ -182,7 +176,10 @@ export function stats(p: Player) {
     }
   }
 
-  const totalPlayed = allCompleted.length > 0 ? allCompleted.length : r.length;
+  const wins = whiteWins + blackWins;
+  const draws = whiteDraws + blackDraws;
+  const losses = whiteLosses + blackLosses;
+  const totalPlayed = white + black;
 
   return {
     played: totalPlayed,
@@ -197,8 +194,8 @@ export function stats(p: Player) {
     blackWins,
     blackDraws,
     blackLosses,
-    unknown: rounds.filter(x => x.color === null && x.status === 'played').length,
-    special: rounds.filter(x => ['bye', 'forfeit'].includes(x.status)).length,
+    unknown: uniqueRounds.filter(x => x.color === null && x.status === 'played').length,
+    special: uniqueRounds.filter(x => ['bye', 'forfeit'].includes(x.status)).length,
     winRate: totalPlayed > 0 ? Math.round((wins / totalPlayed) * 100) : null
   };
 }

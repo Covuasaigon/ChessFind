@@ -48,11 +48,14 @@ function formatClubName(club) {
 }
 function stats(p) {
   const rounds = p.rounds || [];
-  const allCompleted = rounds.filter((x) => x.status !== "pending" && x.status !== "unknown");
-  const r = rounds.filter((x) => x.status === "played" && x.score !== null);
-  const wins = rounds.filter((x) => x.score === 1).length;
-  const draws = rounds.filter((x) => x.score === 0.5).length;
-  const losses = rounds.filter((x) => x.score === 0).length;
+  const uniqueRoundsMap = /* @__PURE__ */ new Map();
+  for (const r of rounds) {
+    if (r.round != null && !uniqueRoundsMap.has(r.round)) {
+      uniqueRoundsMap.set(r.round, r);
+    }
+  }
+  const uniqueRounds = Array.from(uniqueRoundsMap.values());
+  const playedRounds = uniqueRounds.filter((r) => r.status === "played" && r.score !== null && (r.color === "white" || r.color === "black"));
   let white = 0;
   let whiteWins = 0;
   let whiteDraws = 0;
@@ -61,27 +64,23 @@ function stats(p) {
   let blackWins = 0;
   let blackDraws = 0;
   let blackLosses = 0;
-  for (const rd of rounds) {
-    let isW = rd.color === "white";
-    let isB = rd.color === "black";
-    if (!isW && !isB && p.name) {
-      const pNameNorm = p.name.trim().toLowerCase();
-      if (rd.playerWhite && rd.playerWhite.trim().toLowerCase() === pNameNorm) isW = true;
-      else if (rd.playerBlack && rd.playerBlack.trim().toLowerCase() === pNameNorm) isB = true;
-    }
-    if (isW) {
+  for (const rd of playedRounds) {
+    if (rd.color === "white") {
       white++;
       if (rd.score === 1) whiteWins++;
       else if (rd.score === 0.5) whiteDraws++;
       else if (rd.score === 0) whiteLosses++;
-    } else if (isB) {
+    } else if (rd.color === "black") {
       black++;
       if (rd.score === 1) blackWins++;
       else if (rd.score === 0.5) blackDraws++;
       else if (rd.score === 0) blackLosses++;
     }
   }
-  const totalPlayed = allCompleted.length > 0 ? allCompleted.length : r.length;
+  const wins = whiteWins + blackWins;
+  const draws = whiteDraws + blackDraws;
+  const losses = whiteLosses + blackLosses;
+  const totalPlayed = white + black;
   return {
     played: totalPlayed,
     wins,
@@ -95,8 +94,8 @@ function stats(p) {
     blackWins,
     blackDraws,
     blackLosses,
-    unknown: rounds.filter((x) => x.color === null && x.status === "played").length,
-    special: rounds.filter((x) => ["bye", "forfeit"].includes(x.status)).length,
+    unknown: uniqueRounds.filter((x) => x.color === null && x.status === "played").length,
+    special: uniqueRounds.filter((x) => ["bye", "forfeit"].includes(x.status)).length,
     winRate: totalPlayed > 0 ? Math.round(wins / totalPlayed * 100) : null
   };
 }
@@ -421,20 +420,23 @@ function parsePlayer(html, p, t) {
   const boCol = findCol(h, ["bo", "board", "ban"]);
   const rating = findCol(h, ["rtg", "rating"]);
   const res = findCol(h, ["res", "result"]);
-  const colorCol = findCol(h, ["wb", "w/b", "color", "mau", "mauquan"]);
+  const colorCol = findCol(h, ["wb", "w/b", "color", "mau", "mauquan", "ks", "k/s"]);
   const rounds = [];
+  const seenRounds = /* @__PURE__ */ new Set();
   for (const r of rows.slice(hi + 1)) {
     const rd = num(r[ri]?.text || "");
     if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
+    if (seenRounds.has(rd)) continue;
     const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
     let raw = r.slice(res).map((c) => c.text).join(" ").trim();
-    let colorStr = colorCol >= 0 ? r[colorCol]?.text || "" : "";
+    let colorStr = colorCol >= 0 ? (r[colorCol]?.text || "").trim() : "";
     if (!colorStr) {
-      const colorCell = r.find((c) => /^[wb]$/i.test(c.text) || /\b(w|b)\b/i.test(c.text));
+      const colorCell = r.find((c) => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
       colorStr = colorCell?.text || "";
     }
-    const isWhite = /w|white|trắng/i.test(colorStr);
-    const isBlack = /b|black|đen/i.test(colorStr);
+    const colorClean = colorStr.trim().toLowerCase();
+    const isWhite = /^w|\(w\)/i.test(colorClean) || colorClean === "white" || colorClean === "tr\u1EAFng";
+    const isBlack = /^b|\(b\)/i.test(colorClean) || colorClean === "black" || colorClean === "\u0111en";
     const color = isWhite ? "white" : isBlack ? "black" : null;
     raw = raw.replace(/\b[wb]\b/ig, "").trim();
     const opponent = r[ni].text;
@@ -453,6 +455,7 @@ function parsePlayer(html, p, t) {
       if (score !== null && [0, 0.5, 1].includes(score)) status = "played";
       else score = null;
     }
+    seenRounds.add(rd);
     if (rounds.some((x) => x.round === rd)) continue;
     const resFmt = score === 1 ? "1 - 0" : score === 0.5 ? "\xBD - \xBD" : score === 0 ? "0 - 1" : raw || "\u2014";
     let playerWhite;
