@@ -20,6 +20,25 @@ function Avatar({ p, large = false }: { p: Player; large?: boolean }) {
   return <span className={'avatar ' + (large ? 'large' : '')} style={{ background: ['#e4edff', '#e5f3f0', '#f8e9df'][Number(p.snr) % 3] }}>{p.name.split(' ').slice(-2).map(x => x[0]).join('')}</span>
 }
 
+function PlayerCard({ t, p, onClick }: { t: Tournament; p: Player; onClick: () => void }) {
+  return (
+    <button className="player-card" onClick={onClick}>
+      <Avatar p={p} />
+      <span className="player-info">
+        <strong>{p.name}</strong>
+        <span>Bảng: {p.ageGroup || t.group || 'Chưa rõ'} · SBD {p.snr}</span>
+        <small>{p.club || 'Chưa có thông tin đơn vị'}</small>
+        <span className="tournament-link">{t.name}{t.demo ? ' · Minh họa' : ''}</span>
+      </span>
+      <span className="card-score">
+        <b>{fmt(p.points)}<small style={{ fontSize: 11, fontWeight: 500 }}> điểm</small></b>
+        <small>Hạng {fmt(p.rank)}</small>
+        <ChevronRight size={19} />
+      </span>
+    </button>
+  );
+}
+
 export default function ChessApp() {
   const [view, setView] = useState<View>('home'), [tourneys, setTourneys] = useState<Tournament[]>([]), [banners, setBanners] = useState<BannerItem[]>([]), [loading, setLoading] = useState(true), [loadError, setLoadError] = useState(''), [limit, setLimit] = useState(100), [q, setQ] = useState(''), [filter, setFilter] = useState('all'), [selected, setSelected] = useState<{ t: string; p: string } | null>(null), [saved, setSaved] = useState<string[]>([]), [tab, setTab] = useState('overview'), [detailLoading, setDetailLoading] = useState(false), [detailError, setDetailError] = useState(''), [install, setInstall] = useState<any>(null);
   const all = filter === 'demo' || selected?.t === 'demo' ? [...tourneys, demo] : tourneys, current = selected ? all.find(t => t.id === selected.t) : null, player = current?.players.find(p => p.id === selected?.p);
@@ -167,20 +186,7 @@ export default function ChessApp() {
 
         <div className="player-grid">
           {results.slice(0, limit).map(({ t, p }) => (
-            <button className="player-card" key={t.id + p.id} onClick={() => open(t, p)}>
-              <Avatar p={p} />
-              <span className="player-info">
-                <strong>{p.name}</strong>
-                <span>Bảng: {p.ageGroup || t.group || 'Chưa rõ'} · SBD {p.snr}</span>
-                <small>{p.club || 'Chưa có thông tin đơn vị'}</small>
-                <span className="tournament-link">{t.name}{t.demo ? ' · Minh họa' : ''}</span>
-              </span>
-              <span className="card-score">
-                <b>{fmt(p.points)}<small style={{ fontSize: 11, fontWeight: 500 }}> điểm</small></b>
-                <small>Hạng {fmt(p.rank)}</small>
-                <ChevronRight size={19} />
-              </span>
-            </button>
+            <PlayerCard key={t.id + p.id} t={t} p={p} onClick={() => open(t, p)} />
           ))}
         </div>
 
