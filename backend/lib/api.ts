@@ -1,8 +1,9 @@
 import { formatClubName, stats, getNextMatch, getMedal, type Tournament, type Player } from './chess';
 import { importTournament, importPlayer, validateSource, detectCategories, type CategoryDetectResult } from './chess-source';
 import { DEFAULT_ADMIN } from './default-admin';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 
 export interface Database { prepare(sql: string): Statement; batch(statements: Statement[]): Promise<any[]> }
 export interface Statement { bind(...args: any[]): Statement; first<T = any>(): Promise<T | null>; all<T = any>(): Promise<{ results: T[] }>; run(): Promise<{ meta: { changes: number } }> }
@@ -76,6 +77,7 @@ async function ensureSlidesTableSchema(db: Database) {
       await db.prepare('CREATE INDEX IF NOT EXISTS idx_tournament_slides_tournament ON tournament_slides (tournament_id);').run();
       await db.prepare('PRAGMA foreign_keys=ON;').run();
     }
+    await migrateLocalImagesToPermanent(db);
   } catch (e) {
     console.error('Error healing tournament_slides schema:', e);
   }
@@ -137,6 +139,146 @@ async function uploadToSupabaseStorage(fileBuffer: Uint8Array, filename: string,
     console.error('Supabase upload error:', err);
   }
   return null;
+}
+
+async function uploadToCloudinary(fileBuffer: Uint8Array, filename: string, mimeType: string): Promise<string | null> {
+  try {
+    let cloudName = process.env.CLOUDINARY_CLOUD_NAME || '';
+    let apiKey = process.env.CLOUDINARY_API_KEY || '';
+    let apiSecret = process.env.CLOUDINARY_API_SECRET || '';
+    let uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || '';
+
+    const cloudinaryUrl = process.env.CLOUDINARY_URL;
+    if (cloudinaryUrl) {
+      try {
+        const u = new URL(cloudinaryUrl);
+        if (u.protocol === 'cloudinary:') {
+          apiKey = decodeURIComponent(u.username);
+          apiSecret = decodeURIComponent(u.password);
+          cloudName = u.hostname;
+        }
+      } catch {}
+    }
+
+    if (!cloudName) {
+      return null;
+    }
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+    const formData = new FormData();
+    const blob = new Blob([Buffer.from(fileBuffer)], { type: mimeType });
+    formData.append('file', blob, filename);
+    formData.append('folder', 'covuasaigon');
+
+    if (apiKey && apiSecret) {
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      formData.append('api_key', apiKey);
+      formData.append('timestamp', timestamp);
+
+      const toSign = `folder=covuasaigon&timestamp=${timestamp}${apiSecret}`;
+      const signature = createHash('sha1').update(toSign).digest('hex');
+      formData.append('signature', signature);
+    } else if (uploadPreset) {
+      formData.append('upload_preset', uploadPreset);
+    } else {
+      return null;
+    }
+
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('Cloudinary upload error:', res.status, errText);
+      return null;
+    }
+
+    const data = await res.json() as any;
+    if (data && data.secure_url) {
+      return data.secure_url;
+    }
+  } catch (err) {
+    console.error('Cloudinary upload exception:', err);
+  }
+  return null;
+}
+
+async function migrateLocalImagesToPermanent(db: Database) {
+  try {
+    const slides = await db.prepare("SELECT id, image_url FROM tournament_slides WHERE image_url LIKE '/uploads/%' OR image_url LIKE 'http%://%/uploads/%'").all<{ id: string; image_url: string }>();
+    if (slides && slides.results && slides.results.length > 0) {
+      for (const row of slides.results) {
+        const localPath = row.image_url.replace(/^https?:\/\/[^\/]+/, '');
+        const relPath = localPath.replace(/^\//, '');
+        const possibleFiles = [
+          resolve(process.cwd(), relPath),
+          resolve(process.cwd(), 'public', relPath),
+          resolve(process.cwd(), 'web', relPath),
+          resolve(process.cwd(), '../public', relPath),
+          resolve(process.cwd(), '../web', relPath)
+        ];
+        let fileBuffer: Uint8Array | null = null;
+        for (const f of possibleFiles) {
+          try {
+            if (existsSync(f)) {
+              fileBuffer = readFileSync(f);
+              break;
+            }
+          } catch {}
+        }
+        if (fileBuffer && fileBuffer.length > 0) {
+          const mimeType = relPath.endsWith('.png') ? 'image/png' : relPath.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+          const filename = `migrated_${row.id}.${relPath.split('.').pop() || 'png'}`;
+          let newUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = `data:${mimeType};base64,${Buffer.from(fileBuffer).toString('base64')}`;
+
+          if (newUrl) {
+            await db.prepare('UPDATE tournament_slides SET image_url = ? WHERE id = ?').bind(newUrl, row.id).run();
+          }
+        }
+      }
+    }
+
+    const banners = await db.prepare("SELECT id, image_url FROM home_banners WHERE image_url LIKE '/uploads/%' OR image_url LIKE 'http%://%/uploads/%'").all<{ id: string; image_url: string }>();
+    if (banners && banners.results && banners.results.length > 0) {
+      for (const row of banners.results) {
+        const localPath = row.image_url.replace(/^https?:\/\/[^\/]+/, '');
+        const relPath = localPath.replace(/^\//, '');
+        const possibleFiles = [
+          resolve(process.cwd(), relPath),
+          resolve(process.cwd(), 'public', relPath),
+          resolve(process.cwd(), 'web', relPath),
+          resolve(process.cwd(), '../public', relPath),
+          resolve(process.cwd(), '../web', relPath)
+        ];
+        let fileBuffer: Uint8Array | null = null;
+        for (const f of possibleFiles) {
+          try {
+            if (existsSync(f)) {
+              fileBuffer = readFileSync(f);
+              break;
+            }
+          } catch {}
+        }
+        if (fileBuffer && fileBuffer.length > 0) {
+          const mimeType = relPath.endsWith('.png') ? 'image/png' : relPath.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+          const filename = `migrated_banner_${row.id}.${relPath.split('.').pop() || 'png'}`;
+          let newUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = `data:${mimeType};base64,${Buffer.from(fileBuffer).toString('base64')}`;
+
+          if (newUrl) {
+            await db.prepare('UPDATE home_banners SET image_url = ? WHERE id = ?').bind(newUrl, row.id).run();
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error migrating local images:', e);
+  }
 }
 
 export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
@@ -468,28 +610,16 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         const mimeType = isPng ? 'image/png' : isJpg ? 'image/jpeg' : 'image/webp';
         const filename = `${path.includes('slides') ? 'slide_' : ''}${crypto.randomUUID()}.${safeExt}`;
 
-        let publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+        let publicUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+
+        if (!publicUrl) {
+          publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+        }
 
         if (!publicUrl) {
           const base64Str = Buffer.from(fileBuffer).toString('base64');
           publicUrl = `data:${mimeType};base64,${base64Str}`;
         }
-
-        try {
-          const targetDirs = [
-            resolve(process.cwd(), '../web/uploads/slides'),
-            resolve(process.cwd(), 'web/uploads/slides'),
-            resolve(process.cwd(), 'public/uploads/slides'),
-            resolve(process.cwd(), '../public/uploads/slides'),
-            resolve(process.cwd(), 'release/web/uploads/slides')
-          ];
-          for (const dir of targetDirs) {
-            try {
-              mkdirSync(dir, { recursive: true });
-              writeFileSync(resolve(dir, filename), fileBuffer);
-            } catch {}
-          }
-        } catch {}
 
         await log(true, `Upload image thành công: ${publicUrl.startsWith('data:') ? 'Embedded Data URL' : publicUrl}`);
         return json({ url: publicUrl, message: 'Upload ảnh thành công!' }, 200, {}, req);
