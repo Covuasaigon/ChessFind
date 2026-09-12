@@ -35,6 +35,7 @@ export type Player = {
   ties: Record<string, number | null>;
   rounds: Round[];
   detailsLoaded: boolean;
+  warning?: string | null;
   games?: number;
   whiteGames?: number;
   blackGames?: number;
@@ -156,7 +157,7 @@ export function stats(p: Player) {
     }
   }
   const uniqueRounds = Array.from(uniqueRoundsMap.values());
-  const playedRounds = uniqueRounds.filter(r => r.status === 'played' && r.score !== null && r.color != null && (r.color.toUpperCase() === 'WHITE' || r.color.toUpperCase() === 'BLACK'));
+  const playedRounds = uniqueRounds.filter(r => r.status === 'played' && r.score !== null);
 
   let white = 0;
   let whiteWins = 0;
@@ -168,7 +169,15 @@ export function stats(p: Player) {
   let blackDraws = 0;
   let blackLosses = 0;
 
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+
   for (const rd of playedRounds) {
+    if (rd.score === 1) wins++;
+    else if (rd.score === 0.5) draws++;
+    else if (rd.score === 0) losses++;
+
     const c = rd.color?.toUpperCase();
     if (c === 'WHITE') {
       white++;
@@ -183,10 +192,7 @@ export function stats(p: Player) {
     }
   }
 
-  const wins = whiteWins + blackWins;
-  const draws = whiteDraws + blackDraws;
-  const losses = whiteLosses + blackLosses;
-  const totalPlayed = white + black;
+  const totalPlayed = playedRounds.length;
 
   return {
     played: totalPlayed,

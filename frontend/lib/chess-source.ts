@@ -416,14 +416,53 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
   if (!rounds.length) throw Error('Nguồn chưa có chi tiết các ván đấu.');
   rounds.sort((a, b) => a.round - b.round);
 
-  return { ...p, rounds, detailsLoaded: true };
+  let warning: string | undefined = undefined;
+  if (p.points !== null && p.points !== undefined) {
+    const sumPlayed = rounds.reduce((acc, r) => acc + (r.score ?? 0), 0);
+    if (Math.abs(sumPlayed - p.points) > 0.01) {
+      warning = `[SYNC WARNING] Player "${p.name}" (SNR ${p.snr}) official ranking score (${p.points}) differs from calculated match score (${sumPlayed})`;
+      console.warn(warning);
+    }
+  }
+
+  return { ...p, rounds, warning, detailsLoaded: true };
 }
 
 export async function importPlayer(t: Tournament, p: Player) {
   const { url } = validateSource(t.source);
+
+  // Requirement 1: Use Chess-Results art=79 pairing data as single source for color information
   url.searchParams.set('lan', '1');
-  url.searchParams.set('art', '9');
-  url.searchParams.set('snr', p.snr);
+  url.searchParams.set('art', '79');
+  url.searchParams.set('zeilen', '99999');
+  url.searchParams.delete('snr');
   url.searchParams.delete('rd');
-  return parsePlayer(await fetchSource(url), p, t);
+
+  let resultPlayer: Player | null = null;
+
+  try {
+    const html79 = await fetchSource(url);
+    const res79 = parsePlayer(html79, p, t);
+    if (res79.rounds && res79.rounds.length > 0) {
+      resultPlayer = res79;
+    }
+  } catch {}
+
+  if (!resultPlayer) {
+    // Fallback to art=9 (individual player page)
+    const url9 = new URL(t.source);
+    url9.searchParams.set('lan', '1');
+    url9.searchParams.set('art', '9');
+    url9.searchParams.set('snr', p.snr);
+    url9.searchParams.delete('rd');
+    resultPlayer = parsePlayer(await fetchSource(url9), p, t);
+  }
+
+  // Requirement 6: Debug log after import
+  console.log(`\nPlayer:\n${resultPlayer.name}\n\nMatches:`);
+  resultPlayer.rounds.forEach(r => {
+    console.log(`Round ${r.round} - ${r.color || 'UNKNOWN'}`);
+  });
+
+  return resultPlayer;
 }

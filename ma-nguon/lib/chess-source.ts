@@ -508,14 +508,16 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
   if (!rounds.length) throw Error('Nguồn chưa có chi tiết các ván đấu.');
   rounds.sort((a, b) => a.round - b.round);
 
+  let warning: string | undefined = undefined;
   if (p.points !== null && p.points !== undefined) {
     const sumPlayed = rounds.reduce((acc, r) => acc + (r.score ?? 0), 0);
     if (Math.abs(sumPlayed - p.points) > 0.01) {
-      throw Error('Điểm tổng số không khớp với chi tiết các ván đấu.');
+      warning = `[SYNC WARNING] Player "${p.name}" (SNR ${p.snr}) official ranking score (${p.points}) differs from calculated match score (${sumPlayed})`;
+      console.warn(warning);
     }
   }
 
-  return { ...p, rounds, detailsLoaded: true };
+  return { ...p, rounds, warning, detailsLoaded: true };
 }
 
 export async function importPlayer(t: Tournament, p: Player) {

@@ -11,7 +11,7 @@ const t=parseRanking(html,'https://chess-results.com/tnr123.aspx?art=1','U8');as
 const details='<table><tr><th>Rd.</th><th>Name</th><th>Rtg</th><th colspan="2">Res.</th></tr><tr><td>1</td><td><a href="?art=9&amp;snr=7">An B</a></td><td>1300</td><td>b</td><td>1</td></tr><tr><td>2</td><td>An C</td><td>1200</td><td>w</td><td>½</td></tr></table>';
 const p=parsePlayer(details,t.players[0],t);assert.equal(p.rounds[0].color?.toUpperCase(),'BLACK');assert.equal(p.rounds[0].score,1);assert.equal(p.rounds[0].opponentId,'123-7');assert.equal(stats(p).wins,1);assert.equal(stats(p).played,2);
 const special=details.replace('<td>b</td><td>1</td>','<td>b</td><td>+</td>');assert.equal(stats(parsePlayer(special,t.players[0],t)).played,1);
-assert.throws(()=>parsePlayer(details,{...t.players[0],points:9},t));assert.throws(()=>parseRanking('<h1>Access denied</h1>','https://chess-results.com/tnr123.aspx','U8'));
+const pWarn=parsePlayer(details,{...t.players[0],points:9},t);assert.ok(pWarn.warning);assert.throws(()=>parseRanking('<h1>Access denied</h1>','https://chess-results.com/tnr123.aspx','U8'));
 
 // Requirement 7 test case: player with 3 matches (White, White, Black) -> White games = 2, Black games = 1
 const testPlayerReq7 = {
