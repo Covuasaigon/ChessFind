@@ -544,7 +544,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
           let playerObj: Player;
 
-          const r = await db.prepare('SELECT payload FROM details WHERE tid = ? AND pid = ? AND revision = ?').bind(id, pid, t.updated).first<{ payload: string }>();
+          const r = await db.prepare('SELECT payload FROM details WHERE tid = ? AND pid = ? ORDER BY revision DESC LIMIT 1').bind(id, pid).first<{ payload: string }>();
           if (r) {
             playerObj = JSON.parse(r.payload);
           } else {
@@ -570,6 +570,18 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             } catch { }
 
             await db.prepare('INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload').bind(id, pid, t.updated, JSON.stringify(playerObj)).run();
+          }
+
+          if (playerObj.rounds) {
+            playerObj.rounds = playerObj.rounds.map(r => {
+              let color = r.color;
+              if (!color) {
+                if (r.playerWhite && r.playerWhite.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = 'white';
+                else if (r.playerBlack && r.playerBlack.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = 'black';
+                else color = r.round % 2 === 1 ? 'white' : 'black';
+              }
+              return { ...r, color };
+            });
           }
 
           const s = stats(playerObj);

@@ -1253,7 +1253,7 @@ function createApi(db2, sourceParam = {}) {
           const totalPlayers = t.players ? t.players.length : 0;
           const club = p.club || formatClubName(p.federation || "");
           let playerObj;
-          const r = await db2.prepare("SELECT payload FROM details WHERE tid = ? AND pid = ? AND revision = ?").bind(id, pid, t.updated).first();
+          const r = await db2.prepare("SELECT payload FROM details WHERE tid = ? AND pid = ? ORDER BY revision DESC LIMIT 1").bind(id, pid).first();
           if (r) {
             playerObj = JSON.parse(r.payload);
           } else {
@@ -1277,6 +1277,17 @@ function createApi(db2, sourceParam = {}) {
             } catch {
             }
             await db2.prepare("INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload").bind(id, pid, t.updated, JSON.stringify(playerObj)).run();
+          }
+          if (playerObj.rounds) {
+            playerObj.rounds = playerObj.rounds.map((r2) => {
+              let color = r2.color;
+              if (!color) {
+                if (r2.playerWhite && r2.playerWhite.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = "white";
+                else if (r2.playerBlack && r2.playerBlack.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = "black";
+                else color = r2.round % 2 === 1 ? "white" : "black";
+              }
+              return { ...r2, color };
+            });
           }
           const s2 = stats(playerObj);
           const nextMatch = getNextMatch(playerObj);
