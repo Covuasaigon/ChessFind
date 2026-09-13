@@ -364,7 +364,47 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
     let action = ''; let authorized = false; let b: any = {}; try {
       const u = new URL(req.url); const path = u.pathname.replace(/\/+$/, '') || '/';
       if (req.method === 'GET') {
-        if (path === '/api/tournaments') return json({ tournaments: await list() }, 200, {}, req);
+        if (path === '/api/tournaments' || path.startsWith('/api/tournaments/')) {
+          const tid = u.searchParams.get('id') || u.searchParams.get('t') || path.replace(/^\/api\/tournaments\/?/, '');
+          if (tid && tid !== 'tournaments') {
+            const t = await get(tid, true);
+            if (!t) return json({ error: 'Giải đấu không tồn tại.' }, 404, {}, req);
+
+            let matchesList: any[] = [];
+            try {
+              const r = await db.prepare('SELECT * FROM matches WHERE category_id = ? OR player_id LIKE ? ORDER BY round ASC, board ASC').bind(tid, `${tid}-%`).all<any>();
+              matchesList = r.results || [];
+            } catch {}
+
+            const playersWithStats = (t.players || []).map(p => {
+              const s = stats(p);
+              return {
+                ...p,
+                games: s.played,
+                totalGames: s.played,
+                whiteGames: s.whiteGames,
+                blackGames: s.blackGames,
+                wins: s.wins,
+                draws: s.draws,
+                losses: s.losses,
+                whiteWins: s.whiteWins,
+                whiteDraws: s.whiteDraws,
+                whiteLosses: s.whiteLosses,
+                blackWins: s.blackWins,
+                blackDraws: s.blackDraws,
+                blackLosses: s.blackLosses
+              };
+            });
+
+            return json({
+              tournament: { ...t, players: playersWithStats },
+              players: playersWithStats,
+              rounds: t.rounds || (matchesList.length ? Math.max(...matchesList.map(m => m.round || 0)) : null),
+              matches: matchesList
+            }, 200, {}, req);
+          }
+          return json({ tournaments: await list() }, 200, {}, req);
+        }
         if (path === '/api/banners') {
           try {
             const r = await db.prepare('SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC').all();
@@ -542,6 +582,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             totalPlayers,
             club,
             games: s.played,
+            totalGames: s.played,
             whiteGames: s.whiteGames,
             blackGames: s.blackGames,
             whiteWins: s.whiteWins,
@@ -563,6 +604,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             totalPlayers,
             club,
             games: s.played,
+            totalGames: s.played,
             whiteGames: s.whiteGames,
             blackGames: s.blackGames,
             whiteWins: s.whiteWins,

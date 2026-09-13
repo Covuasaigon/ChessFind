@@ -55,7 +55,7 @@ function stats(p) {
     }
   }
   const uniqueRounds = Array.from(uniqueRoundsMap.values());
-  const playedRounds = uniqueRounds.filter((r) => r.status === "played" && r.score !== null && (r.color === "white" || r.color === "black"));
+  const playedRounds = uniqueRounds.filter((r) => r.status === "played" && r.score !== null && r.color != null && (r.color.toUpperCase() === "WHITE" || r.color.toUpperCase() === "BLACK"));
   let white = 0;
   let whiteWins = 0;
   let whiteDraws = 0;
@@ -65,12 +65,13 @@ function stats(p) {
   let blackDraws = 0;
   let blackLosses = 0;
   for (const rd of playedRounds) {
-    if (rd.color === "white") {
+    const c = rd.color?.toUpperCase();
+    if (c === "WHITE") {
       white++;
       if (rd.score === 1) whiteWins++;
       else if (rd.score === 0.5) whiteDraws++;
       else if (rd.score === 0) whiteLosses++;
-    } else if (rd.color === "black") {
+    } else if (c === "BLACK") {
       black++;
       if (rd.score === 1) blackWins++;
       else if (rd.score === 0.5) blackDraws++;
@@ -87,10 +88,12 @@ function stats(p) {
     draws,
     losses,
     white,
+    whiteGames: white,
     whiteWins,
     whiteDraws,
     whiteLosses,
     black,
+    blackGames: black,
     blackWins,
     blackDraws,
     blackLosses,
@@ -300,6 +303,165 @@ function parseRanking(html, source, group) {
     published: false
   };
 }
+async function populateRoundsForTournament(tour) {
+  try {
+    const { url } = validateSource(tour.source);
+    const playerMap = /* @__PURE__ */ new Map();
+    const snrToPlayerMap = /* @__PURE__ */ new Map();
+    for (const p of tour.players) {
+      playerMap.set(p.id, { ...p, rounds: p.rounds ? [...p.rounds] : [] });
+      snrToPlayerMap.set(p.snr, playerMap.get(p.id));
+    }
+    let maxRound = tour.rounds || 0;
+    const maxRdsToFetch = tour.rounds && tour.rounds > 0 ? tour.rounds : 11;
+    const roundFetchPromises = [];
+    for (let rd = 1; rd <= maxRdsToFetch; rd++) {
+      const rdUrl = new URL(url.href);
+      rdUrl.searchParams.set("lan", "1");
+      rdUrl.searchParams.set("art", "2");
+      rdUrl.searchParams.set("rd", String(rd));
+      roundFetchPromises.push(
+        fetchSource(rdUrl).then((html) => ({ rd, html })).catch(() => ({ rd, html: null }))
+      );
+    }
+    const roundResults = await Promise.all(roundFetchPromises);
+    for (const { rd, html } of roundResults) {
+      if (!html) continue;
+      const rows = rowsOf(html);
+      const hi = rows.findIndex((r) => findCol(r, ["white"]) >= 0 && findCol(r, ["black"]) >= 0);
+      if (hi < 0) continue;
+      const h = rows[hi];
+      const boCol = findCol(h, ["bo", "board", "ban"]);
+      const wNameCol = findCol(h, ["white"]);
+      const bNameCol = findCol(h, ["black"]);
+      const resCol = findCol(h, ["result", "res"]);
+      const noCols = h.map((c, i) => ({ i, text: key(c.text) })).filter((c) => c.text === "no" || c.text === "stnr" || c.text === "sno");
+      const wNoCol = noCols[0]?.i ?? wNameCol - 1;
+      const bNoCol = noCols[1]?.i ?? bNameCol + 1;
+      let foundPairs = false;
+      for (const r of rows.slice(hi + 1)) {
+        if (r.length < h.length) continue;
+        const nameW = r[wNameCol]?.text;
+        const nameB = r[bNameCol]?.text;
+        const snrW = r[wNoCol]?.text || r[wNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        const snrB = r[bNoCol]?.text || r[bNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        if (!nameW || !nameB || !snrW || !snrB) continue;
+        const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
+        const rawRes = resCol >= 0 ? r[resCol]?.text.trim() : "";
+        let scoreW = 0;
+        let scoreB = 0;
+        let resFmt = rawRes;
+        if (/1\s*[-:]\s*0/i.test(rawRes)) {
+          scoreW = 1;
+          scoreB = 0;
+          resFmt = "1 - 0";
+        } else if (/0\s*[-:]\s*1/i.test(rawRes)) {
+          scoreW = 0;
+          scoreB = 1;
+          resFmt = "0 - 1";
+        } else if (/½|0\.5|1\/2/i.test(rawRes)) {
+          scoreW = 0.5;
+          scoreB = 0.5;
+          resFmt = "\xBD - \xBD";
+        } else {
+          const scoreParsed = num(rawRes);
+          if (scoreParsed !== null) {
+            scoreW = scoreParsed;
+            scoreB = scoreParsed;
+          }
+        }
+        const pW = snrToPlayerMap.get(snrW);
+        const pB = snrToPlayerMap.get(snrB);
+        if (pW) {
+          if (!pW.rounds.some((x) => x.round === rd)) {
+            pW.rounds.push({
+              round: rd,
+              board: bo,
+              opponentId: pB ? pB.id : `${tour.id}-${snrB}`,
+              opponent: nameB,
+              rating: null,
+              color: "white",
+              status: "played",
+              score: scoreW,
+              playerWhite: nameW,
+              playerBlack: nameB,
+              result: resFmt
+            });
+          }
+        }
+        if (pB) {
+          if (!pB.rounds.some((x) => x.round === rd)) {
+            pB.rounds.push({
+              round: rd,
+              board: bo,
+              opponentId: pW ? pW.id : `${tour.id}-${snrW}`,
+              opponent: nameW,
+              rating: null,
+              color: "black",
+              status: "played",
+              score: scoreB,
+              playerWhite: nameW,
+              playerBlack: nameB,
+              result: resFmt
+            });
+          }
+        }
+        foundPairs = true;
+      }
+      if (foundPairs && rd > maxRound) maxRound = rd;
+    }
+    if (maxRound === 0) {
+      try {
+        const url79 = new URL(url.href);
+        url79.searchParams.set("lan", "1");
+        url79.searchParams.set("art", "79");
+        url79.searchParams.set("zeilen", "99999");
+        const html79 = await fetchSource(url79);
+        for (const p of snrToPlayerMap.values()) {
+          try {
+            const playerWithRounds = parsePlayer(html79, p, tour);
+            if (playerWithRounds.rounds && playerWithRounds.rounds.length > 0) {
+              p.rounds = playerWithRounds.rounds;
+              for (const r of p.rounds) {
+                if (r.round > maxRound) maxRound = r.round;
+              }
+            }
+          } catch {
+          }
+        }
+      } catch {
+      }
+    }
+    tour.players = tour.players.map((p) => {
+      const updatedP = snrToPlayerMap.get(p.snr) || p;
+      if (updatedP.rounds && updatedP.rounds.length > 0) {
+        updatedP.rounds.sort((a, b) => a.round - b.round);
+      }
+      const s = stats(updatedP);
+      return {
+        ...updatedP,
+        detailsLoaded: updatedP.rounds && updatedP.rounds.length > 0,
+        games: s.played,
+        totalGames: s.played,
+        whiteGames: s.whiteGames,
+        blackGames: s.blackGames,
+        wins: s.wins,
+        draws: s.draws,
+        losses: s.losses,
+        whiteWins: s.whiteWins,
+        whiteDraws: s.whiteDraws,
+        whiteLosses: s.whiteLosses,
+        blackWins: s.blackWins,
+        blackDraws: s.blackDraws,
+        blackLosses: s.blackLosses
+      };
+    });
+    if (maxRound > 0) tour.rounds = maxRound;
+  } catch (err) {
+    console.warn("Auto-populating rounds notice:", err);
+  }
+  return tour;
+}
 async function importTournament(source, group) {
   const { url } = validateSource(source);
   url.searchParams.set("lan", "1");
@@ -314,7 +476,8 @@ async function importTournament(source, group) {
     url.searchParams.set("art", "0");
     html = await fetchSource(url);
   }
-  return parseRanking(html, url.href, group);
+  const tour = parseRanking(html, url.href, group);
+  return await populateRoundsForTournament(tour);
 }
 async function detectCategories(source) {
   const { url, id } = validateSource(source);
@@ -479,15 +642,49 @@ function parsePlayer(html, p, t) {
   }
   if (!rounds.length) throw Error("Ngu\u1ED3n ch\u01B0a c\xF3 chi ti\u1EBFt c\xE1c v\xE1n \u0111\u1EA5u.");
   rounds.sort((a, b) => a.round - b.round);
-  return { ...p, rounds, detailsLoaded: true };
+  let warning = void 0;
+  if (p.points !== null && p.points !== void 0) {
+    const sumPlayed = rounds.reduce((acc, r) => acc + (r.score ?? 0), 0);
+    if (Math.abs(sumPlayed - p.points) > 0.01) {
+      warning = `[SYNC WARNING] Player "${p.name}" (SNR ${p.snr}) official ranking score (${p.points}) differs from calculated match score (${sumPlayed})`;
+      console.warn(warning);
+    }
+  }
+  return { ...p, rounds, warning, detailsLoaded: true };
 }
 async function importPlayer(t, p) {
   const { url } = validateSource(t.source);
   url.searchParams.set("lan", "1");
-  url.searchParams.set("art", "9");
-  url.searchParams.set("snr", p.snr);
+  url.searchParams.set("art", "79");
+  url.searchParams.set("zeilen", "99999");
+  url.searchParams.delete("snr");
   url.searchParams.delete("rd");
-  return parsePlayer(await fetchSource(url), p, t);
+  let resultPlayer = null;
+  try {
+    const html79 = await fetchSource(url);
+    const res79 = parsePlayer(html79, p, t);
+    if (res79.rounds && res79.rounds.length > 0) {
+      resultPlayer = res79;
+    }
+  } catch {
+  }
+  if (!resultPlayer) {
+    const url9 = new URL(t.source);
+    url9.searchParams.set("lan", "1");
+    url9.searchParams.set("art", "9");
+    url9.searchParams.set("snr", p.snr);
+    url9.searchParams.delete("rd");
+    resultPlayer = parsePlayer(await fetchSource(url9), p, t);
+  }
+  console.log(`
+Player:
+${resultPlayer.name}
+
+Matches:`);
+  resultPlayer.rounds.forEach((r) => {
+    console.log(`Round ${r.round} - ${r.color || "UNKNOWN"}`);
+  });
+  return resultPlayer;
 }
 
 // lib/default-admin.ts
@@ -829,7 +1026,45 @@ function createApi(db2, sourceParam = {}) {
       const u = new URL(req.url);
       const path = u.pathname.replace(/\/+$/, "") || "/";
       if (req.method === "GET") {
-        if (path === "/api/tournaments") return json({ tournaments: await list() }, 200, {}, req);
+        if (path === "/api/tournaments" || path.startsWith("/api/tournaments/")) {
+          const tid = u.searchParams.get("id") || u.searchParams.get("t") || path.replace(/^\/api\/tournaments\/?/, "");
+          if (tid && tid !== "tournaments") {
+            const t = await get(tid, true);
+            if (!t) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404, {}, req);
+            let matchesList = [];
+            try {
+              const r = await db2.prepare("SELECT * FROM matches WHERE category_id = ? OR player_id LIKE ? ORDER BY round ASC, board ASC").bind(tid, `${tid}-%`).all();
+              matchesList = r.results || [];
+            } catch {
+            }
+            const playersWithStats = (t.players || []).map((p) => {
+              const s2 = stats(p);
+              return {
+                ...p,
+                games: s2.played,
+                totalGames: s2.played,
+                whiteGames: s2.whiteGames,
+                blackGames: s2.blackGames,
+                wins: s2.wins,
+                draws: s2.draws,
+                losses: s2.losses,
+                whiteWins: s2.whiteWins,
+                whiteDraws: s2.whiteDraws,
+                whiteLosses: s2.whiteLosses,
+                blackWins: s2.blackWins,
+                blackDraws: s2.blackDraws,
+                blackLosses: s2.blackLosses
+              };
+            });
+            return json({
+              tournament: { ...t, players: playersWithStats },
+              players: playersWithStats,
+              rounds: t.rounds || (matchesList.length ? Math.max(...matchesList.map((m) => m.round || 0)) : null),
+              matches: matchesList
+            }, 200, {}, req);
+          }
+          return json({ tournaments: await list() }, 200, {}, req);
+        }
         if (path === "/api/banners") {
           try {
             const r = await db2.prepare("SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC").all();
@@ -983,7 +1218,8 @@ function createApi(db2, sourceParam = {}) {
                     player_black = excluded.player_black,
                     board = excluded.board,
                     result = excluded.result,
-                    score = excluded.score
+                    score = excluded.score,
+                    color = excluded.color
                 `).bind(matchId, p.categoryId || t.id, playerObj.id, rd.playerWhite || null, rd.playerBlack || null, rd.round, rd.board || null, rd.result || null, rd.score, rd.color || null, rd.opponentId || null, rd.opponent || null).run();
               }
             } catch {
@@ -999,8 +1235,15 @@ function createApi(db2, sourceParam = {}) {
             totalPlayers,
             club,
             games: s2.played,
-            whiteGames: s2.white,
-            blackGames: s2.black,
+            totalGames: s2.played,
+            whiteGames: s2.whiteGames,
+            blackGames: s2.blackGames,
+            whiteWins: s2.whiteWins,
+            whiteDraws: s2.whiteDraws,
+            whiteLosses: s2.whiteLosses,
+            blackWins: s2.blackWins,
+            blackDraws: s2.blackDraws,
+            blackLosses: s2.blackLosses,
             wins: s2.wins,
             draws: s2.draws,
             losses: s2.losses,
@@ -1013,8 +1256,15 @@ function createApi(db2, sourceParam = {}) {
             totalPlayers,
             club,
             games: s2.played,
-            whiteGames: s2.white,
-            blackGames: s2.black,
+            totalGames: s2.played,
+            whiteGames: s2.whiteGames,
+            blackGames: s2.blackGames,
+            whiteWins: s2.whiteWins,
+            whiteDraws: s2.whiteDraws,
+            whiteLosses: s2.whiteLosses,
+            blackWins: s2.blackWins,
+            blackDraws: s2.blackDraws,
+            blackLosses: s2.blackLosses,
             wins: s2.wins,
             draws: s2.draws,
             losses: s2.losses,
@@ -1555,26 +1805,132 @@ function createApi(db2, sourceParam = {}) {
 }
 
 // database.ts
+import pg from "pg";
+import dns from "node:dns";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync as readFileSync2, readdirSync, mkdirSync as mkdirSync2, existsSync as existsSync2 } from "node:fs";
 import { dirname, resolve as resolve2 } from "node:path";
-function openDatabase(file, migrations) {
-  mkdirSync2(dirname(file), { recursive: true });
-  const sql = new DatabaseSync(file);
+try {
+  dns.setDefaultResultOrder("ipv4first");
+} catch {
+}
+function openDatabase(fileOrUrl, migrations) {
+  const isPostgres = fileOrUrl.startsWith("postgres://") || fileOrUrl.startsWith("postgresql://");
+  if (isPostgres) {
+    let convertSqlForPg = function(sql2) {
+      let paramIndex = 1;
+      let converted = sql2.replace(/\?/g, () => `$${paramIndex++}`);
+      if (/INSERT\s+OR\s+IGNORE\s+INTO/i.test(converted)) {
+        converted = converted.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, "INSERT INTO");
+        if (!/ON\s+CONFLICT/i.test(converted)) {
+          converted += " ON CONFLICT DO NOTHING";
+        }
+      }
+      return converted;
+    };
+    const useSsl = process.env.NODE_ENV === "production" || fileOrUrl.includes("render.com") || fileOrUrl.includes("supabase") || fileOrUrl.includes("neon") || fileOrUrl.includes("railway") || process.env.PGSSLMODE === "require" || process.env.PGSSLMODE === "no-verify";
+    const pool = new pg.Pool({
+      connectionString: fileOrUrl,
+      ssl: useSsl ? { rejectUnauthorized: false } : false
+    });
+    const initPgSchema = async () => {
+      try {
+        let ddl = "";
+        const possibleSchemaPaths = [
+          resolve2(migrations, "pg_schema.sql"),
+          resolve2(process.cwd(), "backend", "migrations", "pg_schema.sql"),
+          resolve2(process.cwd(), "migrations", "pg_schema.sql")
+        ];
+        for (const p of possibleSchemaPaths) {
+          if (existsSync2(p)) {
+            ddl = readFileSync2(p, "utf8");
+            break;
+          }
+        }
+        if (ddl) {
+          await pool.query(ddl);
+        }
+      } catch (err) {
+        console.error("Error initializing PostgreSQL schema:", err);
+      }
+    };
+    initPgSchema();
+    class PgQuery {
+      text;
+      args = [];
+      constructor(text) {
+        this.text = text;
+      }
+      bind(...args) {
+        const q = new PgQuery(this.text);
+        q.args = args;
+        return q;
+      }
+      async executePg(client) {
+        const target = client || pool;
+        const pgSql = convertSqlForPg(this.text);
+        const res = await target.query(pgSql, this.args);
+        return res;
+      }
+      async first() {
+        const res = await this.executePg();
+        return res.rows[0] || null;
+      }
+      async all() {
+        const res = await this.executePg();
+        return { results: res.rows };
+      }
+      async run() {
+        const res = await this.executePg();
+        return { meta: { changes: res.rowCount || 0 } };
+      }
+      execute() {
+        return this.run();
+      }
+    }
+    return {
+      prepare: (s) => new PgQuery(s),
+      async batch(ss) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const results = [];
+          for (const s of ss) {
+            const pgQ = s;
+            results.push(await pgQ.executePg(client));
+          }
+          await client.query("COMMIT");
+          return results;
+        } catch (e) {
+          await client.query("ROLLBACK");
+          throw e;
+        } finally {
+          client.release();
+        }
+      },
+      close: () => {
+        pool.end();
+      }
+    };
+  }
+  mkdirSync2(dirname(fileOrUrl), { recursive: true });
+  const sql = new DatabaseSync(fileOrUrl);
   sql.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
   sql.exec("CREATE TABLE IF NOT EXISTS sgc_migrations (name TEXT PRIMARY KEY, applied TEXT NOT NULL)");
   if (existsSync2(migrations)) {
-    for (const name of readdirSync(migrations).filter((n) => n.endsWith(".sql")).sort()) if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
-      sql.exec("BEGIN IMMEDIATE");
-      try {
-        if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
-          sql.exec(readFileSync2(resolve2(migrations, name), "utf8"));
-          sql.prepare("INSERT OR IGNORE INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
+    for (const name of readdirSync(migrations).filter((n) => n.endsWith(".sql")).sort()) {
+      if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
+        sql.exec("BEGIN IMMEDIATE");
+        try {
+          if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
+            sql.exec(readFileSync2(resolve2(migrations, name), "utf8"));
+            sql.prepare("INSERT OR IGNORE INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
+          }
+          sql.exec("COMMIT");
+        } catch (e) {
+          sql.exec("ROLLBACK");
+          throw e;
         }
-        sql.exec("COMMIT");
-      } catch (e) {
-        sql.exec("ROLLBACK");
-        throw e;
       }
     }
   }
@@ -1603,17 +1959,21 @@ function openDatabase(file, migrations) {
       return this.execute();
     }
   }
-  return { prepare: (s) => new Query(s), async batch(ss) {
-    sql.exec("BEGIN IMMEDIATE");
-    try {
-      const r = ss.map((s) => s.execute());
-      sql.exec("COMMIT");
-      return r;
-    } catch (e) {
-      sql.exec("ROLLBACK");
-      throw e;
-    }
-  }, close: () => sql.close() };
+  return {
+    prepare: (s) => new Query(s),
+    async batch(ss) {
+      sql.exec("BEGIN IMMEDIATE");
+      try {
+        const r = ss.map((s) => s.execute());
+        sql.exec("COMMIT");
+        return r;
+      } catch (e) {
+        sql.exec("ROLLBACK");
+        throw e;
+      }
+    },
+    close: () => sql.close()
+  };
 }
 
 // server.ts
@@ -1621,7 +1981,8 @@ var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
 var host = process.env.HOST || "0.0.0.0";
 var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
-var db = openDatabase(resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite"), resolve3(root, "migrations"));
+var dbUrl = process.env.DATABASE_URL || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
+var db = openDatabase(dbUrl, resolve3(root, "migrations"));
 var api = createApi(db);
 var web = resolve3(root, "web");
 var types = {

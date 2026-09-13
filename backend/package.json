@@ -12,10 +12,14 @@
     "dev": "node server.mjs",
     "build": "node build.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "pg": "^8.13.3"
+  },
   "devDependencies": {
     "@types/node": "22.19.19",
+    "@types/pg": "^8.11.11",
     "esbuild": "^0.25.12",
     "typescript": "5.9.3"
   }
 }
+

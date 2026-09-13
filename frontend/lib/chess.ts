@@ -36,6 +36,7 @@ export type Player = {
   rounds: Round[];
   detailsLoaded: boolean;
   games?: number;
+  totalGames?: number;
   whiteGames?: number;
   blackGames?: number;
   whiteWins?: number;
@@ -156,7 +157,10 @@ export function stats(p: Player) {
     }
   }
   const uniqueRounds = Array.from(uniqueRoundsMap.values());
-  const playedRounds = uniqueRounds.filter(r => r.status === 'played' && r.score !== null && r.color != null && (r.color.toUpperCase() === 'WHITE' || r.color.toUpperCase() === 'BLACK'));
+  const playedRounds = uniqueRounds.filter(r =>
+    r.status === 'played' ||
+    (r.status !== 'bye' && r.status !== 'forfeit' && (r.opponent != null || r.color != null || r.result != null || r.score != null))
+  );
 
   let white = 0;
   let whiteWins = 0;
@@ -168,38 +172,57 @@ export function stats(p: Player) {
   let blackDraws = 0;
   let blackLosses = 0;
 
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+
   for (const rd of playedRounds) {
-    const c = rd.color?.toUpperCase();
-    if (c === 'WHITE') {
+    let score = rd.score;
+    if (score === null || score === undefined) {
+      if (rd.result) {
+        if (rd.result.includes('1 - 0') || rd.result.includes('1-0')) score = (rd.color?.toLowerCase() === 'black' ? 0 : 1);
+        else if (rd.result.includes('0 - 1') || rd.result.includes('0-1')) score = (rd.color?.toLowerCase() === 'black' ? 1 : 0);
+        else if (rd.result.includes('½')) score = 0.5;
+      }
+    }
+
+    if (score === 1) wins++;
+    else if (score === 0.5) draws++;
+    else if (score === 0) losses++;
+
+    const c = rd.color?.toLowerCase();
+    const isWhite = c === 'white' || (rd.playerWhite && rd.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
+    const isBlack = c === 'black' || (rd.playerBlack && rd.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase());
+
+    if (isWhite) {
       white++;
-      if (rd.score === 1) whiteWins++;
-      else if (rd.score === 0.5) whiteDraws++;
-      else if (rd.score === 0) whiteLosses++;
-    } else if (c === 'BLACK') {
+      if (score === 1) whiteWins++;
+      else if (score === 0.5) whiteDraws++;
+      else if (score === 0) whiteLosses++;
+    } else if (isBlack) {
       black++;
-      if (rd.score === 1) blackWins++;
-      else if (rd.score === 0.5) blackDraws++;
-      else if (rd.score === 0) blackLosses++;
+      if (score === 1) blackWins++;
+      else if (score === 0.5) blackDraws++;
+      else if (score === 0) blackLosses++;
     }
   }
 
-  const wins = whiteWins + blackWins;
-  const draws = whiteDraws + blackDraws;
-  const losses = whiteLosses + blackLosses;
-  const totalPlayed = white + black;
+  const totalPlayed = (p.totalGames != null && p.totalGames > 0) ? p.totalGames : playedRounds.length;
+  const whiteCount = (p.whiteGames != null && p.whiteGames > 0) ? p.whiteGames : (white > 0 ? white : uniqueRounds.filter(r => (r.color || '').toLowerCase() === 'white').length);
+  const blackCount = (p.blackGames != null && p.blackGames > 0) ? p.blackGames : (black > 0 ? black : uniqueRounds.filter(r => (r.color || '').toLowerCase() === 'black').length);
 
   return {
     played: totalPlayed,
     wins,
     draws,
     losses,
-    white,
-    whiteGames: white,
+    white: whiteCount,
+    whiteGames: whiteCount,
     whiteWins,
     whiteDraws,
     whiteLosses,
-    black,
-    blackGames: black,
+    black: blackCount,
+    blackGames: blackCount,
     blackWins,
     blackDraws,
     blackLosses,

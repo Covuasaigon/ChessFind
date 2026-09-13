@@ -6,10 +6,17 @@
   "scripts": {
     "dev": "npm --prefix ma-nguon run dev",
     "build": "npm --prefix ma-nguon run build",
+    "build:backend": "npm --prefix backend run build",
     "start": "npm --prefix ma-nguon run start",
+    "migrate:db": "node scripts/migrate-sqlite-to-pg.mjs",
+    "migrate:images": "node scripts/migrate-local-images.mjs",
     "lint": "npm --prefix ma-nguon run lint"
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.0"
   }
 }
