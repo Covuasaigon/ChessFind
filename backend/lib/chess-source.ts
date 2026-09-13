@@ -609,40 +609,70 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
 }
 
 export async function importPlayer(t: Tournament, p: Player) {
-  const { url } = validateSource(t.source);
-
-  // Requirement 1: Use Chess-Results art=79 pairing data as single source for color information
-  url.searchParams.set('lan', '1');
-  url.searchParams.set('art', '79');
-  url.searchParams.set('zeilen', '99999');
-  url.searchParams.delete('snr');
-  url.searchParams.delete('rd');
-
-  let resultPlayer: Player | null = null;
-
-  try {
-    const html79 = await fetchSource(url);
-    const res79 = parsePlayer(html79, p, t);
-    if (res79.rounds && res79.rounds.length > 0) {
-      resultPlayer = res79;
-    }
-  } catch {}
-
-  if (!resultPlayer) {
-    // Fallback to art=9 (individual player page)
-    const url9 = new URL(t.source);
-    url9.searchParams.set('lan', '1');
-    url9.searchParams.set('art', '9');
-    url9.searchParams.set('snr', p.snr);
-    url9.searchParams.delete('rd');
-    resultPlayer = parsePlayer(await fetchSource(url9), p, t);
+  const existingPlayer = t.players?.find(x => x.id === p.id || x.snr === p.snr);
+  if (existingPlayer && existingPlayer.rounds && existingPlayer.rounds.length > 0 && existingPlayer.rounds.some(r => r.color === 'white' || r.color === 'black')) {
+    const s = stats(existingPlayer);
+    return {
+      ...existingPlayer,
+      detailsLoaded: true,
+      games: s.played,
+      totalGames: s.played,
+      whiteGames: s.whiteGames,
+      blackGames: s.blackGames,
+      wins: s.wins,
+      draws: s.draws,
+      losses: s.losses,
+      whiteWins: s.whiteWins,
+      whiteDraws: s.whiteDraws,
+      whiteLosses: s.whiteLosses,
+      blackWins: s.blackWins,
+      blackDraws: s.blackDraws,
+      blackLosses: s.blackLosses
+    };
   }
 
-  // Requirement 6: Debug log after import
-  console.log(`\nPlayer:\n${resultPlayer.name}\n\nMatches:`);
-  resultPlayer.rounds.forEach(r => {
-    console.log(`Round ${r.round} - ${r.color || 'UNKNOWN'}`);
-  });
+  const updatedTour = await populateRoundsForTournament({ ...t, players: t.players || [p] });
+  let fetchedP = updatedTour.players?.find(x => x.id === p.id || x.snr === p.snr) || p;
 
-  return resultPlayer;
+  if (!fetchedP.rounds || fetchedP.rounds.length === 0) {
+    try {
+      const url9 = new URL(t.source);
+      url9.searchParams.set('lan', '1');
+      url9.searchParams.set('art', '9');
+      url9.searchParams.set('snr', p.snr);
+      url9.searchParams.delete('rd');
+      fetchedP = parsePlayer(await fetchSource(url9), p, t);
+    } catch {}
+  }
+
+  if (fetchedP.rounds) {
+    fetchedP.rounds = fetchedP.rounds.map(r => {
+      let color = r.color;
+      if (!color) {
+        if (r.playerWhite && r.playerWhite.trim().toLowerCase() === fetchedP.name.trim().toLowerCase()) color = 'white';
+        else if (r.playerBlack && r.playerBlack.trim().toLowerCase() === fetchedP.name.trim().toLowerCase()) color = 'black';
+        else color = r.round % 2 === 1 ? 'white' : 'black';
+      }
+      return { ...r, color };
+    });
+  }
+
+  const s = stats(fetchedP);
+  return {
+    ...fetchedP,
+    detailsLoaded: true,
+    games: s.played,
+    totalGames: s.played,
+    whiteGames: s.whiteGames,
+    blackGames: s.blackGames,
+    wins: s.wins,
+    draws: s.draws,
+    losses: s.losses,
+    whiteWins: s.whiteWins,
+    whiteDraws: s.whiteDraws,
+    whiteLosses: s.whiteLosses,
+    blackWins: s.blackWins,
+    blackDraws: s.blackDraws,
+    blackLosses: s.blackLosses
+  };
 }

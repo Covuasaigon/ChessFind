@@ -55,7 +55,9 @@ function stats(p) {
     }
   }
   const uniqueRounds = Array.from(uniqueRoundsMap.values());
-  const playedRounds = uniqueRounds.filter((r) => r.status === "played" && r.score !== null && r.color != null && (r.color.toUpperCase() === "WHITE" || r.color.toUpperCase() === "BLACK"));
+  const playedRounds = uniqueRounds.filter(
+    (r) => r.status === "played" || r.status !== "bye" && r.status !== "forfeit" && (r.opponent != null || r.color != null || r.result != null || r.score != null)
+  );
   let white = 0;
   let whiteWins = 0;
   let whiteDraws = 0;
@@ -64,36 +66,55 @@ function stats(p) {
   let blackWins = 0;
   let blackDraws = 0;
   let blackLosses = 0;
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
   for (const rd of playedRounds) {
-    const c = rd.color?.toUpperCase();
-    if (c === "WHITE") {
+    let score = rd.score;
+    if (score === null || score === void 0) {
+      if (rd.result) {
+        if (rd.result.includes("1 - 0") || rd.result.includes("1-0")) score = rd.color?.toLowerCase() === "black" ? 0 : 1;
+        else if (rd.result.includes("0 - 1") || rd.result.includes("0-1")) score = rd.color?.toLowerCase() === "black" ? 1 : 0;
+        else if (rd.result.includes("\xBD")) score = 0.5;
+      }
+    }
+    if (score === 1) wins++;
+    else if (score === 0.5) draws++;
+    else if (score === 0) losses++;
+    const c = rd.color?.toLowerCase();
+    let isWhite = c === "white" || rd.playerWhite && rd.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase();
+    let isBlack = c === "black" || rd.playerBlack && rd.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase();
+    if (!isWhite && !isBlack) {
+      if (rd.round % 2 === 1) isWhite = true;
+      else isBlack = true;
+    }
+    if (isWhite) {
       white++;
-      if (rd.score === 1) whiteWins++;
-      else if (rd.score === 0.5) whiteDraws++;
-      else if (rd.score === 0) whiteLosses++;
-    } else if (c === "BLACK") {
+      if (score === 1) whiteWins++;
+      else if (score === 0.5) whiteDraws++;
+      else if (score === 0) whiteLosses++;
+    } else if (isBlack) {
       black++;
-      if (rd.score === 1) blackWins++;
-      else if (rd.score === 0.5) blackDraws++;
-      else if (rd.score === 0) blackLosses++;
+      if (score === 1) blackWins++;
+      else if (score === 0.5) blackDraws++;
+      else if (score === 0) blackLosses++;
     }
   }
-  const wins = whiteWins + blackWins;
-  const draws = whiteDraws + blackDraws;
-  const losses = whiteLosses + blackLosses;
-  const totalPlayed = white + black;
+  const totalPlayed = p.totalGames != null && p.totalGames > 0 ? p.totalGames : playedRounds.length;
+  const whiteCount = p.whiteGames != null && p.whiteGames > 0 ? p.whiteGames : white;
+  const blackCount = p.blackGames != null && p.blackGames > 0 ? p.blackGames : black;
   return {
     played: totalPlayed,
     wins,
     draws,
     losses,
-    white,
-    whiteGames: white,
+    white: whiteCount,
+    whiteGames: whiteCount,
     whiteWins,
     whiteDraws,
     whiteLosses,
-    black,
-    blackGames: black,
+    black: blackCount,
+    blackGames: blackCount,
     blackWins,
     blackDraws,
     blackLosses,
@@ -653,38 +674,69 @@ function parsePlayer(html, p, t) {
   return { ...p, rounds, warning, detailsLoaded: true };
 }
 async function importPlayer(t, p) {
-  const { url } = validateSource(t.source);
-  url.searchParams.set("lan", "1");
-  url.searchParams.set("art", "79");
-  url.searchParams.set("zeilen", "99999");
-  url.searchParams.delete("snr");
-  url.searchParams.delete("rd");
-  let resultPlayer = null;
-  try {
-    const html79 = await fetchSource(url);
-    const res79 = parsePlayer(html79, p, t);
-    if (res79.rounds && res79.rounds.length > 0) {
-      resultPlayer = res79;
+  const existingPlayer = t.players?.find((x) => x.id === p.id || x.snr === p.snr);
+  if (existingPlayer && existingPlayer.rounds && existingPlayer.rounds.length > 0 && existingPlayer.rounds.some((r) => r.color === "white" || r.color === "black")) {
+    const s2 = stats(existingPlayer);
+    return {
+      ...existingPlayer,
+      detailsLoaded: true,
+      games: s2.played,
+      totalGames: s2.played,
+      whiteGames: s2.whiteGames,
+      blackGames: s2.blackGames,
+      wins: s2.wins,
+      draws: s2.draws,
+      losses: s2.losses,
+      whiteWins: s2.whiteWins,
+      whiteDraws: s2.whiteDraws,
+      whiteLosses: s2.whiteLosses,
+      blackWins: s2.blackWins,
+      blackDraws: s2.blackDraws,
+      blackLosses: s2.blackLosses
+    };
+  }
+  const updatedTour = await populateRoundsForTournament({ ...t, players: t.players || [p] });
+  let fetchedP = updatedTour.players?.find((x) => x.id === p.id || x.snr === p.snr) || p;
+  if (!fetchedP.rounds || fetchedP.rounds.length === 0) {
+    try {
+      const url9 = new URL(t.source);
+      url9.searchParams.set("lan", "1");
+      url9.searchParams.set("art", "9");
+      url9.searchParams.set("snr", p.snr);
+      url9.searchParams.delete("rd");
+      fetchedP = parsePlayer(await fetchSource(url9), p, t);
+    } catch {
     }
-  } catch {
   }
-  if (!resultPlayer) {
-    const url9 = new URL(t.source);
-    url9.searchParams.set("lan", "1");
-    url9.searchParams.set("art", "9");
-    url9.searchParams.set("snr", p.snr);
-    url9.searchParams.delete("rd");
-    resultPlayer = parsePlayer(await fetchSource(url9), p, t);
+  if (fetchedP.rounds) {
+    fetchedP.rounds = fetchedP.rounds.map((r) => {
+      let color = r.color;
+      if (!color) {
+        if (r.playerWhite && r.playerWhite.trim().toLowerCase() === fetchedP.name.trim().toLowerCase()) color = "white";
+        else if (r.playerBlack && r.playerBlack.trim().toLowerCase() === fetchedP.name.trim().toLowerCase()) color = "black";
+        else color = r.round % 2 === 1 ? "white" : "black";
+      }
+      return { ...r, color };
+    });
   }
-  console.log(`
-Player:
-${resultPlayer.name}
-
-Matches:`);
-  resultPlayer.rounds.forEach((r) => {
-    console.log(`Round ${r.round} - ${r.color || "UNKNOWN"}`);
-  });
-  return resultPlayer;
+  const s = stats(fetchedP);
+  return {
+    ...fetchedP,
+    detailsLoaded: true,
+    games: s.played,
+    totalGames: s.played,
+    whiteGames: s.whiteGames,
+    blackGames: s.blackGames,
+    wins: s.wins,
+    draws: s.draws,
+    losses: s.losses,
+    whiteWins: s.whiteWins,
+    whiteDraws: s.whiteDraws,
+    whiteLosses: s.whiteLosses,
+    blackWins: s.blackWins,
+    blackDraws: s.blackDraws,
+    blackLosses: s.blackLosses
+  };
 }
 
 // lib/default-admin.ts

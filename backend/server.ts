@@ -8,7 +8,8 @@ import { openDatabase } from './database';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 3000), host = process.env.HOST || '0.0.0.0';
 const publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
-const db = openDatabase(resolve(root, process.env.DATA_DIR || 'data', 'chess.sqlite'), resolve(root, 'migrations'));
+const dbUrl = process.env.DATABASE_URL || resolve(root, process.env.DATA_DIR || 'data', 'chess.sqlite');
+const db = openDatabase(dbUrl, resolve(root, 'migrations'));
 const api = createApi(db);
 const web = resolve(root, 'web');
 const types: Record<string, string> = {
