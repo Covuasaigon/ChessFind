@@ -281,7 +281,7 @@ export default function ChessApp() {
                         {medal.medal} {medal.label}
                       </span>
                     )}
-                    <span className="soft-badge" style={{ background: 'rgba(20, 93, 160, 0.15)', color: '#145DA0', border: '1px solid rgba(20, 93, 160, 0.3)', fontWeight: 700 }}>
+                    <span className="soft-badge" style={{ background: 'rgba(20, 93, 160, 0.85)', color: '#FFFFFF', border: '1px solid rgba(255, 255, 255, 0.3)', fontWeight: 700 }}>
                       CLB/Tỉnh: {player.club || formatClubName(player.federation || '')}
                     </span>
                   </div>
