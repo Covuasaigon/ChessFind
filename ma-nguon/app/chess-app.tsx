@@ -469,7 +469,7 @@ export default function ChessApp() {
 
                 <div className="encouragement">
                   <span>♞</span>
-                  <p>“Mỗi ván cờ là một bài học,<br />mỗi đối thủ là một người bạn.”<small>CỜ VUA SÀI GÒN ACADEMY</small></p>
+                  <p>“Mỗi ván cờ là một bài học,<br />mỗi đối thủ là một người bạn.”<small>CỜ VUA SÀI GÒN</small></p>
                 </div>
               </div>
 
@@ -883,7 +883,7 @@ function TournamentInfoSlides({ tournamentId }: { tournamentId: string }) {
       .then(data => {
         if (!dead && data.slides) setSlides(data.slides);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         if (!dead) setLoading(false);
       });
@@ -1051,7 +1051,7 @@ function TournamentInfoSlider() {
               const list2 = Array.isArray(data2) ? data2 : (data2.slides || []);
               if (!dead && list2.length > 0) setSlides(list2);
             })
-            .catch(() => {});
+            .catch(() => { });
         }
       })
       .catch(() => {
@@ -1062,7 +1062,7 @@ function TournamentInfoSlider() {
               const list2 = Array.isArray(data2) ? data2 : (data2.slides || []);
               if (!dead && list2.length > 0) setSlides(list2);
             })
-            .catch(() => {});
+            .catch(() => { });
         }
       })
       .finally(() => {

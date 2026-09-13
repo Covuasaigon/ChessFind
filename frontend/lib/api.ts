@@ -553,6 +553,28 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       const s = await session(req);
       if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' }, 401, {}, req);
       if (req.headers.get('x-csrf-token') !== s.csrf) return json({ error: 'Phiên xác thực không hợp lệ. Hãy tải lại trang.' }, 403, {}, req);
+
+      if (path === '/api/tournaments/bulk') {
+        const ids: string[] = Array.isArray(b.ids) ? b.ids.map((x: any) => String(x).trim()).filter(Boolean) : [];
+        if (ids.length === 0) return json({ error: 'Vui lòng chọn ít nhất 1 giải đấu để xóa.' }, 400, {}, req);
+
+        const statements: Statement[] = [];
+        for (const id of ids) {
+          statements.push(
+            db.prepare('DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?').bind(id, `${id}-%`),
+            db.prepare('DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?').bind(id, `${id}-%`),
+            db.prepare('DELETE FROM players WHERE tournament_id = ? OR category_id = ?').bind(id, id),
+            db.prepare('DELETE FROM categories WHERE tournament_id = ? OR id = ?').bind(id, id),
+            db.prepare('DELETE FROM details WHERE tid = ? OR tid LIKE ?').bind(id, `${id}-%`),
+            db.prepare('DELETE FROM sync_logs WHERE tournament_id = ?').bind(id),
+            db.prepare('DELETE FROM previews WHERE payload LIKE ?').bind(`%"id":"${id}"%`),
+            db.prepare('DELETE FROM tournaments WHERE id = ?').bind(id)
+          );
+        }
+        await db.batch(statements);
+        await log(true, `Đã xóa hàng loạt ${ids.length} giải đấu.`);
+        return json({ message: `Đã xóa thành công ${ids.length} giải đấu.` }, 200, {}, req);
+      }
       authorized = true;
 
       if (path === '/api/admin/slides' || path.startsWith('/api/admin/slides/')) {
@@ -892,6 +914,28 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         await db.prepare('UPDATE home_banners SET is_active = ?, updated_at = ? WHERE id = ?').bind(is_active, new Date().toISOString(), id).run();
         await log(true, `${is_active ? 'Hiện' : 'Ẩn'} banner id: ${id}`);
         return json({ message: is_active ? 'Đã hiển thị banner.' : 'Đã ẩn banner.' }, 200, {}, req);
+      }
+
+      if (action === 'bulk_delete') {
+        const ids: string[] = Array.isArray(b.ids) ? b.ids.map((x: any) => String(x).trim()).filter(Boolean) : [];
+        if (ids.length === 0) return json({ error: 'Vui lòng chọn ít nhất 1 giải đấu để xóa.' }, 400, {}, req);
+
+        const statements: Statement[] = [];
+        for (const id of ids) {
+          statements.push(
+            db.prepare('DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?').bind(id, `${id}-%`),
+            db.prepare('DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?').bind(id, `${id}-%`),
+            db.prepare('DELETE FROM players WHERE tournament_id = ? OR category_id = ?').bind(id, id),
+            db.prepare('DELETE FROM categories WHERE tournament_id = ? OR id = ?').bind(id, id),
+            db.prepare('DELETE FROM details WHERE tid = ? OR tid LIKE ?').bind(id, `${id}-%`),
+            db.prepare('DELETE FROM sync_logs WHERE tournament_id = ?').bind(id),
+            db.prepare('DELETE FROM previews WHERE payload LIKE ?').bind(`%"id":"${id}"%`),
+            db.prepare('DELETE FROM tournaments WHERE id = ?').bind(id)
+          );
+        }
+        await db.batch(statements);
+        await log(true, `Đã xóa hàng loạt ${ids.length} giải đấu.`);
+        return json({ message: `Đã xóa thành công ${ids.length} giải đấu.` }, 200, {}, req);
       }
 
       const old = await get(String(b.id || ''), true);

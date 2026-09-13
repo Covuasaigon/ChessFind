@@ -144,7 +144,52 @@ export default function Admin({ onChanged }: AdminProps) {
   const [edit, setEdit] = useState<Tournament | null>(null);
   const [remove, setRemove] = useState<Tournament | null>(null);
   const [confirmName, setConfirmName] = useState('');
+  const [selectedTournamentIds, setSelectedTournamentIds] = useState<string[]>([]);
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
   const [q, setQ] = useState('');
+
+  async function handleBulkDelete() {
+    if (selectedTournamentIds.length === 0) return;
+    setBusy('bulk_delete');
+    setError('');
+    try {
+      const r = await apiFetch('/api/tournaments/bulk', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        },
+        body: JSON.stringify({ ids: selectedTournamentIds })
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi xóa giải đấu');
+
+      toast.success(d.message || `Đã xóa ${selectedTournamentIds.length} giải đấu thành công!`);
+      setSelectedTournamentIds([]);
+      setBulkDeleteModalOpen(false);
+      await load();
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+      toast.error((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function handleBulkSync() {
+    if (selectedTournamentIds.length === 0) return;
+    setBusy('bulk_sync');
+    let successCount = 0;
+    for (const id of selectedTournamentIds) {
+      try {
+        const ok = await action('sync', { id });
+        if (ok) successCount++;
+      } catch {}
+    }
+    toast.success(`Đã đồng bộ ${successCount}/${selectedTournamentIds.length} giải đấu.`);
+    setBusy('');
+  }
   const [bannerModal, setBannerModal] = useState<Partial<BannerItem> | null>(null);
   const [infoModal, setInfoModal] = useState<Tournament | null>(null);
   const [previewBanner, setPreviewBanner] = useState<BannerItem | null>(null);
@@ -987,6 +1032,68 @@ export default function Admin({ onChanged }: AdminProps) {
           </div>
         </div>
 
+        {selectedTournamentIds.length > 0 && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: '#062B4F',
+            color: '#FFFFFF',
+            padding: '12px 20px',
+            borderRadius: 12,
+            marginBottom: 16,
+            boxShadow: '0 4px 12px rgba(6,43,79,0.15)',
+            flexWrap: 'wrap',
+            gap: 12
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 14 }}>
+              <CheckSquare size={18} style={{ color: '#FACC15' }} />
+              <span>Đã chọn <strong style={{ color: '#FACC15', fontSize: 16 }}>{selectedTournamentIds.length}</strong> giải đấu</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                className="outline"
+                style={{
+                  background: 'rgba(255,255,255,0.15)',
+                  color: '#FFFFFF',
+                  borderColor: 'rgba(255,255,255,0.3)',
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  borderRadius: 8,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6
+                }}
+                disabled={!!busy}
+                onClick={handleBulkSync}
+              >
+                <RefreshCw size={14} className={busy === 'bulk_sync' ? 'spin' : ''} />
+                <span>Đồng bộ đã chọn</span>
+              </button>
+              <button
+                className="primary danger-delete"
+                style={{
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  borderRadius: 8,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#DC2626',
+                  borderColor: '#DC2626',
+                  color: '#FFFFFF',
+                  fontWeight: 700
+                }}
+                disabled={!!busy}
+                onClick={() => { setError(''); setBulkDeleteModalOpen(true); }}
+              >
+                <Trash2 size={14} />
+                <span>Xóa đã chọn ({selectedTournamentIds.length})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {!tournaments.length ? (
           <div style={{ textAlign: 'center', padding: '40px 20px', background: '#F8FAFC', borderRadius: 16, border: '1px dashed #CBD5E1' }}>
             <Trophy size={40} style={{ color: '#94A3B8', margin: '0 auto 12px' }} />
@@ -998,6 +1105,21 @@ export default function Admin({ onChanged }: AdminProps) {
             <table className="saas-table">
               <thead>
                 <tr>
+                  <th style={{ width: 44, textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Chọn tất cả"
+                      checked={tournaments.length > 0 && tournaments.every((t: Tournament) => selectedTournamentIds.includes(t.id))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        if (e.target.checked) {
+                          setSelectedTournamentIds(tournaments.map((t: Tournament) => t.id));
+                        } else {
+                          setSelectedTournamentIds([]);
+                        }
+                      }}
+                      style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#062B4F' }}
+                    />
+                  </th>
                   <th>Tên giải đấu</th>
                   <th>Bảng đấu / Nhóm</th>
                   <th style={{ textAlign: 'center' }}>Kỳ thủ</th>
@@ -1007,7 +1129,22 @@ export default function Admin({ onChanged }: AdminProps) {
               </thead>
               <tbody>
                 {tournaments.map((t: Tournament) => (
-                  <tr key={t.id}>
+                  <tr key={t.id} style={{ background: selectedTournamentIds.includes(t.id) ? '#F1F5F9' : undefined }}>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Chọn ${t.name}`}
+                        checked={selectedTournamentIds.includes(t.id)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          if (e.target.checked) {
+                            setSelectedTournamentIds(prev => [...prev, t.id]);
+                          } else {
+                            setSelectedTournamentIds(prev => prev.filter(id => id !== t.id));
+                          }
+                        }}
+                        style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#062B4F' }}
+                      />
+                    </td>
                     <td>
                       <b style={{ color: '#062B4F', fontSize: 15, display: 'block' }}>{t.name}</b>
                       <a href={t.source} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#145DA0', display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
@@ -2050,6 +2187,56 @@ export default function Admin({ onChanged }: AdminProps) {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteModalOpen} onOpenChange={(v: boolean) => { if (!v && !busy) setBulkDeleteModalOpen(false); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Xóa {selectedTournamentIds.length} giải đấu đã chọn?</DialogTitle>
+            <DialogDescription>
+              Xác nhận xóa các giải đấu đã chọn khỏi hệ thống.
+            </DialogDescription>
+          </DialogHeader>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
+            <div style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>
+              Danh sách giải đấu chuẩn bị xóa ({selectedTournamentIds.length} giải):
+            </div>
+            <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 14px', background: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(state?.tournaments || [])
+                .filter(t => selectedTournamentIds.includes(t.id))
+                .map(t => (
+                  <div key={t.id} style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: 6 }}>
+                    <span style={{ fontWeight: 700, color: '#0F172A' }}>• {t.name} ({t.group || 'Toàn giải'})</span>
+                    <span style={{ color: '#64748B', fontSize: 12, fontWeight: 600 }}>{t.players ? t.players.length : 0} kỳ thủ</span>
+                  </div>
+                ))}
+            </div>
+
+            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: 14, color: '#991B1B' }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: '#7F1D1D' }}>
+                ⚠️ Cảnh báo:
+              </div>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: '1.5', color: '#991B1B' }}>
+                Toàn bộ dữ liệu kỳ thủ, kết quả, bảng xếp hạng, lịch sử thi đấu sẽ bị xóa và không thể khôi phục.
+              </p>
+            </div>
+
+            {error && <p className="notice warning" role="alert">{error}</p>}
+            <div className="dialog-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
+              <button type="button" className="outline" disabled={!!busy} onClick={() => setBulkDeleteModalOpen(false)}>
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="primary danger-delete"
+                disabled={!!busy}
+                onClick={handleBulkDelete}
+              >
+                {busy === 'bulk_delete' ? 'Đang xóa…' : `Xóa ${selectedTournamentIds.length} giải`}
+              </button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

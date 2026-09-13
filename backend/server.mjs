@@ -1459,6 +1459,26 @@ function createApi(db2, sourceParam = {}) {
       if (!s) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401, {}, req);
       if (req.headers.get("x-csrf-token") !== s.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
       authorized = true;
+      if (path === "/api/tournaments/bulk") {
+        const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x).trim()).filter(Boolean) : [];
+        if (ids.length === 0) return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t 1 gi\u1EA3i \u0111\u1EA5u \u0111\u1EC3 x\xF3a." }, 400, {}, req);
+        const statements = [];
+        for (const id of ids) {
+          statements.push(
+            db2.prepare("DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM players WHERE tournament_id = ? OR category_id = ?").bind(id, id),
+            db2.prepare("DELETE FROM categories WHERE tournament_id = ? OR id = ?").bind(id, id),
+            db2.prepare("DELETE FROM details WHERE tid = ? OR tid LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM sync_logs WHERE tournament_id = ?").bind(id),
+            db2.prepare("DELETE FROM previews WHERE payload LIKE ?").bind(`%"id":"${id}"%`),
+            db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(id)
+          );
+        }
+        await db2.batch(statements);
+        await log(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} gi\u1EA3i \u0111\u1EA5u.`);
+        return json({ message: `\u0110\xE3 x\xF3a th\xE0nh c\xF4ng ${ids.length} gi\u1EA3i \u0111\u1EA5u.` }, 200, {}, req);
+      }
       if (path === "/api/admin/slides" || path.startsWith("/api/admin/slides/")) {
         await ensureSlidesTableSchema(db2);
         const slideId = path.replace(/^\/api\/admin\/slides\/?/, "");
@@ -1752,6 +1772,26 @@ function createApi(db2, sourceParam = {}) {
         await db2.prepare("UPDATE home_banners SET is_active = ?, updated_at = ? WHERE id = ?").bind(is_active, (/* @__PURE__ */ new Date()).toISOString(), id).run();
         await log(true, `${is_active ? "Hi\u1EC7n" : "\u1EA8n"} banner id: ${id}`);
         return json({ message: is_active ? "\u0110\xE3 hi\u1EC3n th\u1ECB banner." : "\u0110\xE3 \u1EA9n banner." }, 200, {}, req);
+      }
+      if (action === "bulk_delete") {
+        const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x).trim()).filter(Boolean) : [];
+        if (ids.length === 0) return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t 1 gi\u1EA3i \u0111\u1EA5u \u0111\u1EC3 x\xF3a." }, 400, {}, req);
+        const statements = [];
+        for (const id of ids) {
+          statements.push(
+            db2.prepare("DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM players WHERE tournament_id = ? OR category_id = ?").bind(id, id),
+            db2.prepare("DELETE FROM categories WHERE tournament_id = ? OR id = ?").bind(id, id),
+            db2.prepare("DELETE FROM details WHERE tid = ? OR tid LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM sync_logs WHERE tournament_id = ?").bind(id),
+            db2.prepare("DELETE FROM previews WHERE payload LIKE ?").bind(`%"id":"${id}"%`),
+            db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(id)
+          );
+        }
+        await db2.batch(statements);
+        await log(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} gi\u1EA3i \u0111\u1EA5u.`);
+        return json({ message: `\u0110\xE3 x\xF3a th\xE0nh c\xF4ng ${ids.length} gi\u1EA3i \u0111\u1EA5u.` }, 200, {}, req);
       }
       const old = await get(String(b.id || ""), true);
       if (!old) return json({ error: "Gi\u1EA3i kh\xF4ng t\u1ED3n t\u1EA1i ho\u1EB7c \u0111\xE3 b\u1ECB x\xF3a." }, 404, {}, req);
