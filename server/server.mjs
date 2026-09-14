@@ -1,6 +1,7 @@
 // server.ts
 import { createServer } from "node:http";
-import { resolve as resolve3, extname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolve as resolve3, dirname as dirname2, extname, sep } from "node:path";
 import { readFile, stat } from "node:fs/promises";
 
 // lib/chess.ts
@@ -9,6 +10,182 @@ var num = (s) => {
   const v = s.trim().replace(/½/g, ".5").replace(",", ".");
   return v !== "" && /^\d+(?:\.\d+)?$|^\.5$/.test(v) ? Number(v) : null;
 };
+var CLUB_MAP = {
+  "HDC": "CLB C\u1EDD Vua HDC",
+  "TPC": "CLB C\u1EDD Vua TPC (T\xE2n B\xECnh)",
+  "TBC": "CLB C\u1EDD Vua TBC",
+  "RTC": "CLB C\u1EDD Vua R\u1ED3ng Tr\u1EBB (RTC)",
+  "BTC": "CLB C\u1EDD Vua B\u1EBFn Th\xE0nh (BTC)",
+  "ONL": "CLB C\u1EDD Vua Online (ONL)",
+  "DHC": "CLB C\u1EDD Vua DHC",
+  "KDC": "CLB C\u1EDD Vua KDC",
+  "Q1": "Qu\u1EADn 1 - TP.HCM",
+  "Q2": "Qu\u1EADn 2 - TP.HCM",
+  "Q3": "Qu\u1EADn 3 - TP.HCM",
+  "Q4": "Qu\u1EADn 4 - TP.HCM",
+  "Q5": "Qu\u1EADn 5 - TP.HCM",
+  "Q6": "Qu\u1EADn 6 - TP.HCM",
+  "Q7": "Qu\u1EADn 7 - TP.HCM",
+  "Q8": "Qu\u1EADn 8 - TP.HCM",
+  "Q9": "Qu\u1EADn 9 - TP.HCM",
+  "Q10": "Qu\u1EADn 10 - TP.HCM",
+  "Q11": "Qu\u1EADn 11 - TP.HCM",
+  "Q12": "Qu\u1EADn 12 - TP.HCM",
+  "TD": "TP. Th\u1EE7 \u0110\u1EE9c",
+  "GV": "Qu\u1EADn G\xF2 V\u1EA5p",
+  "TB": "Qu\u1EADn T\xE2n B\xECnh",
+  "BT": "Qu\u1EADn B\xECnh Th\u1EA1nh",
+  "PN": "Qu\u1EADn Ph\xFA Nhu\u1EADn",
+  "TP": "Th\xE0nh ph\u1ED1 H\u1ED3 Ch\xED Minh"
+};
+function formatClubName(club) {
+  if (!club || !club.trim()) return "T\u1EF1 do / Ch\u01B0a r\xF5";
+  const trimmed = club.trim();
+  const upper = trimmed.toUpperCase();
+  if (CLUB_MAP[upper]) return CLUB_MAP[upper];
+  if (CLUB_MAP[trimmed]) return CLUB_MAP[trimmed];
+  return trimmed;
+}
+function stats(p) {
+  const rounds = p.rounds || [];
+  const uniqueRoundsMap = /* @__PURE__ */ new Map();
+  for (const r of rounds) {
+    if (r.round != null && !uniqueRoundsMap.has(r.round)) {
+      uniqueRoundsMap.set(r.round, r);
+    }
+  }
+  const uniqueRounds = Array.from(uniqueRoundsMap.values());
+  const playedRounds = uniqueRounds.filter((r) => r.status === "played");
+  let white = 0;
+  let whiteWins = 0;
+  let whiteDraws = 0;
+  let whiteLosses = 0;
+  let black = 0;
+  let blackWins = 0;
+  let blackDraws = 0;
+  let blackLosses = 0;
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+  let points = 0;
+  for (const rd of uniqueRounds) {
+    if (rd.status === "played" || rd.status === "bye" || rd.status === "forfeit") {
+      if (rd.score != null) {
+        points += rd.score;
+      }
+    }
+  }
+  for (const rd of playedRounds) {
+    let score = rd.score;
+    if (score === null || score === void 0) {
+      if (rd.result) {
+        if (rd.result.includes("1 - 0") || rd.result.includes("1-0")) score = rd.color?.toLowerCase() === "black" ? 0 : 1;
+        else if (rd.result.includes("0 - 1") || rd.result.includes("0-1")) score = rd.color?.toLowerCase() === "black" ? 1 : 0;
+        else if (rd.result.includes("\xBD") || rd.result.includes("1/2")) score = 0.5;
+      }
+    }
+    if (score === 1) wins++;
+    else if (score === 0.5) draws++;
+    else if (score === 0) losses++;
+    const c = rd.color?.toLowerCase();
+    let isWhite = c === "white" || rd.playerWhite && rd.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase();
+    let isBlack = c === "black" || rd.playerBlack && rd.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase();
+    if (!isWhite && !isBlack) {
+      if (rd.round % 2 === 1) isWhite = true;
+      else isBlack = true;
+    }
+    if (isWhite) {
+      white++;
+      if (score === 1) whiteWins++;
+      else if (score === 0.5) whiteDraws++;
+      else if (score === 0) whiteLosses++;
+    } else if (isBlack) {
+      black++;
+      if (score === 1) blackWins++;
+      else if (score === 0.5) blackDraws++;
+      else if (score === 0) blackLosses++;
+    }
+  }
+  const totalPlayed = playedRounds.length;
+  const whiteCount = white;
+  const blackCount = black;
+  return {
+    played: totalPlayed,
+    points,
+    wins,
+    draws,
+    losses,
+    white: whiteCount,
+    whiteGames: whiteCount,
+    whiteWins,
+    whiteDraws,
+    whiteLosses,
+    black: blackCount,
+    blackGames: blackCount,
+    blackWins,
+    blackDraws,
+    blackLosses,
+    unknown: uniqueRounds.filter((x) => x.color === null && x.status === "played").length,
+    special: uniqueRounds.filter((x) => ["bye", "forfeit"].includes(x.status)).length,
+    winRate: totalPlayed > 0 ? Math.round(wins / totalPlayed * 100) : null
+  };
+}
+function getMedal(rank, group, prizes) {
+  if (!rank || rank <= 0) return null;
+  if (prizes && prizes.length > 0) {
+    const match = prizes.find((p) => {
+      const rankMatches = p.rank === rank || p.rankFrom != null && p.rankTo != null && rank >= p.rankFrom && rank <= p.rankTo;
+      if (!rankMatches) return false;
+      if (!group || !p.group) return true;
+      const pGroupNorm = normalize(p.group);
+      return pGroupNorm === "tat ca" || pGroupNorm === normalize(group);
+    });
+    if (match) {
+      const label = match.prizeName || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
+      let medalIcon = "\u{1F3C6}";
+      if (match.medal === "gold" || rank === 1) medalIcon = "\u{1F947}";
+      else if (match.medal === "silver" || rank === 2) medalIcon = "\u{1F948}";
+      else if (match.medal === "bronze" || rank === 3) medalIcon = "\u{1F949}";
+      else if (match.medal === "consolation") medalIcon = "\u{1F396}\uFE0F";
+      return { medal: medalIcon, label };
+    }
+  }
+  if (rank === 1) return { medal: "\u{1F947}", label: "Huy ch\u01B0\u01A1ng V\xE0ng" };
+  if (rank === 2) return { medal: "\u{1F948}", label: "Huy ch\u01B0\u01A1ng B\u1EA1c" };
+  if (rank === 3) return { medal: "\u{1F949}", label: "Huy ch\u01B0\u01A1ng \u0110\u1ED3ng" };
+  return null;
+}
+function getNextMatch(p) {
+  if (!p.rounds || !p.rounds.length) return null;
+  const match = p.rounds.find((r) => r.status === "scheduled" || r.status === "pending");
+  if (!match) return null;
+  let colorClean = "white";
+  const cLower = match.color ? match.color.toLowerCase() : "";
+  if (cLower === "white" || cLower === "black") {
+    colorClean = cLower;
+  } else if (match.playerBlack && match.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase()) {
+    colorClean = "black";
+  } else if (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase()) {
+    colorClean = "white";
+  } else {
+    colorClean = match.round % 2 === 1 ? "white" : "black";
+  }
+  const isWhite = colorClean === "white" || match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase();
+  const playerWhite = match.playerWhite || (isWhite ? p.name : match.opponent);
+  const playerBlack = match.playerBlack || (!isWhite ? p.name : match.opponent);
+  return {
+    round: match.round,
+    board: match.board ?? null,
+    playerWhite,
+    playerBlack,
+    opponent: match.opponent,
+    color: colorClean,
+    status: "scheduled",
+    opponentId: match.opponentId,
+    rating: match.rating ?? null,
+    score: null
+  };
+}
 
 // lib/chess-source.ts
 var HOSTS = /* @__PURE__ */ new Set(["chess-results.com", "www.chess-results.com", "s1.chess-results.com", "s2.chess-results.com", "s3.chess-results.com"]);
@@ -82,16 +259,56 @@ function textOf(s) {
     return entities[x] ?? " ";
   }).replace(/\s+/g, " ").trim();
 }
+function cleanCellText(text) {
+  if (!text) return text;
+  if (/Note:\s*To reduce/i.test(text) || /Search for player/i.test(text) || /Final Ranking/i.test(text)) {
+    const match = text.match(/\b(Rk|Rank|St\.?Nr|SNo|No|Name|Tên|Pts|Points|Điểm|BH|SB|Rp|TB\d+)\b\.?$/i) || text.match(/\b(Rk|Rank|St\.?Nr|SNo|No)\b\.?/i);
+    if (match) return match[0];
+  }
+  return text;
+}
 function rowsOf(html) {
   return [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => [...m[1].matchAll(/<t[dh]\b([^>]*)>([\s\S]*?)<\/t[dh]>/gi)].flatMap((c) => {
-    const col = { text: textOf(c[2]), raw: c[2] };
+    const col = { text: cleanCellText(textOf(c[2])), raw: c[2] };
     const span = Math.min(10, Number(c[1].match(/colspan\s*=\s*["']?(\d+)/i)?.[1] || 1));
     return [col, ...Array.from({ length: span - 1 }, () => ({ text: "", raw: "" }))];
   })).filter((x) => x.length);
 }
-var key = (s) => normalize(s).replace(/[.\s:]/g, "");
+var key = (s) => normalize(s).replace(/[^a-z0-9]/g, "");
 function findCol(headers, names) {
   return headers.findIndex((h) => names.includes(key(h.text)));
+}
+function parseTieBreakDescriptions(html) {
+  const result = [];
+  const map = /* @__PURE__ */ new Map();
+  const lines = [...html.matchAll(/(?:Tie-?Break|TB|HS)\s*(\d+)[\s:\-:=]+([^\r\n<]+)/gi)];
+  for (const m of lines) {
+    const numIdx = parseInt(m[1], 10);
+    const desc = textOf(m[2]).trim();
+    if (numIdx >= 1 && numIdx <= 10 && desc && !map.has(numIdx)) {
+      map.set(numIdx, desc);
+    }
+  }
+  if (map.size < 5) {
+    const blockMatch = html.match(/(?:Tie-?Break\s*(?:match rule|details|legend|criteria|tiêu chí)?|Hệ số phụ)\s*[:：]?([\s\S]*?)(?=<\/div>|<\/table>|<\/p>|<h\d|$)/i);
+    if (blockMatch) {
+      const blockText = textOf(blockMatch[1]);
+      const items = [...blockText.matchAll(/(?:TB|HS)?\s*(\d+)[\.:\)\-]\s*([^\r\n,;]+(?:\([^)]+\))?)/gi)];
+      for (const item of items) {
+        const numIdx = parseInt(item[1], 10);
+        const desc = item[2].trim();
+        if (numIdx >= 1 && numIdx <= 10 && desc && !map.has(numIdx)) {
+          map.set(numIdx, desc);
+        }
+      }
+    }
+  }
+  for (let i = 1; i <= 5; i++) {
+    if (map.has(i)) {
+      result.push(map.get(i));
+    }
+  }
+  return result;
 }
 function parseRanking(html, source, group) {
   const { id } = validateSource(source);
@@ -101,49 +318,85 @@ function parseRanking(html, source, group) {
     throw Error("Ch\u01B0a nh\u1EADn di\u1EC7n \u0111\u01B0\u1EE3c b\u1EA3ng k\u1EF3 th\u1EE7. Ngu\u1ED3n c\xF3 th\u1EC3 \u0111\u1ED5i c\u1EA5u tr\xFAc ho\u1EB7c ch\u01B0a c\xF4ng b\u1ED1 k\u1EBFt qu\u1EA3.");
   }
   const h = rows[hi];
-  const ni = findCol(h, ["name"]);
-  const ri = findCol(h, ["rk", "rank"]);
-  const si = findCol(h, ["sno", "no"]);
-  const pi = findCol(h, ["pts", "points"]);
+  const ni = findCol(h, ["name", "ten", "namekytthu", "hoten"]);
+  const ri = findCol(h, ["rk", "rank", "pos", "hang", "thuhang"]);
+  const si = findCol(h, ["sno", "stnr", "stno", "sbd", "no"]);
+  const pi = findCol(h, ["pts", "points", "diem"]);
   const rating = findCol(h, ["rtg", "rating", "rtgi", "elo"]);
-  const club = findCol(h, ["club/city", "club", "club/country", "team", "city", "club/city/fed", "federation", "fed"]);
+  const fedCol = findCol(h, ["fed", "federation", "ld", "ldo", "land"]);
+  const clubCol = findCol(h, ["clubcity", "clbtinh", "clb/tinh", "club/city", "club/country", "team/city", "club", "clb", "team", "city"]);
   const fideIdCol = findCol(h, ["fideid", "fide", "id", "identnumber", "ident"]);
   const sexCol = findCol(h, ["sex", "gender", "gioitinh"]);
   const typCol = findCol(h, ["typ", "gr", "group", "typgr", "kat", "cat", "category"]);
-  const ties = h.map((c, i) => ({ label: c.text, i })).filter((c) => /^tb\d+$/i.test(key(c.label)) || /^bh|^sb|buchholz|sonneborn|performance|rp|fide rtg/i.test(key(c.label)));
+  const knownStandardCols = new Set([ri, si, ni, pi, rating, fedCol, clubCol, fideIdCol, sexCol, typCol].filter((i) => i >= 0));
+  const tieBreakCols = [];
+  h.forEach((cell, index) => {
+    if (knownStandardCols.has(index)) return;
+    const textClean = cell.text.trim();
+    if (!textClean) return;
+    const k = key(textClean);
+    if (/^tb\d+$/i.test(k) || !knownStandardCols.has(index) && pi >= 0 && index > pi) {
+      tieBreakCols.push({ label: cell.text || `TB${tieBreakCols.length + 1}`, index });
+    }
+  });
+  const tieBreakDescriptions = parseTieBreakDescriptions(html);
   const players = [];
   const seen = /* @__PURE__ */ new Set();
   for (const row of rows.slice(hi + 1)) {
     if (findCol(row, ["name"]) >= 0) continue;
     if (row.length < h.length || !row[ni]?.text) continue;
     const link = row[ni].raw.match(/href\s*=\s*["']([^"']+)["']/i)?.[1];
-    const snr = link ? new URL(textOf(link), source).searchParams.get("snr") : row[si]?.text;
+    const snr = link ? new URL(textOf(link), source).searchParams.get("snr") : si >= 0 ? row[si]?.text : null;
     if (!snr || !/^\d+$/.test(snr)) continue;
     if (seen.has(snr)) continue;
     seen.add(snr);
-    const tieValues = Object.fromEntries(ties.map((t) => [t.label, num(row[t.i]?.text || "")]));
-    const bhVal = tieValues["BH"] ?? tieValues["Buchholz"] ?? tieValues["TB1"] ?? tieValues["TB2"] ?? null;
-    const sbVal = tieValues["SB"] ?? tieValues["Sonneborn-Berger"] ?? tieValues["Sonneborn"] ?? null;
-    const rpVal = tieValues["Rp"] ?? tieValues["RP"] ?? tieValues["Performance"] ?? null;
+    const tieValues = {};
+    const tieBreakArray = [];
+    tieBreakCols.forEach((col, idx) => {
+      const rawCellVal = row[col.index]?.text || "";
+      const numVal = num(rawCellVal);
+      tieValues[col.label] = numVal;
+      tieValues[`TB${idx + 1}`] = numVal;
+      tieValues[`HS${idx + 1}`] = numVal;
+      tieValues[`H\u1EC7 s\u1ED1 ${idx + 1}`] = numVal;
+      tieBreakArray.push(numVal);
+    });
+    const hs1 = tieBreakArray[0] ?? null;
+    const hs2 = tieBreakArray[1] ?? null;
+    const hs3 = tieBreakArray[2] ?? null;
+    const hs4 = tieBreakArray[3] ?? null;
+    const hs5 = tieBreakArray[4] ?? null;
+    const parsedRank = ri >= 0 ? num(row[ri]?.text || "") : null;
+    const finalRank = parsedRank ?? players.length + 1;
     const rowSex = sexCol >= 0 ? row[sexCol]?.text : "";
     const gender = /f|w|nữ|nu|female/i.test(rowSex) || /nữ/i.test(group) ? "N\u1EEF" : "Nam";
     const rowTyp = typCol >= 0 ? row[typCol]?.text : "";
     const ageGroupMatch = group.match(/(?:U\d+|Trẻ|Nhi|Tiểu học|THCS|THPT)/i)?.[0] || rowTyp || "To\xE0n gi\u1EA3i";
+    const rawFed = fedCol >= 0 ? row[fedCol]?.text || null : null;
+    const rawClub = clubCol >= 0 ? row[clubCol]?.text || "" : "";
+    const finalClub = rawClub ? formatClubName(rawClub) : rawFed ? formatClubName(rawFed) : "";
     players.push({
       id: `${id}-${snr}`,
       snr,
       name: row[ni].text,
       fideId: fideIdCol >= 0 ? row[fideIdCol]?.text || null : null,
-      club: club >= 0 ? row[club].text : "",
+      federation: rawFed,
+      club: finalClub,
       rating: rating >= 0 ? num(row[rating].text) : null,
-      rank: ri >= 0 ? num(row[ri].text) : null,
+      rank: finalRank,
       points: pi >= 0 ? num(row[pi].text) : null,
-      buchholz: bhVal,
-      sonnebornBerger: sbVal,
-      performance: rpVal,
+      hs1,
+      hs2,
+      hs3,
+      hs4,
+      hs5,
+      buchholz: hs2 ?? hs1,
+      sonnebornBerger: hs3,
+      performance: null,
       gender,
       ageGroup: ageGroupMatch,
       ties: tieValues,
+      tieBreakArray,
       rounds: [],
       detailsLoaded: false
     });
@@ -159,10 +412,221 @@ function parseRanking(html, source, group) {
     source,
     updated: (/* @__PURE__ */ new Date()).toISOString(),
     players,
-    tieLabels: ties.map((t) => t.label),
+    tieLabels: tieBreakCols.map((t, idx) => `H\u1EC7 s\u1ED1 ${idx + 1}`),
+    tieBreakDescriptions,
     rounds: total ? Number(total[1]) : null,
     published: false
   };
+}
+async function populateRoundsForTournament(tour) {
+  try {
+    const { url } = validateSource(tour.source);
+    const playerMap = /* @__PURE__ */ new Map();
+    const snrToPlayerMap = /* @__PURE__ */ new Map();
+    for (const p of tour.players) {
+      playerMap.set(p.id, { ...p, rounds: p.rounds ? [...p.rounds] : [] });
+      snrToPlayerMap.set(p.snr, playerMap.get(p.id));
+    }
+    let maxRound = tour.rounds || 0;
+    const maxRdsToFetch = tour.rounds && tour.rounds > 0 ? tour.rounds : 11;
+    const roundFetchPromises = [];
+    for (let rd = 1; rd <= maxRdsToFetch; rd++) {
+      const rdUrl = new URL(url.href);
+      rdUrl.searchParams.set("lan", "1");
+      rdUrl.searchParams.set("art", "2");
+      rdUrl.searchParams.set("rd", String(rd));
+      roundFetchPromises.push(
+        fetchSource(rdUrl).then((html) => ({ rd, html })).catch(() => ({ rd, html: null }))
+      );
+    }
+    const roundResults = await Promise.all(roundFetchPromises);
+    for (const { rd, html } of roundResults) {
+      if (!html) continue;
+      const rows = rowsOf(html);
+      const hi = rows.findIndex((r) => findCol(r, ["white", "trang", "weiss", "blancs"]) >= 0 && findCol(r, ["black", "den", "schwarz", "noirs"]) >= 0);
+      if (hi < 0) continue;
+      const h = rows[hi];
+      let boCol = findCol(h, ["bo", "board", "ban", "banso", "br", "tbl", "tisch", "b"]);
+      const wCol = findCol(h, ["white", "trang", "weiss", "blancs"]);
+      const bCol = findCol(h, ["black", "den", "schwarz", "noirs"]);
+      const resCol = findCol(h, ["result", "res", "ketqua", "kq", "ergebnis"]);
+      if (boCol < 0 && h.length > 0) {
+        const col0Key = key(h[0].text || "");
+        if ((/^bo|^br|^tbl|^tisch|^ban|^#|^no/i.test(col0Key) || col0Key === "") && 0 !== wCol && 0 !== bCol) {
+          boCol = 0;
+        }
+      }
+      const noCols = h.map((c, i) => ({ i, text: key(c.text) })).filter((c) => c.text === "no" || c.text === "stnr" || c.text === "sno" || c.text === "stno" || c.text === "sbd");
+      const wNoCol = noCols[0]?.i ?? wCol - 1;
+      const bNoCol = noCols[1]?.i ?? bCol + 1;
+      let foundPairs = false;
+      for (const r of rows.slice(hi + 1)) {
+        if (!r[wCol] || !r[bCol]) continue;
+        const nameW = r[wCol]?.text;
+        const nameB = r[bCol]?.text;
+        const snrW = r[wNoCol]?.text || r[wCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        const snrB = r[bNoCol]?.text || r[bCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        if (!nameW || !nameB || !snrW || !snrB) continue;
+        const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
+        const rawRes = resCol >= 0 ? r[resCol]?.text.trim() : "";
+        let scoreW = null;
+        let scoreB = null;
+        let resFmt = rawRes;
+        let roundStatus = "scheduled";
+        if (/1\s*[-:]\s*0/i.test(rawRes)) {
+          scoreW = 1;
+          scoreB = 0;
+          resFmt = "1 - 0";
+          roundStatus = "played";
+        } else if (/0\s*[-:]\s*1/i.test(rawRes)) {
+          scoreW = 0;
+          scoreB = 1;
+          resFmt = "0 - 1";
+          roundStatus = "played";
+        } else if (/½|0\.5|1\/2/i.test(rawRes)) {
+          scoreW = 0.5;
+          scoreB = 0.5;
+          resFmt = "\xBD - \xBD";
+          roundStatus = "played";
+        } else {
+          scoreW = null;
+          scoreB = null;
+          resFmt = rawRes || "\u2014";
+          roundStatus = "scheduled";
+        }
+        const pW = snrToPlayerMap.get(snrW);
+        const pB = snrToPlayerMap.get(snrB);
+        if (pW) {
+          const existingR = pW.rounds.find((x) => x.round === rd);
+          if (existingR) {
+            if (bo != null) existingR.board = bo;
+            if (roundStatus === "played") existingR.status = "played";
+            if (scoreW != null) existingR.score = scoreW;
+            if (resFmt && resFmt !== "\u2014") existingR.result = resFmt;
+            if (nameB) existingR.opponent = nameB;
+            if (pB) existingR.opponentId = pB.id;
+            existingR.playerWhite = nameW;
+            existingR.playerBlack = nameB;
+          } else {
+            pW.rounds.push({
+              round: rd,
+              board: bo,
+              opponentId: pB ? pB.id : `${tour.id}-${snrB}`,
+              opponent: nameB,
+              rating: null,
+              color: "white",
+              status: roundStatus,
+              score: scoreW,
+              playerWhite: nameW,
+              playerBlack: nameB,
+              result: resFmt
+            });
+          }
+        }
+        if (pB) {
+          const existingR = pB.rounds.find((x) => x.round === rd);
+          if (existingR) {
+            if (bo != null) existingR.board = bo;
+            if (roundStatus === "played") existingR.status = "played";
+            if (scoreB != null) existingR.score = scoreB;
+            if (resFmt && resFmt !== "\u2014") existingR.result = resFmt;
+            if (nameW) existingR.opponent = nameW;
+            if (pW) existingR.opponentId = pW.id;
+            existingR.playerWhite = nameW;
+            existingR.playerBlack = nameB;
+          } else {
+            pB.rounds.push({
+              round: rd,
+              board: bo,
+              opponentId: pW ? pW.id : `${tour.id}-${snrW}`,
+              opponent: nameW,
+              rating: null,
+              color: "black",
+              status: roundStatus,
+              score: scoreB,
+              playerWhite: nameW,
+              playerBlack: nameB,
+              result: resFmt
+            });
+          }
+        }
+        foundPairs = true;
+      }
+      if (foundPairs && rd > maxRound) maxRound = rd;
+    }
+    if (maxRound === 0) {
+      try {
+        const url79 = new URL(url.href);
+        url79.searchParams.set("lan", "1");
+        url79.searchParams.set("art", "79");
+        url79.searchParams.set("zeilen", "99999");
+        const html79 = await fetchSource(url79);
+        for (const p of snrToPlayerMap.values()) {
+          try {
+            const playerWithRounds = parsePlayer(html79, p, tour);
+            if (playerWithRounds.rounds && playerWithRounds.rounds.length > 0) {
+              p.rounds = playerWithRounds.rounds;
+              for (const r of p.rounds) {
+                if (r.round > maxRound) maxRound = r.round;
+              }
+            }
+          } catch {
+          }
+        }
+      } catch {
+      }
+    }
+    const allPlayedRounds = /* @__PURE__ */ new Set();
+    const allKnownRounds = /* @__PURE__ */ new Set();
+    for (const p of snrToPlayerMap.values()) {
+      if (p.rounds) {
+        for (const r of p.rounds) {
+          allKnownRounds.add(r.round);
+          if (r.status === "played") {
+            allPlayedRounds.add(r.round);
+          }
+        }
+      }
+    }
+    const completedRounds = allPlayedRounds.size > 0 ? Math.max(...Array.from(allPlayedRounds)) : 0;
+    let currentRound = 0;
+    if (allKnownRounds.size > 0) {
+      currentRound = Math.max(...Array.from(allKnownRounds));
+    } else if (tour.rounds && tour.rounds > 0) {
+      currentRound = 1;
+    }
+    tour.completedRounds = completedRounds;
+    tour.currentRound = currentRound;
+    tour.players = tour.players.map((p) => {
+      const updatedP = snrToPlayerMap.get(p.snr) || p;
+      if (updatedP.rounds && updatedP.rounds.length > 0) {
+        updatedP.rounds.sort((a, b) => a.round - b.round);
+      }
+      const s = stats(updatedP);
+      return {
+        ...updatedP,
+        points: s.points,
+        detailsLoaded: updatedP.rounds && updatedP.rounds.length > 0,
+        games: s.played,
+        totalGames: s.played,
+        whiteGames: s.whiteGames,
+        blackGames: s.blackGames,
+        wins: s.wins,
+        draws: s.draws,
+        losses: s.losses,
+        whiteWins: s.whiteWins,
+        whiteDraws: s.whiteDraws,
+        whiteLosses: s.whiteLosses,
+        blackWins: s.blackWins,
+        blackDraws: s.blackDraws,
+        blackLosses: s.blackLosses
+      };
+    });
+    if (maxRound > 0) tour.rounds = maxRound;
+  } catch (err) {
+    console.warn("Auto-populating rounds notice:", err);
+  }
+  return tour;
 }
 async function importTournament(source, group) {
   const { url } = validateSource(source);
@@ -178,7 +642,8 @@ async function importTournament(source, group) {
     url.searchParams.set("art", "0");
     html = await fetchSource(url);
   }
-  return parseRanking(html, url.href, group);
+  const tour = parseRanking(html, url.href, group);
+  return await populateRoundsForTournament(tour);
 }
 async function detectCategories(source) {
   const { url, id } = validateSource(source);
@@ -215,38 +680,23 @@ async function detectCategories(source) {
       if (!tStr || tStr.includes("Tournament-Database") || tStr.includes("Error")) return null;
       const isMatch = tStr.includes(baseName) || baseName.length > 6 && tStr.includes(baseName.slice(0, 15)) || catId === targetId;
       if (!isMatch) return null;
-      let groupName = tStr;
+      seenIds.add(catIdStr);
+      let catGroup = "To\xE0n gi\u1EA3i";
       if (tStr.includes(" - ")) {
         const parts = tStr.split(" - ");
-        if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(parts[0])) {
-          groupName = parts[0].trim();
-        } else {
-          groupName = parts[parts.length - 1].trim();
-        }
-      }
-      let pCount = 0;
-      if (hi >= 0) {
-        const h = pageRows[hi];
-        const ni = findCol(h, ["name"]);
-        const si = findCol(h, ["sno", "no"]);
-        const playerSeen = /* @__PURE__ */ new Set();
-        for (const row of pageRows.slice(hi + 1)) {
-          if (findCol(row, ["name"]) >= 0) continue;
-          if (row.length < h.length || !row[ni]?.text) continue;
-          const link = row[ni].raw.match(/href\s*=\s*["']([^"']+)["']/i)?.[1];
-          const snr = link ? new URL(textOf(link), u.href).searchParams.get("snr") : row[si]?.text;
-          if (snr && /^\d+$/.test(snr) && !playerSeen.has(snr)) {
-            playerSeen.add(snr);
-            pCount++;
+        for (const p of parts) {
+          if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(p) && !p.includes(baseName)) {
+            catGroup = p.trim();
+            break;
           }
         }
       }
-      seenIds.add(catIdStr);
+      const pCount = pageRows.slice(hi + 1).filter((r) => r.length >= 3 && /^\d+$/.test(r[0]?.text || r[1]?.text || "")).length;
       return {
         id: catIdStr,
-        group: groupName,
+        group: catGroup,
         name: tStr,
-        source: `https://chess-results.com/tnr${catId}.aspx?lan=1`,
+        source: u.href,
         playerCount: pCount,
         status: "Ch\u01B0a nh\u1EADp"
       };
@@ -254,16 +704,19 @@ async function detectCategories(source) {
       return null;
     }
   }
-  const range = 35;
-  const scanIds = [];
-  for (let offset = -range; offset <= range; offset++) {
-    scanIds.push(targetId + offset);
+  const promises = [];
+  for (let offset = -20; offset <= 20; offset++) {
+    promises.push(checkTnrId(targetId + offset));
   }
-  const CONCURRENCY = 8;
-  for (let i = 0; i < scanIds.length; i += CONCURRENCY) {
-    const chunk = scanIds.slice(i, i + CONCURRENCY);
-    const chunkResults = await Promise.all(chunk.map((id2) => checkTnrId(id2)));
-    for (const res of chunkResults) {
+  const results = await Promise.all(promises);
+  for (const res of results) {
+    if (res) categories.push(res);
+  }
+  const links = html.matchAll(/href\s*=\s*["']([^"']*tnr(\d+)\.aspx[^"']*)["']/gi);
+  for (const m of links) {
+    const cId = parseInt(m[2], 10);
+    if (!isNaN(cId) && !seenIds.has(String(cId))) {
+      const res = await checkTnrId(cId);
       if (res) categories.push(res);
     }
   }
@@ -276,23 +729,47 @@ async function detectCategories(source) {
 }
 function parsePlayer(html, p, t) {
   const rows = rowsOf(html);
-  const hi = rows.findIndex((r) => findCol(r, ["rd", "round"]) >= 0 && findCol(r, ["name"]) >= 0 && findCol(r, ["res", "result"]) >= 0);
+  const hi = rows.findIndex(
+    (r) => findCol(r, ["rd", "round", "vong", "v", "r"]) >= 0 && findCol(r, ["name", "ten", "doithu", "doi", "opp", "opponent", "kytthu", "hoten", "spieler"]) >= 0 && findCol(r, ["res", "result", "ketqua", "kq", "ergebnis"]) >= 0
+  );
   if (hi < 0) throw Error("Ch\u01B0a \u0111\u1ECDc \u0111\u01B0\u1EE3c chi ti\u1EBFt t\u1EEBng v\xF2ng t\u1EEB ngu\u1ED3n. \u0110i\u1EC3m v\xE0 th\u1EE9 h\u1EA1ng v\u1EABn \u0111\u01B0\u1EE3c gi\u1EEF theo b\u1EA3ng \u0111\xE3 \u0111\u1ED3ng b\u1ED9.");
   const h = rows[hi];
-  const ni = findCol(h, ["name"]);
-  const ri = findCol(h, ["rd", "round"]);
-  const boCol = findCol(h, ["bo", "board", "ban"]);
-  const rating = findCol(h, ["rtg", "rating"]);
-  const res = findCol(h, ["res", "result"]);
+  const ni = findCol(h, ["name", "ten", "doithu", "doi", "opp", "opponent", "kytthu", "hoten", "spieler"]);
+  const ri = findCol(h, ["rd", "round", "vong", "v", "r"]);
+  const boCol = findCol(h, ["bo", "board", "ban", "banso", "br", "tbl", "tisch", "b"]);
+  const rating = findCol(h, ["rtg", "rating", "elo"]);
+  const res = findCol(h, ["res", "result", "ketqua", "kq", "ergebnis"]);
+  const colorCol = findCol(h, ["wb", "w/b", "color", "mau", "mauquan", "ks", "k/s", "farbe"]);
   const rounds = [];
+  const seenRounds = /* @__PURE__ */ new Set();
   for (const r of rows.slice(hi + 1)) {
     const rd = num(r[ri]?.text || "");
     if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
-    const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
-    let raw = r.slice(res).map((c) => c.text).join(" ").trim();
-    const colorCell = r.find((c) => /^[wb]$/i.test(c.text));
-    const color = colorCell?.text.toLowerCase() === "w" ? "white" : colorCell?.text.toLowerCase() === "b" ? "black" : null;
-    raw = raw.replace(/\b[wb]\b/ig, "").trim();
+    if (seenRounds.has(rd)) continue;
+    let bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
+    const existingP = p.rounds?.find((x) => x.round === rd);
+    if (bo === null && existingP && existingP.board != null) {
+      bo = existingP.board;
+    }
+    let rawCellText = res >= 0 ? (r[res]?.text || "").trim() : "";
+    if (!rawCellText || /^(?:w|b|trắng|đen|\(w\)|\(b\))$/i.test(rawCellText)) {
+      if (res >= 0 && r[res + 1] && /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(r[res + 1].text.trim())) {
+        rawCellText = r[res + 1].text.trim();
+      } else {
+        const scoreCell = r.find((c) => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
+        rawCellText = scoreCell?.text.trim() || rawCellText;
+      }
+    }
+    let colorStr = colorCol >= 0 ? (r[colorCol]?.text || "").trim() : "";
+    if (!colorStr) {
+      const colorCell = r.find((c) => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
+      colorStr = colorCell?.text || "";
+    }
+    const colorClean = colorStr.trim().toLowerCase();
+    const isWhite = /^w|\(w\)/i.test(colorClean) || colorClean === "white" || colorClean === "tr\u1EAFng";
+    const isBlack = /^b|\(b\)/i.test(colorClean) || colorClean === "black" || colorClean === "\u0111en";
+    const color = isWhite ? "white" : isBlack ? "black" : null;
+    let raw = rawCellText.replace(/\b[wb]\b/ig, "").trim();
     const opponent = r[ni].text;
     const snr = r[ni].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
     let status = "unknown", score = null;
@@ -302,17 +779,41 @@ function parsePlayer(html, p, t) {
     } else if (/^[+−-]$|[kK]$|forfeit/i.test(raw)) {
       status = "forfeit";
       score = raw === "+" ? 1 : /^[−-]$/.test(raw) ? 0 : num(raw.replace(/[kK]/g, ""));
-    } else if (raw === "" || raw === "*") {
-      status = "pending";
+    } else if (raw === "" || raw === "*" || raw === "\u2014") {
+      status = "scheduled";
+      score = null;
+    } else if (/1\s*[-:]\s*0/i.test(raw)) {
+      status = "played";
+      score = 1;
+    } else if (/0\s*[-:]\s*1/i.test(raw)) {
+      status = "played";
+      score = 0;
+    } else if (/½|0\.5|1\/2/i.test(raw)) {
+      status = "played";
+      score = 0.5;
     } else {
       score = num(raw);
       if (score !== null && [0, 0.5, 1].includes(score)) status = "played";
-      else score = null;
+      else {
+        score = null;
+        status = "scheduled";
+      }
     }
+    seenRounds.add(rd);
     if (rounds.some((x) => x.round === rd)) continue;
     const resFmt = score === 1 ? "1 - 0" : score === 0.5 ? "\xBD - \xBD" : score === 0 ? "0 - 1" : raw || "\u2014";
-    const playerWhite = color === "white" ? p.name : opponent;
-    const playerBlack = color === "black" ? p.name : opponent;
+    let playerWhite;
+    let playerBlack;
+    if (status === "bye" || /bye|not paired|unpaired|spielfrei/i.test(opponent)) {
+      playerWhite = p.name;
+      playerBlack = "Mi\u1EC5n \u0111\u1EA5u (Bye)";
+    } else if (color === "black") {
+      playerWhite = opponent;
+      playerBlack = p.name;
+    } else {
+      playerWhite = p.name;
+      playerBlack = opponent;
+    }
     rounds.push({
       round: rd,
       board: bo,
@@ -330,34 +831,158 @@ function parsePlayer(html, p, t) {
   }
   if (!rounds.length) throw Error("Ngu\u1ED3n ch\u01B0a c\xF3 chi ti\u1EBFt c\xE1c v\xE1n \u0111\u1EA5u.");
   rounds.sort((a, b) => a.round - b.round);
-  return { ...p, rounds, detailsLoaded: true };
+  let warning = void 0;
+  if (p.points !== null && p.points !== void 0) {
+    const sumPlayed = rounds.reduce((acc, r) => acc + (r.score ?? 0), 0);
+    if (Math.abs(sumPlayed - p.points) > 0.01) {
+      warning = `[SYNC WARNING] Player "${p.name}" (SNR ${p.snr}) official ranking score (${p.points}) differs from calculated match score (${sumPlayed})`;
+      console.warn(warning);
+    }
+  }
+  return { ...p, rounds, warning, detailsLoaded: true };
 }
 async function importPlayer(t, p) {
-  const { url } = validateSource(t.source);
-  url.searchParams.set("lan", "1");
-  url.searchParams.set("art", "9");
-  url.searchParams.set("snr", p.snr);
-  url.searchParams.delete("rd");
-  return parsePlayer(await fetchSource(url), p, t);
+  const existingPlayer = t.players?.find((x) => x.id === p.id || x.snr === p.snr);
+  if (existingPlayer && existingPlayer.rounds && existingPlayer.rounds.length > 0 && existingPlayer.rounds.some((r) => r.color === "white" || r.color === "black")) {
+    const s2 = stats(existingPlayer);
+    return {
+      ...existingPlayer,
+      detailsLoaded: true,
+      games: s2.played,
+      totalGames: s2.played,
+      whiteGames: s2.whiteGames,
+      blackGames: s2.blackGames,
+      wins: s2.wins,
+      draws: s2.draws,
+      losses: s2.losses,
+      whiteWins: s2.whiteWins,
+      whiteDraws: s2.whiteDraws,
+      whiteLosses: s2.whiteLosses,
+      blackWins: s2.blackWins,
+      blackDraws: s2.blackDraws,
+      blackLosses: s2.blackLosses
+    };
+  }
+  const updatedTour = await populateRoundsForTournament({ ...t, players: t.players || [p] });
+  let fetchedP = updatedTour.players?.find((x) => x.id === p.id || x.snr === p.snr) || p;
+  if (!fetchedP.rounds || fetchedP.rounds.length === 0) {
+    try {
+      const url9 = new URL(t.source);
+      url9.searchParams.set("lan", "1");
+      url9.searchParams.set("art", "9");
+      url9.searchParams.set("snr", p.snr);
+      url9.searchParams.delete("rd");
+      fetchedP = parsePlayer(await fetchSource(url9), p, t);
+    } catch {
+    }
+  }
+  if (fetchedP.rounds) {
+    fetchedP.rounds = fetchedP.rounds.map((r) => {
+      let color = r.color;
+      if (!color) {
+        if (r.playerWhite && r.playerWhite.trim().toLowerCase() === fetchedP.name.trim().toLowerCase()) color = "white";
+        else if (r.playerBlack && r.playerBlack.trim().toLowerCase() === fetchedP.name.trim().toLowerCase()) color = "black";
+        else color = r.round % 2 === 1 ? "white" : "black";
+      }
+      return { ...r, color };
+    });
+  }
+  const s = stats(fetchedP);
+  return {
+    ...fetchedP,
+    detailsLoaded: true,
+    games: s.played,
+    totalGames: s.played,
+    whiteGames: s.whiteGames,
+    blackGames: s.blackGames,
+    wins: s.wins,
+    draws: s.draws,
+    losses: s.losses,
+    whiteWins: s.whiteWins,
+    whiteDraws: s.whiteDraws,
+    whiteLosses: s.whiteLosses,
+    blackWins: s.blackWins,
+    blackDraws: s.blackDraws,
+    blackLosses: s.blackLosses
+  };
 }
 
 // lib/default-admin.ts
 var DEFAULT_ADMIN = { "username": "admin", "salt": "edd812c082e94ee178697eb85216b90335f20eb48a823d55", "hash": "bbdb86f851c40bbe3a9cf297d250250bc1f944083de61f1f405517261e81982b", "iterations": 1e5 };
 
 // lib/api.ts
-import { writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 var enc = new TextEncoder();
 var hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 var unhex = (s) => Uint8Array.from(s.match(/.{2}/g).map((x) => parseInt(x, 16)));
 var random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
 var digest = async (s) => hex(await crypto.subtle.digest("SHA-256", enc.encode(s)));
-function json(data, status = 200, headers = {}) {
-  return Response.json(data, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...headers } });
+function getCorsHeaders(req) {
+  let reqOrigin = req?.headers.get("origin");
+  if (!reqOrigin && req?.headers.get("referer")) {
+    try {
+      reqOrigin = new URL(req.headers.get("referer")).origin;
+    } catch {
+    }
+  }
+  const allowOrigin = reqOrigin || "*";
+  const headers = {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-CSRF-Token, X-Admin-Token, X-Requested-With",
+    "Access-Control-Max-Age": "86400"
+  };
+  if (allowOrigin !== "*") {
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
+  return headers;
+}
+function json(data, status = 200, headers = {}, req) {
+  const cors = getCorsHeaders(req);
+  return Response.json(data, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      ...cors,
+      ...headers
+    }
+  });
 }
 function message(e) {
   const m = e instanceof Error ? e.message : "";
   return /SQL|D1|binding|syntax|database|fetch failed/i.test(m) ? "Kho d\u1EEF li\u1EC7u t\u1EA1m th\u1EDDi kh\xF4ng s\u1EB5n s\xE0ng. Vui l\xF2ng th\u1EED l\u1EA1i." : m || "C\xF3 l\u1ED7i x\u1EA3y ra. Vui l\xF2ng th\u1EED l\u1EA1i.";
+}
+async function ensureSlidesTableSchema(db2) {
+  try {
+    const row = await db2.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='tournament_slides'").first();
+    if (row?.sql && (row.sql.includes("FOREIGN KEY") || row.sql.includes("`tournament_id` text NOT NULL") || row.sql.includes("tournament_id TEXT NOT NULL"))) {
+      await db2.prepare("PRAGMA foreign_keys=OFF;").run();
+      await db2.prepare(`
+        CREATE TABLE IF NOT EXISTS tournament_slides_fix (
+          id TEXT PRIMARY KEY NOT NULL,
+          tournament_id TEXT,
+          title TEXT NOT NULL,
+          slide_type TEXT NOT NULL,
+          image_url TEXT NOT NULL,
+          display_order INTEGER DEFAULT 0 NOT NULL,
+          status TEXT DEFAULT 'active' NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `).run();
+      await db2.prepare("INSERT OR IGNORE INTO tournament_slides_fix SELECT id, tournament_id, title, slide_type, image_url, display_order, status, created_at, updated_at FROM tournament_slides;").run();
+      await db2.prepare("DROP TABLE tournament_slides;").run();
+      await db2.prepare("ALTER TABLE tournament_slides_fix RENAME TO tournament_slides;").run();
+      await db2.prepare("CREATE INDEX IF NOT EXISTS idx_tournament_slides_tournament ON tournament_slides (tournament_id);").run();
+      await db2.prepare("PRAGMA foreign_keys=ON;").run();
+    }
+    await migrateLocalImagesToPermanent(db2);
+  } catch (e) {
+    console.error("Error healing tournament_slides schema:", e);
+  }
 }
 async function passwordOK(password, c) {
   const key2 = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
@@ -366,11 +991,229 @@ async function passwordOK(password, c) {
   for (let i = 0; i < actual.length; i++) diff |= actual.charCodeAt(i) ^ (c.hash.charCodeAt(i) || 0);
   return diff === 0;
 }
+async function uploadToSupabaseStorage(fileBuffer, filename, mimeType) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const bucket = process.env.SUPABASE_BUCKET || "banners";
+    if (!supabaseUrl || !supabaseKey) {
+      return null;
+    }
+    const baseUrl = supabaseUrl.replace(/\/+$/, "");
+    const uploadUrl = `${baseUrl}/storage/v1/object/${bucket}/${filename}`;
+    let res = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${supabaseKey}`,
+        "apikey": supabaseKey,
+        "Content-Type": mimeType,
+        "x-upsert": "true"
+      },
+      body: fileBuffer
+    });
+    if (!res.ok) {
+      const bucketUrl = `${baseUrl}/storage/v1/bucket`;
+      await fetch(bucketUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${supabaseKey}`,
+          "apikey": supabaseKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ id: bucket, name: bucket, public: true })
+      }).catch(() => {
+      });
+      res = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${supabaseKey}`,
+          "apikey": supabaseKey,
+          "Content-Type": mimeType,
+          "x-upsert": "true"
+        },
+        body: fileBuffer
+      });
+    }
+    if (res.ok) {
+      return `${baseUrl}/storage/v1/object/public/${bucket}/${filename}`;
+    }
+  } catch (err) {
+    console.error("Supabase upload error:", err);
+  }
+  return null;
+}
+async function uploadToCloudinary(fileBuffer, filename, mimeType) {
+  try {
+    let cloudName = process.env.CLOUDINARY_CLOUD_NAME || "";
+    let apiKey = process.env.CLOUDINARY_API_KEY || "";
+    let apiSecret = process.env.CLOUDINARY_API_SECRET || "";
+    let uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || "";
+    const cloudinaryUrl = process.env.CLOUDINARY_URL;
+    if (cloudinaryUrl) {
+      try {
+        const u = new URL(cloudinaryUrl);
+        if (u.protocol === "cloudinary:") {
+          apiKey = decodeURIComponent(u.username);
+          apiSecret = decodeURIComponent(u.password);
+          cloudName = u.hostname;
+        }
+      } catch {
+      }
+    }
+    if (!cloudName) {
+      return null;
+    }
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+    const formData = new FormData();
+    const blob = new Blob([Buffer.from(fileBuffer)], { type: mimeType });
+    formData.append("file", blob, filename);
+    formData.append("folder", "covuasaigon");
+    if (apiKey && apiSecret) {
+      const timestamp = Math.floor(Date.now() / 1e3).toString();
+      formData.append("api_key", apiKey);
+      formData.append("timestamp", timestamp);
+      const toSign = `folder=covuasaigon&timestamp=${timestamp}${apiSecret}`;
+      const signature = createHash("sha1").update(toSign).digest("hex");
+      formData.append("signature", signature);
+    } else if (uploadPreset) {
+      formData.append("upload_preset", uploadPreset);
+    } else {
+      return null;
+    }
+    const res = await fetch(uploadUrl, {
+      method: "POST",
+      body: formData
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Cloudinary upload error:", res.status, errText);
+      return null;
+    }
+    const data = await res.json();
+    if (data && data.secure_url) {
+      return data.secure_url;
+    }
+  } catch (err) {
+    console.error("Cloudinary upload exception:", err);
+  }
+  return null;
+}
+async function migrateLocalImagesToPermanent(db2) {
+  try {
+    const slides = await db2.prepare("SELECT id, image_url FROM tournament_slides WHERE image_url LIKE '/uploads/%' OR image_url LIKE 'http%://%/uploads/%'").all();
+    if (slides && slides.results && slides.results.length > 0) {
+      for (const row of slides.results) {
+        const localPath = row.image_url.replace(/^https?:\/\/[^\/]+/, "");
+        const relPath = localPath.replace(/^\//, "");
+        const possibleFiles = [
+          resolve(process.cwd(), relPath),
+          resolve(process.cwd(), "public", relPath),
+          resolve(process.cwd(), "web", relPath),
+          resolve(process.cwd(), "../public", relPath),
+          resolve(process.cwd(), "../web", relPath)
+        ];
+        let fileBuffer = null;
+        for (const f of possibleFiles) {
+          try {
+            if (existsSync(f)) {
+              fileBuffer = readFileSync(f);
+              break;
+            }
+          } catch {
+          }
+        }
+        if (fileBuffer && fileBuffer.length > 0) {
+          const mimeType = relPath.endsWith(".png") ? "image/png" : relPath.endsWith(".webp") ? "image/webp" : "image/jpeg";
+          const filename = `migrated_${row.id}.${relPath.split(".").pop() || "png"}`;
+          let newUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = `data:${mimeType};base64,${Buffer.from(fileBuffer).toString("base64")}`;
+          if (newUrl) {
+            await db2.prepare("UPDATE tournament_slides SET image_url = ? WHERE id = ?").bind(newUrl, row.id).run();
+          }
+        }
+      }
+    }
+    const banners = await db2.prepare("SELECT id, image_url FROM home_banners WHERE image_url LIKE '/uploads/%' OR image_url LIKE 'http%://%/uploads/%'").all();
+    if (banners && banners.results && banners.results.length > 0) {
+      for (const row of banners.results) {
+        const localPath = row.image_url.replace(/^https?:\/\/[^\/]+/, "");
+        const relPath = localPath.replace(/^\//, "");
+        const possibleFiles = [
+          resolve(process.cwd(), relPath),
+          resolve(process.cwd(), "public", relPath),
+          resolve(process.cwd(), "web", relPath),
+          resolve(process.cwd(), "../public", relPath),
+          resolve(process.cwd(), "../web", relPath)
+        ];
+        let fileBuffer = null;
+        for (const f of possibleFiles) {
+          try {
+            if (existsSync(f)) {
+              fileBuffer = readFileSync(f);
+              break;
+            }
+          } catch {
+          }
+        }
+        if (fileBuffer && fileBuffer.length > 0) {
+          const mimeType = relPath.endsWith(".png") ? "image/png" : relPath.endsWith(".webp") ? "image/webp" : "image/jpeg";
+          const filename = `migrated_banner_${row.id}.${relPath.split(".").pop() || "png"}`;
+          let newUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = `data:${mimeType};base64,${Buffer.from(fileBuffer).toString("base64")}`;
+          if (newUrl) {
+            await db2.prepare("UPDATE home_banners SET image_url = ? WHERE id = ?").bind(newUrl, row.id).run();
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error migrating local images:", e);
+  }
+}
+async function ensureSyncLogsTableSchema(db2) {
+  try {
+    await db2.prepare(`
+      CREATE TABLE IF NOT EXISTS sync_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        tournament_id TEXT,
+        tournament_name TEXT,
+        url TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        status TEXT NOT NULL,
+        players_updated INTEGER DEFAULT 0 NOT NULL,
+        message TEXT NOT NULL
+      )
+    `).run();
+    await db2.prepare("CREATE INDEX IF NOT EXISTS idx_sync_logs_created ON sync_logs (created_at);").run();
+  } catch (e) {
+    console.error("Error ensuring sync_logs table schema:", e);
+  }
+}
 function createApi(db2, sourceParam = {}) {
   const source = {
     tournament: sourceParam.tournament ?? importTournament,
     player: sourceParam.player ?? importPlayer,
     detect: sourceParam.detect ?? detectCategories
+  };
+  const logSync = async (item) => {
+    try {
+      await ensureSyncLogsTableSchema(db2);
+      const id = crypto.randomUUID();
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      await db2.prepare(`
+        INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, item.tournament_id || null, item.tournament_name || null, item.url, now, item.status, item.players_updated, item.message.slice(0, 1e3)).run();
+      await db2.prepare(`
+        DELETE FROM sync_logs WHERE id NOT IN (
+          SELECT id FROM sync_logs ORDER BY created_at DESC LIMIT 200
+        )
+      `).run();
+    } catch (e) {
+      console.error("logSync error:", e);
+    }
   };
   const log = async (ok, m) => {
     await db2.batch([db2.prepare("INSERT INTO logs (id, created, ok, message) VALUES (?, ?, ?, ?)").bind(crypto.randomUUID(), (/* @__PURE__ */ new Date()).toISOString(), ok ? 1 : 0, m.slice(0, 500)), db2.prepare("DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY created DESC LIMIT 100)")]);
@@ -379,13 +1222,48 @@ function createApi(db2, sourceParam = {}) {
     const now = Date.now();
     return (await db2.prepare("INSERT INTO locks (key, until) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until WHERE locks.until < ?").bind(k, now + s * 1e3, now).run()).meta.changes > 0;
   };
+  const formatTourObj = (r) => {
+    if (!r) return null;
+    let t;
+    try {
+      t = JSON.parse(r.payload);
+    } catch {
+      return null;
+    }
+    const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
+    const syncInterval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
+    const lastSync = r.last_sync || t.lastSync || t.last_sync || null;
+    const nextSync = r.next_sync || t.nextSync || t.next_sync || null;
+    return {
+      ...t,
+      published: !!r.published,
+      autoSync,
+      auto_sync: autoSync,
+      syncInterval,
+      sync_interval: syncInterval,
+      lastSync,
+      last_sync: lastSync,
+      nextSync,
+      next_sync: nextSync
+    };
+  };
   const get = async (id, admin = false) => {
-    const r = await db2.prepare(admin ? "SELECT payload,published FROM tournaments WHERE id = ?" : "SELECT payload,published FROM tournaments WHERE id = ? AND published = 1").bind(id).first();
-    return r ? { ...JSON.parse(r.payload), published: !!r.published } : null;
+    let r = null;
+    try {
+      r = await db2.prepare(admin ? "SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE id = ?" : "SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE id = ? AND published = 1").bind(id).first();
+    } catch {
+      r = await db2.prepare(admin ? "SELECT payload,published FROM tournaments WHERE id = ?" : "SELECT payload,published FROM tournaments WHERE id = ? AND published = 1").bind(id).first();
+    }
+    return formatTourObj(r);
   };
   const list = async (admin = false) => {
-    const r = await db2.prepare(admin ? "SELECT payload,published FROM tournaments ORDER BY updated DESC" : "SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC").all();
-    return r.results.map((x) => ({ ...JSON.parse(x.payload), published: !!x.published }));
+    let res = { results: [] };
+    try {
+      res = await db2.prepare(admin ? "SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments ORDER BY updated DESC" : "SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE published = 1 ORDER BY updated DESC").all();
+    } catch {
+      res = await db2.prepare(admin ? "SELECT payload,published FROM tournaments ORDER BY updated DESC" : "SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC").all();
+    }
+    return res.results.map(formatTourObj).filter((x) => x !== null);
   };
   async function session(req) {
     const token = req.headers.get("cookie")?.match(/(?:^|;\s*)sgc_session=([a-f0-9]{64})(?:;|$)/)?.[1] || req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || req.headers.get("x-admin-token")?.trim();
@@ -398,32 +1276,171 @@ function createApi(db2, sourceParam = {}) {
   return async function handle(req, ip = "unknown") {
     let action = "";
     let authorized = false;
+    let b = {};
     try {
       const u = new URL(req.url);
-      const path = u.pathname;
+      const path = u.pathname.replace(/\/+$/, "") || "/";
       if (req.method === "GET") {
-        if (path === "/api/tournaments") return json({ tournaments: await list() });
+        if (path === "/api/tournaments" || path.startsWith("/api/tournaments/")) {
+          const tid = u.searchParams.get("id") || u.searchParams.get("t") || path.replace(/^\/api\/tournaments\/?/, "");
+          if (tid && tid !== "tournaments") {
+            const t = await get(tid, true);
+            if (!t) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404, {}, req);
+            let matchesList = [];
+            try {
+              const r = await db2.prepare("SELECT * FROM matches WHERE category_id = ? OR player_id LIKE ? ORDER BY round ASC, board ASC").bind(tid, `${tid}-%`).all();
+              matchesList = r.results || [];
+            } catch {
+            }
+            const playersWithStats = (t.players || []).map((p) => {
+              const s2 = stats(p);
+              return {
+                ...p,
+                games: s2.played,
+                totalGames: s2.played,
+                whiteGames: s2.whiteGames,
+                blackGames: s2.blackGames,
+                wins: s2.wins,
+                draws: s2.draws,
+                losses: s2.losses,
+                whiteWins: s2.whiteWins,
+                whiteDraws: s2.whiteDraws,
+                whiteLosses: s2.whiteLosses,
+                blackWins: s2.blackWins,
+                blackDraws: s2.blackDraws,
+                blackLosses: s2.blackLosses
+              };
+            });
+            return json({
+              tournament: { ...t, players: playersWithStats },
+              players: playersWithStats,
+              rounds: t.rounds || (matchesList.length ? Math.max(...matchesList.map((m) => m.round || 0)) : null),
+              matches: matchesList
+            }, 200, {}, req);
+          }
+          return json({ tournaments: await list() }, 200, {}, req);
+        }
         if (path === "/api/banners") {
           try {
             const r = await db2.prepare("SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC").all();
-            return json({ banners: r.results });
+            return json({ banners: r.results }, 200, {}, req);
           } catch {
-            return json({ banners: [] });
+            return json({ banners: [] }, 200, {}, req);
           }
         }
         if (path === "/api/admin") {
           const s2 = await session(req);
-          if (!s2) return json({ admin: false });
+          if (!s2) return json({ admin: false }, 200, {}, req);
           let bannersList = [];
+          let prizesList = [];
+          let slidesList = [];
+          let syncLogsList = [];
           try {
             bannersList = (await db2.prepare("SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC").all()).results;
           } catch {
           }
-          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results });
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            const r = await db2.prepare("SELECT * FROM prizes ORDER BY created_at DESC").all();
+            prizesList = (r.results || []).map((p) => ({
+              ...p,
+              tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
+            }));
+          } catch {
+          }
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            const r = await db2.prepare("SELECT * FROM tournament_slides ORDER BY display_order ASC, created_at DESC").all();
+            slidesList = (r.results || []).map((item) => ({
+              ...item,
+              tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
+            }));
+          } catch {
+          }
+          try {
+            await ensureSyncLogsTableSchema(db2);
+            const r = await db2.prepare("SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50").all();
+            syncLogsList = r.results || [];
+          } catch {
+          }
+          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
+        }
+        if (path === "/api/slides" || path === "/api/slides/home" || path === "/api/home/slides") {
+          await ensureSlidesTableSchema(db2);
+          const tid = u.searchParams.get("tournament_id") || u.searchParams.get("t") || "";
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            let sqlStr = "SELECT * FROM tournament_slides WHERE status = 'active'";
+            const params = [];
+            if (tid) {
+              sqlStr += " AND tournament_id = ?";
+              params.push(tid);
+            }
+            sqlStr += " ORDER BY display_order ASC, created_at DESC";
+            const r = params.length > 0 ? await db2.prepare(sqlStr).bind(...params).all() : await db2.prepare(sqlStr).all();
+            const slidesList = (r.results || []).map((item) => ({
+              ...item,
+              tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
+            }));
+            if (path === "/api/slides/home" || path === "/api/home/slides") {
+              return json(slidesList, 200, {}, req);
+            }
+            return json({ slides: slidesList }, 200, {}, req);
+          } catch (err) {
+            console.error("Error fetching tournament_slides:", err);
+            if (path === "/api/slides/home" || path === "/api/home/slides") {
+              return json([], 200, {}, req);
+            }
+            return json({ slides: [] }, 200, {}, req);
+          }
+        }
+        if (path === "/api/admin/slides") {
+          await ensureSlidesTableSchema(db2);
+          const s2 = await session(req);
+          if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n." }, 401, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            const tid = u.searchParams.get("tournament_id") || u.searchParams.get("t") || "";
+            let sqlStr = "SELECT * FROM tournament_slides";
+            const params = [];
+            if (tid) {
+              sqlStr += " WHERE tournament_id = ?";
+              params.push(tid);
+            }
+            sqlStr += " ORDER BY display_order ASC, created_at DESC";
+            const r = params.length > 0 ? await db2.prepare(sqlStr).bind(...params).all() : await db2.prepare(sqlStr).all();
+            const slides = (r.results || []).map((item) => ({
+              ...item,
+              tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
+            }));
+            return json({ slides }, 200, {}, req);
+          } catch {
+            return json({ slides: [] }, 200, {}, req);
+          }
+        }
+        if (path === "/api/admin/prizes") {
+          const s2 = await session(req);
+          if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n." }, 401, {}, req);
+          try {
+            const tList = await list(true);
+            const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+            const r = await db2.prepare("SELECT * FROM prizes ORDER BY created_at DESC").all();
+            const prizes = (r.results || []).map((p) => ({
+              ...p,
+              tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
+            }));
+            return json({ prizes }, 200, {}, req);
+          } catch {
+            return json({ prizes: [] }, 200, {}, req);
+          }
         }
         if (path === "/api/player") {
           const id = u.searchParams.get("t") || "", pid = u.searchParams.get("p") || "";
-          if (!/^\d+$/.test(id) || !/^\d+-\d+$/.test(pid)) return json({ error: "M\xE3 h\u1ED3 s\u01A1 kh\xF4ng h\u1EE3p l\u1EC7." }, 400);
+          if (!/^\d+$/.test(id) || !/^\d+-\d+$/.test(pid)) return json({ error: "M\xE3 h\u1ED3 s\u01A1 kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
           let t = await get(id);
           let p = t?.players.find((p2) => p2.id === pid);
           if (!p) {
@@ -434,63 +1451,142 @@ function createApi(db2, sourceParam = {}) {
               p = catTour.players.find((x) => x.id === pid);
             }
           }
-          if (!t || !p) return json({ error: "H\u1ED3 s\u01A1 kh\xF4ng t\u1ED3n t\u1EA1i ho\u1EB7c gi\u1EA3i \u0111ang \u1EA9n." }, 404);
-          const r = await db2.prepare("SELECT payload FROM details WHERE tid = ? AND pid = ? AND revision = ?").bind(id, pid, t.updated).first();
-          if (r) return json({ player: JSON.parse(r.payload) });
-          if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429);
-          const player = await source.player(t, p);
-          try {
-            for (const rd of player.rounds) {
-              const matchId = `${player.id}-rd${rd.round}`;
-              await db2.prepare(`
-                INSERT INTO matches (id, category_id, player_id, player_white, player_black, round, board, result, score, color, opponent_id, opponent_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                  player_white = excluded.player_white,
-                  player_black = excluded.player_black,
-                  board = excluded.board,
-                  result = excluded.result,
-                  score = excluded.score
-              `).bind(matchId, p.categoryId || t.id, player.id, rd.playerWhite || null, rd.playerBlack || null, rd.round, rd.board || null, rd.result || null, rd.score, rd.color || null, rd.opponentId || null, rd.opponent || null).run();
+          if (!t || !p) return json({ error: "H\u1ED3 s\u01A1 kh\xF4ng t\u1ED3n t\u1EA1i ho\u1EB7c gi\u1EA3i \u0111ang \u1EA9n." }, 404, {}, req);
+          const rank = p.rank ?? t.players.findIndex((x) => x.id === pid) + 1;
+          const totalPlayers = t.players ? t.players.length : 0;
+          const club = p.club || formatClubName(p.federation || "");
+          let playerObj;
+          const r = await db2.prepare("SELECT payload FROM details WHERE tid = ? AND pid = ? ORDER BY revision DESC LIMIT 1").bind(id, pid).first();
+          if (r) {
+            playerObj = JSON.parse(r.payload);
+            if (p.rounds && p.rounds.length > 0) {
+              playerObj.rounds = playerObj.rounds || [];
+              for (const sch of p.rounds) {
+                const existingIdx = playerObj.rounds.findIndex((x) => x.round === sch.round);
+                if (existingIdx >= 0) {
+                  if (sch.board != null) playerObj.rounds[existingIdx].board = sch.board;
+                  if (sch.playerWhite && !playerObj.rounds[existingIdx].playerWhite) playerObj.rounds[existingIdx].playerWhite = sch.playerWhite;
+                  if (sch.playerBlack && !playerObj.rounds[existingIdx].playerBlack) playerObj.rounds[existingIdx].playerBlack = sch.playerBlack;
+                } else {
+                  playerObj.rounds.push(sch);
+                }
+              }
+              playerObj.rounds.sort((a, b2) => a.round - b2.round);
             }
-          } catch {
+          } else {
+            if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429, {}, req);
+            playerObj = await source.player(t, p);
+            try {
+              for (const rd of playerObj.rounds) {
+                const matchId = `${playerObj.id}-rd${rd.round}`;
+                await db2.prepare(`
+                  INSERT INTO matches (id, category_id, player_id, player_white, player_black, round, board, result, score, color, opponent_id, opponent_name)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET
+                    player_white = excluded.player_white,
+                    player_black = excluded.player_black,
+                    board = excluded.board,
+                    result = excluded.result,
+                    score = excluded.score,
+                    color = excluded.color
+                `).bind(matchId, p.categoryId || t.id, playerObj.id, rd.playerWhite || null, rd.playerBlack || null, rd.round, rd.board || null, rd.result || null, rd.score, rd.color || null, rd.opponentId || null, rd.opponent || null).run();
+              }
+            } catch {
+            }
+            await db2.prepare("INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload").bind(id, pid, t.updated, JSON.stringify(playerObj)).run();
           }
-          await db2.prepare("INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload").bind(id, pid, t.updated, JSON.stringify(player)).run();
-          return json({ player });
+          if (playerObj.rounds) {
+            playerObj.rounds = playerObj.rounds.map((r2) => {
+              let color = r2.color;
+              if (!color) {
+                if (r2.playerWhite && r2.playerWhite.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = "white";
+                else if (r2.playerBlack && r2.playerBlack.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = "black";
+                else color = r2.round % 2 === 1 ? "white" : "black";
+              }
+              return { ...r2, color };
+            });
+          }
+          const s2 = stats(playerObj);
+          const nextMatch = getNextMatch(playerObj);
+          const medalPrediction = getMedal(rank, p.ageGroup || t.group, t.prizes);
+          const fullPlayer = {
+            ...playerObj,
+            hs1: p.hs1 ?? playerObj.hs1 ?? null,
+            hs2: p.hs2 ?? playerObj.hs2 ?? null,
+            hs3: p.hs3 ?? playerObj.hs3 ?? null,
+            hs4: p.hs4 ?? playerObj.hs4 ?? null,
+            hs5: p.hs5 ?? playerObj.hs5 ?? null,
+            tieBreakArray: p.tieBreakArray || playerObj.tieBreakArray || [],
+            ties: p.ties || playerObj.ties || {},
+            rank,
+            totalPlayers,
+            club,
+            games: s2.played,
+            totalGames: s2.played,
+            whiteGames: s2.whiteGames,
+            blackGames: s2.blackGames,
+            whiteWins: s2.whiteWins,
+            whiteDraws: s2.whiteDraws,
+            whiteLosses: s2.whiteLosses,
+            blackWins: s2.blackWins,
+            blackDraws: s2.blackDraws,
+            blackLosses: s2.blackLosses,
+            wins: s2.wins,
+            draws: s2.draws,
+            losses: s2.losses,
+            nextMatch,
+            medalPrediction
+          };
+          return json({
+            player: fullPlayer,
+            rank,
+            totalPlayers,
+            club,
+            games: s2.played,
+            totalGames: s2.played,
+            whiteGames: s2.whiteGames,
+            blackGames: s2.blackGames,
+            whiteWins: s2.whiteWins,
+            whiteDraws: s2.whiteDraws,
+            whiteLosses: s2.whiteLosses,
+            blackWins: s2.blackWins,
+            blackDraws: s2.blackDraws,
+            blackLosses: s2.blackLosses,
+            wins: s2.wins,
+            draws: s2.draws,
+            losses: s2.losses,
+            nextMatch,
+            medalPrediction
+          }, 200, {}, req);
         }
-        return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404);
+        return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404, {}, req);
       }
       if (req.method === "OPTIONS") {
-        return new Response(null, { status: 204 });
+        return new Response(null, { status: 204, headers: getCorsHeaders(req) });
       }
-      if (req.method !== "POST") return json({ error: "Ph\u01B0\u01A1ng th\u1EE9c kh\xF4ng h\u1EE3p l\u1EC7." }, 405);
+      if (!["POST", "PUT", "DELETE"].includes(req.method)) return json({ error: "Ph\u01B0\u01A1ng th\u1EE9c kh\xF4ng h\u1EE3p l\u1EC7." }, 405, {}, req);
       const reqOrigin = req.headers.get("origin");
-      const allowedOrigins = new Set([
-        u.origin,
-        process.env.FRONTEND_URL,
-        process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : "",
-        process.env.PUBLIC_ORIGIN,
-        process.env.API_URL,
-        "https://chess-find-m38a.vercel.app",
-        "https://co-vua-sai-gon.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:3000"
-      ].filter(Boolean));
-      const isAllowedOrigin = (orig) => {
-        if (!orig) return true;
-        const cleanOrig = orig.replace(/\/$/, "");
-        if (allowedOrigins.has(orig) || allowedOrigins.has(cleanOrig)) return true;
-        if (cleanOrig.endsWith(".vercel.app")) return true;
-        if (cleanOrig.includes("localhost") || cleanOrig.includes("127.0.0.1")) return true;
-        return false;
-      };
-      if (reqOrigin && !isAllowedOrigin(reqOrigin) && process.env.NODE_ENV === "production") {
-        return json({ error: "Y\xEAu c\u1EA7u kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y thao t\xE1c trong \u1EE9ng d\u1EE5ng." }, 403);
+      if (reqOrigin && process.env.NODE_ENV === "production" && path !== "/api/auth/login") {
+        const allowedSet = /* @__PURE__ */ new Set([
+          u.origin,
+          ...[
+            process.env.FRONTEND_URL,
+            process.env.PUBLIC_ORIGIN,
+            process.env.API_URL,
+            process.env.ALLOWED_ORIGINS
+          ].filter(Boolean).flatMap((x) => x.split(",").map((s2) => s2.trim()))
+        ]);
+        const isVercelApp = reqOrigin.endsWith(".vercel.app");
+        const isValidWebOrigin = reqOrigin.startsWith("https://") || reqOrigin.startsWith("http://");
+        const isAllowed = allowedSet.has("*") || allowedSet.has(reqOrigin) || isVercelApp || reqOrigin === u.origin || isValidWebOrigin;
+        if (!isAllowed) {
+          return json({ error: "Y\xEAu c\u1EA7u kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y thao t\xE1c trong \u1EE9ng d\u1EE5ng." }, 403, {}, req);
+        }
       }
-      if (path === "/api/admin/upload-image") {
+      if (path === "/api/admin/upload-image" || path === "/api/admin/slides/upload") {
         const s2 = await session(req);
-        if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401);
-        if (req.headers.get("x-csrf-token") !== s2.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403);
+        if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401, {}, req);
+        if (req.headers.get("x-csrf-token") !== s2.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
         let fileBuffer = null;
         let fileExt = "";
         let originalName = "";
@@ -498,12 +1594,12 @@ function createApi(db2, sourceParam = {}) {
         if (contentType.includes("multipart/form-data")) {
           try {
             const formData = await req.formData();
-            const file = formData.get("image");
-            if (!file) return json({ error: "Kh\xF4ng t\xECm th\u1EA5y file \u1EA3nh trong y\xEAu c\u1EA7u." }, 400);
-            originalName = file.name || "image.png";
+            const file = formData.get("image") || formData.get("file");
+            if (!file) return json({ error: "Kh\xF4ng t\xECm th\u1EA5y file \u1EA3nh trong y\xEAu c\u1EA7u." }, 400, {}, req);
+            originalName = file.name || "slide.png";
             fileBuffer = new Uint8Array(await file.arrayBuffer());
           } catch (e) {
-            return json({ error: "L\u1ED7i \u0111\u1ECDc file upload: " + e.message }, 400);
+            return json({ error: "L\u1ED7i \u0111\u1ECDc file upload: " + e.message }, 400, {}, req);
           }
         } else {
           try {
@@ -521,10 +1617,10 @@ function createApi(db2, sourceParam = {}) {
           }
         }
         if (!fileBuffer || fileBuffer.length === 0) {
-          return json({ error: "D\u1EEF li\u1EC7u h\xECnh \u1EA3nh kh\xF4ng h\u1EE3p l\u1EC7." }, 400);
+          return json({ error: "D\u1EEF li\u1EC7u h\xECnh \u1EA3nh kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
         }
-        if (fileBuffer.length > 5 * 1024 * 1024) {
-          return json({ error: "Dung l\u01B0\u1EE3ng h\xECnh \u1EA3nh qu\xE1 l\u1EDBn (T\u1ED1i \u0111a 5MB)." }, 400);
+        if (fileBuffer.length > 8 * 1024 * 1024) {
+          return json({ error: "Dung l\u01B0\u1EE3ng h\xECnh \u1EA3nh qu\xE1 l\u1EDBn (T\u1ED1i \u0111a 8MB)." }, 400, {}, req);
         }
         if (!fileExt) {
           fileExt = originalName.split(".").pop()?.toLowerCase() || "";
@@ -532,82 +1628,173 @@ function createApi(db2, sourceParam = {}) {
         if (fileExt === "jpeg") fileExt = "jpg";
         const ALLOWED_EXTS = ["jpg", "png", "webp"];
         if (!ALLOWED_EXTS.includes(fileExt)) {
-          return json({ error: "Ch\u1EC9 ch\u1EA5p nh\u1EADn c\xE1c \u0111\u1ECBnh d\u1EA1ng \u1EA3nh: .jpg, .jpeg, .png, .webp (Kh\xF4ng cho ph\xE9p .exe, .js, .php, .svg)." }, 400);
+          return json({ error: "Ch\u1EC9 ch\u1EA5p nh\u1EADn c\xE1c \u0111\u1ECBnh d\u1EA1ng \u1EA3nh: .jpg, .jpeg, .png, .webp (Kh\xF4ng cho ph\xE9p .exe, .js, .php, .svg)." }, 400, {}, req);
         }
         const head = fileBuffer.slice(0, 12);
         const isPng = head[0] === 137 && head[1] === 80 && head[2] === 78 && head[3] === 71;
         const isJpg = head[0] === 255 && head[1] === 216 && head[2] === 255;
         const isWebp = head[0] === 82 && head[1] === 73 && head[2] === 70 && head[3] === 70 && head[8] === 87 && head[9] === 69 && head[10] === 66 && head[11] === 80;
         if (!isPng && !isJpg && !isWebp) {
-          return json({ error: "N\u1ED9i dung file kh\xF4ng \u0111\xFAng \u0111\u1ECBnh d\u1EA1ng \u1EA3nh h\u1EE3p l\u1EC7 (.jpg, .png, .webp)." }, 400);
+          return json({ error: "N\u1ED9i dung file kh\xF4ng \u0111\xFAng \u0111\u1ECBnh d\u1EA1ng \u1EA3nh h\u1EE3p l\u1EC7 (.jpg, .png, .webp)." }, 400, {}, req);
         }
         const safeExt = isPng ? "png" : isJpg ? "jpg" : "webp";
-        const filename = `${crypto.randomUUID()}.${safeExt}`;
-        const relativeUrl = `/uploads/banner/${filename}`;
-        try {
-          const targetDirs = [
-            resolve(process.cwd(), "../web/uploads/banner"),
-            resolve(process.cwd(), "web/uploads/banner"),
-            resolve(process.cwd(), "public/uploads/banner"),
-            resolve(process.cwd(), "../public/uploads/banner"),
-            resolve(process.cwd(), "release/web/uploads/banner")
-          ];
-          for (const dir of targetDirs) {
-            try {
-              mkdirSync(dir, { recursive: true });
-              writeFileSync(resolve(dir, filename), fileBuffer);
-            } catch {
-            }
-          }
-        } catch {
-          return json({ error: "Kh\xF4ng th\u1EC3 l\u01B0u file \u1EA3nh v\xE0o h\u1EC7 th\u1ED1ng." }, 500);
+        const mimeType = isPng ? "image/png" : isJpg ? "image/jpeg" : "image/webp";
+        const filename = `${path.includes("slides") ? "slide_" : ""}${crypto.randomUUID()}.${safeExt}`;
+        let publicUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+        if (!publicUrl) {
+          publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
         }
-        await log(true, `Upload banner image th\xE0nh c\xF4ng: ${relativeUrl}`);
-        return json({ url: relativeUrl, message: "Upload \u1EA3nh th\xE0nh c\xF4ng!" });
+        if (!publicUrl) {
+          const base64Str = Buffer.from(fileBuffer).toString("base64");
+          publicUrl = `data:${mimeType};base64,${base64Str}`;
+        }
+        await log(true, `Upload image th\xE0nh c\xF4ng: ${publicUrl.startsWith("data:") ? "Embedded Data URL" : publicUrl}`);
+        return json({ url: publicUrl, message: "Upload \u1EA3nh th\xE0nh c\xF4ng!" }, 200, {}, req);
       }
-      if (Number(req.headers.get("content-length") || 0) > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413);
+      if (Number(req.headers.get("content-length") || 0) > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413, {}, req);
       const raw = await req.text();
-      if (raw.length > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413);
-      let b;
-      try {
-        b = JSON.parse(raw);
-      } catch {
-        return json({ error: "D\u1EEF li\u1EC7u kh\xF4ng h\u1EE3p l\u1EC7." }, 400);
+      if (raw.length > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413, {}, req);
+      b = {};
+      if (raw && raw.trim()) {
+        try {
+          b = JSON.parse(raw);
+        } catch {
+          return json({ error: "D\u1EEF li\u1EC7u kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+        }
       }
       if (path === "/api/auth/login") {
         const k = "login:" + await digest(ip), now = Date.now();
         await db2.prepare("INSERT INTO auth_attempts (key,count,reset) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count = CASE WHEN auth_attempts.reset < ? THEN 1 ELSE auth_attempts.count + 1 END, reset = CASE WHEN auth_attempts.reset < ? THEN excluded.reset ELSE auth_attempts.reset END").bind(k, now + 9e5, now, now).run();
         const at = await db2.prepare("SELECT count FROM auth_attempts WHERE key = ?").bind(k).first();
-        if ((at?.count || 0) > 8) return json({ error: "\u0110\u0103ng nh\u1EADp sai qu\xE1 nhi\u1EC1u l\u1EA7n. Vui l\xF2ng th\u1EED l\u1EA1i sau 15 ph\xFAt." }, 429);
-        if (typeof b.username !== "string" || typeof b.password !== "string" || b.password.length > 256) return json({ error: "T\xEAn \u0111\u0103ng nh\u1EADp ho\u1EB7c m\u1EADt kh\u1EA9u kh\xF4ng \u0111\xFAng." }, 401);
+        if ((at?.count || 0) > 8) return json({ error: "\u0110\u0103ng nh\u1EADp sai qu\xE1 nhi\u1EC1u l\u1EA7n. Vui l\xF2ng th\u1EED l\u1EA1i sau 15 ph\xFAt." }, 429, {}, req);
+        if (typeof b.username !== "string" || typeof b.password !== "string" || b.password.length > 256) return json({ error: "T\xEAn \u0111\u0103ng nh\u1EADp ho\u1EB7c m\u1EADt kh\u1EA9u kh\xF4ng \u0111\xFAng." }, 401, {}, req);
         await db2.prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO NOTHING").bind("admin_credentials", JSON.stringify(DEFAULT_ADMIN)).run();
         const row = await db2.prepare("SELECT value FROM settings WHERE key = ?").bind("admin_credentials").first();
-        let c = row ? JSON.parse(row.value) : DEFAULT_ADMIN;
-        let ok = b.username === c.username && await passwordOK(b.password, c);
-        if (!ok && b.username === "admin") {
-          const validPass = process.env.ADMIN_PASSWORD || "Tuan@123";
-          if (b.password === validPass || await passwordOK(b.password, DEFAULT_ADMIN)) {
-            ok = true;
-            await db2.prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind("admin_credentials", JSON.stringify(DEFAULT_ADMIN)).run();
-          }
-        }
-        if (!ok) return json({ error: "T\xEAn \u0111\u0103ng nh\u1EADp ho\u1EB7c m\u1EADt kh\u1EA9u kh\xF4ng \u0111\xFAng." }, 401);
+        const c = row ? JSON.parse(row.value) : DEFAULT_ADMIN;
+        const envAdminPass = process.env.ADMIN_PASSWORD || process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
+        const validPass = envAdminPass || "Tuan@123";
+        const ok = b.password === validPass || await passwordOK(b.password, c) || await passwordOK(b.password, DEFAULT_ADMIN);
+        if (b.username !== c.username && b.username !== "admin" || !ok) return json({ error: "T\xEAn \u0111\u0103ng nh\u1EADp ho\u1EB7c m\u1EADt kh\u1EA9u kh\xF4ng \u0111\xFAng." }, 401, {}, req);
         const token = random(), csrf = random();
         await db2.batch([db2.prepare("DELETE FROM admin_sessions WHERE expires < ?").bind(now), db2.prepare("DELETE FROM auth_attempts WHERE key = ?").bind(k), db2.prepare("INSERT INTO admin_sessions (hash,csrf,expires) VALUES (?,?,?)").bind(await digest(token), csrf, now + 288e5)]);
-        return json({ admin: true, token, csrf, message: "\u0110\u0103ng nh\u1EADp th\xE0nh c\xF4ng." }, 200, { "Set-Cookie": cookie(req, token) });
+        return json({ admin: true, token, csrf, message: "\u0110\u0103ng nh\u1EADp th\xE0nh c\xF4ng." }, 200, { "Set-Cookie": cookie(req, token) }, req);
       }
       const s = await session(req);
-      if (!s) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401);
-      if (req.headers.get("x-csrf-token") !== s.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403);
+      if (!s) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401, {}, req);
+      if (req.headers.get("x-csrf-token") !== s.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
       authorized = true;
+      if (path === "/api/tournaments/bulk") {
+        const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x).trim()).filter(Boolean) : [];
+        if (ids.length === 0) return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t 1 gi\u1EA3i \u0111\u1EA5u \u0111\u1EC3 x\xF3a." }, 400, {}, req);
+        const statements = [];
+        for (const id of ids) {
+          statements.push(
+            db2.prepare("DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM players WHERE tournament_id = ? OR category_id = ?").bind(id, id),
+            db2.prepare("DELETE FROM categories WHERE tournament_id = ? OR id = ?").bind(id, id),
+            db2.prepare("DELETE FROM details WHERE tid = ? OR tid LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM sync_logs WHERE tournament_id = ?").bind(id),
+            db2.prepare("DELETE FROM previews WHERE payload LIKE ?").bind(`%"id":"${id}"%`),
+            db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(id)
+          );
+        }
+        await db2.batch(statements);
+        await log(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} gi\u1EA3i \u0111\u1EA5u.`);
+        return json({ message: `\u0110\xE3 x\xF3a th\xE0nh c\xF4ng ${ids.length} gi\u1EA3i \u0111\u1EA5u.` }, 200, {}, req);
+      }
+      if (path === "/api/admin/slides" || path.startsWith("/api/admin/slides/")) {
+        await ensureSlidesTableSchema(db2);
+        const slideId = path.replace(/^\/api\/admin\/slides\/?/, "");
+        if (req.method === "DELETE" || b.action === "slide_delete") {
+          const targetId = slideId || String(b.id || "");
+          if (!targetId) return json({ error: "M\xE3 slide kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+          await db2.prepare("DELETE FROM tournament_slides WHERE id = ?").bind(targetId).run();
+          await log(true, `\u0110\xE3 x\xF3a slide id: ${targetId}`);
+          return json({ message: "\u0110\xE3 x\xF3a slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng." }, 200, {}, req);
+        }
+        const rawTid = b.tournament_id || b.tournamentId;
+        const tournament_id = rawTid && String(rawTid).trim() !== "global" ? String(rawTid).trim() : null;
+        const title = String(b.title || "").trim();
+        const slide_type = String(b.slide_type || b.slideType || b.type || "\u0110i\u1EC1u l\u1EC7 gi\u1EA3i \u0111\u1EA5u").trim();
+        const image_url = String(b.image || b.image_url || b.imageUrl || "").trim();
+        const display_order = Number(b.sort_order ?? b.sortOrder ?? b.display_order ?? b.displayOrder ?? 0);
+        const status = b.status === "hidden" || b.status === 0 || b.status === false ? "hidden" : "active";
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        if (!title) return json({ error: "Vui l\xF2ng nh\u1EADp Ti\xEAu \u0111\u1EC1 slide." }, 400, {}, req);
+        if (!image_url) return json({ error: "Vui l\xF2ng t\u1EA3i l\xEAn h\xECnh \u1EA3nh slide." }, 400, {}, req);
+        if (req.method === "PUT" || slideId && slideId !== "" || b.action === "slide_update") {
+          const targetId = slideId || String(b.id || "");
+          if (!targetId) return json({ error: "M\xE3 slide kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+          await db2.prepare(`
+            UPDATE tournament_slides
+            SET tournament_id = ?, title = ?, slide_type = ?, image_url = ?, display_order = ?, status = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(tournament_id, title, slide_type, image_url, display_order, status, now, targetId).run();
+          await log(true, `C\u1EADp nh\u1EADt slide: ${title}`);
+          return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt slide th\xE0nh c\xF4ng." }, 200, {}, req);
+        }
+        const id = crypto.randomUUID();
+        await db2.prepare(`
+          INSERT INTO tournament_slides (id, tournament_id, title, slide_type, image_url, display_order, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, tournament_id, title, slide_type, image_url, display_order, status, now, now).run();
+        await log(true, `T\u1EA1o slide m\u1EDBi: ${title}`);
+        return json({ message: "\u0110\xE3 t\u1EA1o slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng.", id }, 200, {}, req);
+      }
+      if (path === "/api/admin/prizes" || path.startsWith("/api/admin/prizes/")) {
+        const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, "");
+        if (req.method === "DELETE" || b.action === "prize_delete") {
+          const targetId = prizeId || String(b.id || "");
+          if (!targetId) return json({ error: "M\xE3 gi\u1EA3i th\u01B0\u1EDFng kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+          await db2.prepare("DELETE FROM prizes WHERE id = ?").bind(targetId).run();
+          await log(true, `\u0110\xE3 x\xF3a c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng id: ${targetId}`);
+          return json({ message: "\u0110\xE3 x\xF3a quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng." }, 200, {}, req);
+        }
+        const tournament_id = String(b.tournament_id || b.tournamentId || "").trim();
+        const group_name = String(b.group_name || b.groupName || b.group || "").trim();
+        const rank_from = Number(b.rank_from ?? b.rankFrom ?? 1);
+        const rank_to = Number(b.rank_to ?? b.rankTo ?? 1);
+        const medal = String(b.medal || "").trim();
+        const prize_name = String(b.prize_name || b.prizeName || "").trim();
+        const description = String(b.description || "").trim();
+        const now = (/* @__PURE__ */ new Date()).toISOString();
+        if (!tournament_id) return json({ error: "Vui l\xF2ng ch\u1ECDn Gi\u1EA3i \u0111\u1EA5u (tournament required)." }, 400, {}, req);
+        if (!group_name) return json({ error: "Vui l\xF2ng nh\u1EADp B\u1EA3ng/Nh\xF3m \u0111\u1EA5u (group required)." }, 400, {}, req);
+        if (!prize_name) return json({ error: "Vui l\xF2ng nh\u1EADp T\xEAn gi\u1EA3i th\u01B0\u1EDFng." }, 400, {}, req);
+        if (isNaN(rank_from) || isNaN(rank_to) || rank_from < 1 || rank_to < 1) {
+          return json({ error: "Th\u1EE9 h\u1EA1ng t\u1EEB - \u0111\u1EBFn ph\u1EA3i l\xE0 s\u1ED1 nguy\xEAn d\u01B0\u01A1ng >= 1." }, 400, {}, req);
+        }
+        if (rank_from > rank_to) {
+          return json({ error: "Rank From (h\u1EA1ng t\u1EEB) ph\u1EA3i nh\u1ECF h\u01A1n ho\u1EB7c b\u1EB1ng Rank To (h\u1EA1ng \u0111\u1EBFn)." }, 400, {}, req);
+        }
+        if (req.method === "PUT" || prizeId && prizeId !== "" || b.action === "prize_update") {
+          const targetId = prizeId || String(b.id || "");
+          if (!targetId) return json({ error: "M\xE3 gi\u1EA3i th\u01B0\u1EDFng kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+          await db2.prepare(`
+            UPDATE prizes
+            SET tournament_id = ?, group_name = ?, rank_from = ?, rank_to = ?, medal = ?, prize_name = ?, description = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, now, targetId).run();
+          await log(true, `C\u1EADp nh\u1EADt c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng: ${prize_name}`);
+          return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng." }, 200, {}, req);
+        }
+        const id = crypto.randomUUID();
+        await db2.prepare(`
+          INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, now, now).run();
+        await log(true, `T\u1EA1o c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng m\u1EDBi: ${prize_name}`);
+        return json({ message: "\u0110\xE3 t\u1EA1o quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng.", id }, 200, {}, req);
+      }
       if (path === "/api/auth/logout") {
         await db2.prepare("DELETE FROM admin_sessions WHERE hash = ?").bind(s.hash).run();
-        return json({ message: "\u0110\xE3 \u0111\u0103ng xu\u1EA5t." }, 200, { "Set-Cookie": cookie(req, "", 0) });
+        return json({ message: "\u0110\xE3 \u0111\u0103ng xu\u1EA5t." }, 200, { "Set-Cookie": cookie(req, "", 0) }, req);
       }
-      if (path !== "/api/admin") return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404);
+      if (path !== "/api/admin") return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404, {}, req);
       action = String(b.action || "");
       if (action === "detect") {
-        if (!await lock("source-detect", 2)) return json({ error: "Vui l\xF2ng ch\u1EDD v\xE0i gi\xE2y gi\u1EEFa c\xE1c l\u1EA7n ki\u1EC3m tra." }, 429);
+        if (!await lock("source-detect", 2)) return json({ error: "Vui l\xF2ng ch\u1EDD v\xE0i gi\xE2y gi\u1EEFa c\xE1c l\u1EA7n ki\u1EC3m tra." }, 429, {}, req);
         const info = await source.detect(String(b.url || ""));
         for (const cat of info.categories) {
           try {
@@ -617,28 +1804,28 @@ function createApi(db2, sourceParam = {}) {
             cat.status = "Ch\u01B0a nh\u1EADp";
           }
         }
-        return json({ detected: info });
+        return json({ detected: info }, 200, {}, req);
       }
       if (action === "preview") {
-        if (!await lock("source-preview", 3)) return json({ error: "Vui l\xF2ng ch\u1EDD v\xE0i gi\xE2y gi\u1EEFa c\xE1c l\u1EA7n ki\u1EC3m tra ngu\u1ED3n." }, 429);
+        if (!await lock("source-preview", 3)) return json({ error: "Vui l\xF2ng ch\u1EDD v\xE0i gi\xE2y gi\u1EEFa c\xE1c l\u1EA7n ki\u1EC3m tra ngu\u1ED3n." }, 429, {}, req);
         const t = await source.tournament(String(b.url || ""), String(b.group || ""));
         if (b.name?.trim()) t.name = String(b.name).trim().slice(0, 240);
         const token = random();
         await db2.batch([db2.prepare("DELETE FROM previews WHERE expires < ?").bind(Date.now()), db2.prepare("INSERT INTO previews (token,owner,payload,expires) VALUES (?,?,?,?)").bind(token, s.hash, JSON.stringify(t), Date.now() + 6e5)]);
-        return json({ tournament: t, token });
+        return json({ tournament: t, token }, 200, {}, req);
       }
       if (action === "save") {
         const row = await db2.prepare("SELECT payload FROM previews WHERE token = ? AND owner = ? AND expires > ?").bind(String(b.token || ""), s.hash, Date.now()).first();
-        if (!row) return json({ error: "B\u1EA3n ki\u1EC3m tra \u0111\xE3 h\u1EBFt h\u1EA1n. H\xE3y ki\u1EC3m tra ngu\u1ED3n l\u1EA1i." }, 400);
+        if (!row) return json({ error: "B\u1EA3n ki\u1EC3m tra \u0111\xE3 h\u1EBFt h\u1EA1n. H\xE3y ki\u1EC3m tra ngu\u1ED3n l\u1EA1i." }, 400, {}, req);
         const t = JSON.parse(row.payload);
-        if (await get(t.id, true)) return json({ error: "Gi\u1EA3i n\xE0y \u0111\xE3 t\u1ED3n t\u1EA1i. H\xE3y ch\u1ECDn S\u1EEDa ho\u1EB7c \u0110\u1ED3ng b\u1ED9." }, 409);
+        if (await get(t.id, true)) return json({ error: "Gi\u1EA3i n\xE0y \u0111\xE3 t\u1ED3n t\u1EA1i. H\xE3y ch\u1ECDn S\u1EEDa ho\u1EB7c \u0110\u1ED3ng b\u1ED9." }, 409, {}, req);
         await db2.batch([db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,0,?)").bind(t.id, JSON.stringify(t), t.updated), db2.prepare("DELETE FROM previews WHERE token = ?").bind(b.token)]);
         await log(true, `Th\xEAm gi\u1EA3i: ${t.name} \xB7 ${t.players.length} k\u1EF3 th\u1EE7`);
-        return json({ message: "\u0110\xE3 th\xEAm gi\u1EA3i \u1EDF tr\u1EA1ng th\xE1i \u1EA9n. Nh\u1EA5n Hi\u1EC7n gi\u1EA3i khi \u0111\xE3 s\u1EB5n s\xE0ng." });
+        return json({ message: "\u0110\xE3 th\xEAm gi\u1EA3i \u1EDF tr\u1EA1ng th\xE1i \u1EA9n. Nh\u1EA5n Hi\u1EC7n gi\u1EA3i khi \u0111\xE3 s\u1EB5n s\xE0ng." }, 200, {}, req);
       }
       if (action === "batch_import") {
         const items = b.items || [];
-        if (!items.length) return json({ error: "Kh\xF4ng c\xF3 b\u1EA3ng \u0111\u1EA5u n\xE0o \u0111\u01B0\u1EE3c ch\u1ECDn \u0111\u1EC3 nh\u1EADp." }, 400);
+        if (!items.length) return json({ error: "Kh\xF4ng c\xF3 b\u1EA3ng \u0111\u1EA5u n\xE0o \u0111\u01B0\u1EE3c ch\u1ECDn \u0111\u1EC3 nh\u1EADp." }, 400, {}, req);
         let totalPlayers = 0;
         let successCount = 0;
         const mainTournamentTitle = b.name?.trim() || b.mainName?.trim() || "Gi\u1EA3i \u0111\u1EA5u";
@@ -748,7 +1935,15 @@ function createApi(db2, sourceParam = {}) {
           }
         }
         await log(true, `\u0110\u1ED3ng b\u1ED9 V2 gi\u1EA3i \u0111\u1EA5u: ${mainTournamentTitle} \xB7 ${successCount}/${items.length} b\u1EA3ng \u0111\u1EA5u, t\u1ED5ng ${totalPlayers} k\u1EF3 th\u1EE7`);
-        return json({ message: `\u0110\xE3 \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng ${successCount} b\u1EA3ng \u0111\u1EA5u v\u1EDBi ${totalPlayers} k\u1EF3 th\u1EE7!` });
+        await logSync({
+          tournament_id: masterId,
+          tournament_name: mainTournamentTitle,
+          url: items[0]?.url || `https://chess-results.com/tnr${masterId}.aspx?lan=1`,
+          status: "success",
+          players_updated: totalPlayers,
+          message: `\u0110\u1ED3ng b\u1ED9 V2 th\xE0nh c\xF4ng: ${mainTournamentTitle} (${successCount} b\u1EA3ng, ${totalPlayers} k\u1EF3 th\u1EE7)`
+        });
+        return json({ message: `\u0110\xE3 \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng ${successCount} b\u1EA3ng \u0111\u1EA5u v\u1EDBi ${totalPlayers} k\u1EF3 th\u1EE7!` }, 200, {}, req);
       }
       if (action === "banner_create") {
         const id = crypto.randomUUID();
@@ -760,13 +1955,13 @@ function createApi(db2, sourceParam = {}) {
         const is_active = b.is_active === false || b.is_active === 0 ? 0 : 1;
         const sort_order = Number(b.sort_order || 0);
         const now = (/* @__PURE__ */ new Date()).toISOString();
-        if (!title) return json({ error: "Ti\xEAu \u0111\u1EC1 banner kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng." }, 400);
+        if (!title) return json({ error: "Ti\xEAu \u0111\u1EC1 banner kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng." }, 400, {}, req);
         await db2.prepare(`
           INSERT INTO home_banners (id, title, description, image_url, button_text, button_link, is_active, sort_order, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(id, title, description, image_url, button_text, button_link, is_active, sort_order, now, now).run();
         await log(true, `T\u1EA1o banner m\u1EDBi: ${title}`);
-        return json({ message: "\u0110\xE3 t\u1EA1o banner m\u1EDBi th\xE0nh c\xF4ng." });
+        return json({ message: "\u0110\xE3 t\u1EA1o banner m\u1EDBi th\xE0nh c\xF4ng." }, 200, {}, req);
       }
       if (action === "banner_update") {
         const id = String(b.id || "");
@@ -778,40 +1973,60 @@ function createApi(db2, sourceParam = {}) {
         const is_active = b.is_active === false || b.is_active === 0 ? 0 : 1;
         const sort_order = Number(b.sort_order || 0);
         const now = (/* @__PURE__ */ new Date()).toISOString();
-        if (!id || !title) return json({ error: "Th\xF4ng tin banner kh\xF4ng h\u1EE3p l\u1EC7." }, 400);
+        if (!id || !title) return json({ error: "Th\xF4ng tin banner kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
         await db2.prepare(`
           UPDATE home_banners
           SET title = ?, description = ?, image_url = ?, button_text = ?, button_link = ?, is_active = ?, sort_order = ?, updated_at = ?
           WHERE id = ?
         `).bind(title, description, image_url, button_text, button_link, is_active, sort_order, now, id).run();
         await log(true, `C\u1EADp nh\u1EADt banner: ${title}`);
-        return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt banner th\xE0nh c\xF4ng." });
+        return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt banner th\xE0nh c\xF4ng." }, 200, {}, req);
       }
       if (action === "banner_delete") {
         const id = String(b.id || "");
-        if (!id) return json({ error: "M\xE3 banner kh\xF4ng h\u1EE3p l\u1EC7." }, 400);
+        if (!id) return json({ error: "M\xE3 banner kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
         await db2.prepare("DELETE FROM home_banners WHERE id = ?").bind(id).run();
         await log(true, `\u0110\xE3 x\xF3a banner id: ${id}`);
-        return json({ message: "\u0110\xE3 x\xF3a banner th\xE0nh c\xF4ng." });
+        return json({ message: "\u0110\xE3 x\xF3a banner th\xE0nh c\xF4ng." }, 200, {}, req);
       }
       if (action === "banner_toggle") {
         const id = String(b.id || "");
         const is_active = b.is_active ? 1 : 0;
-        if (!id) return json({ error: "M\xE3 banner kh\xF4ng h\u1EE3p l\u1EC7." }, 400);
+        if (!id) return json({ error: "M\xE3 banner kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
         await db2.prepare("UPDATE home_banners SET is_active = ?, updated_at = ? WHERE id = ?").bind(is_active, (/* @__PURE__ */ new Date()).toISOString(), id).run();
         await log(true, `${is_active ? "Hi\u1EC7n" : "\u1EA8n"} banner id: ${id}`);
-        return json({ message: is_active ? "\u0110\xE3 hi\u1EC3n th\u1ECB banner." : "\u0110\xE3 \u1EA9n banner." });
+        return json({ message: is_active ? "\u0110\xE3 hi\u1EC3n th\u1ECB banner." : "\u0110\xE3 \u1EA9n banner." }, 200, {}, req);
+      }
+      if (action === "bulk_delete") {
+        const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x).trim()).filter(Boolean) : [];
+        if (ids.length === 0) return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t 1 gi\u1EA3i \u0111\u1EA5u \u0111\u1EC3 x\xF3a." }, 400, {}, req);
+        const statements = [];
+        for (const id of ids) {
+          statements.push(
+            db2.prepare("DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM players WHERE tournament_id = ? OR category_id = ?").bind(id, id),
+            db2.prepare("DELETE FROM categories WHERE tournament_id = ? OR id = ?").bind(id, id),
+            db2.prepare("DELETE FROM details WHERE tid = ? OR tid LIKE ?").bind(id, `${id}-%`),
+            db2.prepare("DELETE FROM sync_logs WHERE tournament_id = ?").bind(id),
+            db2.prepare("DELETE FROM previews WHERE payload LIKE ?").bind(`%"id":"${id}"%`),
+            db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(id)
+          );
+        }
+        await db2.batch(statements);
+        await log(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} gi\u1EA3i \u0111\u1EA5u.`);
+        return json({ message: `\u0110\xE3 x\xF3a th\xE0nh c\xF4ng ${ids.length} gi\u1EA3i \u0111\u1EA5u.` }, 200, {}, req);
       }
       const old = await get(String(b.id || ""), true);
-      if (!old) return json({ error: "Gi\u1EA3i kh\xF4ng t\u1ED3n t\u1EA1i ho\u1EB7c \u0111\xE3 b\u1ECB x\xF3a." }, 404);
+      if (!old) return json({ error: "Gi\u1EA3i kh\xF4ng t\u1ED3n t\u1EA1i ho\u1EB7c \u0111\xE3 b\u1ECB x\xF3a." }, 404, {}, req);
       if (action === "publish") {
         const shown = b.published === true;
         await db2.prepare("UPDATE tournaments SET published = ? WHERE id = ?").bind(shown ? 1 : 0, old.id).run();
         await log(true, `${shown ? "Hi\u1EC7n" : "\u1EA8n"} gi\u1EA3i: ${old.name}`);
-        return json({ message: shown ? "\u0110\xE3 c\xF4ng b\u1ED1 gi\u1EA3i \u0111\u1EA5u." : "\u0110\xE3 \u1EA9n gi\u1EA3i \u0111\u1EA5u." });
+        return json({ message: shown ? "\u0110\xE3 c\xF4ng b\u1ED1 gi\u1EA3i \u0111\u1EA5u." : "\u0110\xE3 \u1EA9n gi\u1EA3i \u0111\u1EA5u." }, 200, {}, req);
       }
       if (action === "delete") {
-        if (b.confirmName !== old.name) return json({ error: "T\xEAn x\xE1c nh\u1EADn x\xF3a kh\xF4ng kh\u1EDBp." }, 400);
+        if (b.confirmName !== old.name) return json({ error: "T\xEAn x\xE1c nh\u1EADn x\xF3a kh\xF4ng kh\u1EDBp." }, 400, {}, req);
         await db2.batch([
           db2.prepare("DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?").bind(old.id, `${old.id}-%`),
           db2.prepare("DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?").bind(old.id, `${old.id}-%`),
@@ -821,69 +2036,266 @@ function createApi(db2, sourceParam = {}) {
           db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(old.id)
         ]);
         await log(true, `\u0110\xE3 x\xF3a gi\u1EA3i: ${old.name}`);
-        return json({ message: "\u0110\xE3 x\xF3a gi\u1EA3i v\xE0 to\xE0n b\u1ED9 d\u1EEF li\u1EC7u k\u1EF3 th\u1EE7 c\u1EE7a gi\u1EA3i." });
+        return json({ message: "\u0110\xE3 x\xF3a gi\u1EA3i v\xE0 to\xE0n b\u1ED9 d\u1EEF li\u1EC7u k\u1EF3 th\u1EE7 c\u1EE7a gi\u1EA3i." }, 200, {}, req);
       }
-      if (action === "edit" || action === "sync") {
+      if (action === "edit" || action === "sync" || action === "force_sync") {
         let t;
-        if (action === "edit") {
+        if (action === "force_sync") {
+          try {
+            await db2.batch([
+              db2.prepare("DELETE FROM details WHERE tid = ? OR tid LIKE ?").bind(old.id, `${old.id}-%`),
+              db2.prepare("DELETE FROM matches WHERE category_id = ? OR player_id LIKE ?").bind(old.id, `${old.id}-%`),
+              db2.prepare("DELETE FROM rankings WHERE category_id = ? OR player_id LIKE ?").bind(old.id, `${old.id}-%`),
+              db2.prepare("DELETE FROM players WHERE tournament_id = ? OR category_id = ?").bind(old.id, old.id)
+            ]);
+          } catch (e) {
+            console.error("Error purging old cache for force_sync:", e);
+          }
+          t = await source.tournament(old.source, old.group);
+          t.name = old.name;
+        } else if (action === "edit") {
           const name = String(b.name || "").trim(), group = String(b.group || "").trim(), url = String(b.url || "").trim();
-          if (!name || name.length > 240 || group.length > 100) return json({ error: "T\xEAn gi\u1EA3i kh\xF4ng \u0111\u01B0\u1EE3c tr\u1ED1ng v\xE0 ph\u1EA3i d\u01B0\u1EDBi 240 k\xFD t\u1EF1." }, 400);
+          if (!name || name.length > 240 || group.length > 100) return json({ error: "T\xEAn gi\u1EA3i kh\xF4ng \u0111\u01B0\u1EE3c tr\u1ED1ng v\xE0 ph\u1EA3i d\u01B0\u1EDBi 240 k\xFD t\u1EF1." }, 400, {}, req);
           validateSource(url);
           if (url === old.source) {
             t = { ...old, name, group };
           } else {
-            if (!await lock("sync:" + old.id, 20)) return json({ error: "Gi\u1EA3i \u0111ang \u0111\u01B0\u1EE3c \u0111\u1ED3ng b\u1ED9. Vui l\xF2ng th\u1EED l\u1EA1i sau." }, 429);
+            if (!await lock("sync:" + old.id, 20)) return json({ error: "Gi\u1EA3i \u0111ang \u0111\u01B0\u1EE3c \u0111\u1ED3ng b\u1ED9. Vui l\xF2ng th\u1EED l\u1EA1i sau." }, 429, {}, req);
             t = await source.tournament(url, group);
-            if (t.id !== old.id && await get(t.id, true)) return json({ error: "Link m\u1EDBi thu\u1ED9c m\u1ED9t gi\u1EA3i \u0111\xE3 c\xF3 trong \u1EE9ng d\u1EE5ng." }, 409);
+            if (t.id !== old.id && await get(t.id, true)) return json({ error: "Link m\u1EDBi thu\u1ED9c m\u1ED9t gi\u1EA3i \u0111\xE3 c\xF3 trong \u1EE9ng d\u1EE5ng." }, 409, {}, req);
             t.name = name;
           }
         } else {
-          if (!await lock("sync:" + old.id, 20)) return json({ error: "Gi\u1EA3i v\u1EEBa \u0111\u01B0\u1EE3c \u0111\u1ED3ng b\u1ED9. Vui l\xF2ng ch\u1EDD 20 gi\xE2y." }, 429);
+          if (!await lock("sync:" + old.id, 20)) return json({ error: "Gi\u1EA3i v\u1EEBa \u0111\u01B0\u1EE3c \u0111\u1ED3ng b\u1ED9. Vui l\xF2ng ch\u1EDD 20 gi\xE2y." }, 429, {}, req);
           t = await source.tournament(old.source, old.group);
           if (t.players.length < old.players.length) throw Error(`Ngu\u1ED3n ch\u1EC9 tr\u1EA3 ${t.players.length}/${old.players.length} k\u1EF3 th\u1EE7. D\u1EEF li\u1EC7u c\u0169 \u0111\u01B0\u1EE3c gi\u1EEF \u0111\u1EC3 tr\xE1nh m\u1EA5t k\u1EBFt qu\u1EA3.`);
           t.name = old.name;
         }
         t.published = old.published;
         const statements = [];
+        const nowSyncIso = (/* @__PURE__ */ new Date()).toISOString();
+        const syncIntervalVal = old.syncInterval ?? old.sync_interval ?? 5;
+        const autoSyncVal = old.autoSync ?? old.auto_sync ?? true;
+        const nextSyncIso = autoSyncVal ? new Date(Date.now() + syncIntervalVal * 60 * 1e3).toISOString() : null;
+        t.autoSync = autoSyncVal;
+        t.auto_sync = autoSyncVal;
+        t.syncInterval = syncIntervalVal;
+        t.sync_interval = syncIntervalVal;
+        t.lastSync = nowSyncIso;
+        t.last_sync = nowSyncIso;
+        t.nextSync = nextSyncIso;
+        t.next_sync = nextSyncIso;
         if (t.id !== old.id) {
-          statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          try {
+            statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,auto_sync,sync_interval,last_sync,next_sync,updated) VALUES (?,?,?,?,?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.updated));
+          } catch {
+            statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          }
           statements.push(db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(old.id));
         } else {
-          statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
+          try {
+            statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.id));
+          } catch {
+            statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
+          }
         }
-        if (t.updated !== old.updated || t.id !== old.id) statements.push(db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id));
+        if (t.updated !== old.updated || t.id !== old.id || action === "force_sync") statements.push(db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id));
         await db2.batch(statements);
-        await log(true, `${action === "edit" ? "S\u1EEDa" : "\u0110\u1ED3ng b\u1ED9"} gi\u1EA3i: ${t.name}`);
-        return json({ message: action === "edit" ? "\u0110\xE3 l\u01B0u ch\u1EC9nh s\u1EEDa." : "\u0110\xE3 c\u1EADp nh\u1EADt k\u1EBFt qu\u1EA3 m\u1EDBi nh\u1EA5t." });
+        await log(true, `${action === "edit" ? "S\u1EEDa" : action === "force_sync" ? "\xC9p \u0111\u1ED3ng b\u1ED9" : "\u0110\u1ED3ng b\u1ED9"} gi\u1EA3i: ${t.name}`);
+        await logSync({
+          tournament_id: t.id,
+          tournament_name: t.name,
+          url: t.source,
+          status: "success",
+          players_updated: t.players.length,
+          message: `\u0110\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results (${action}): ${t.name} (${t.players.length} k\u1EF3 th\u1EE7)`
+        });
+        return json({ message: action === "edit" ? "\u0110\xE3 l\u01B0u ch\u1EC9nh s\u1EEDa." : action === "force_sync" ? "\u0110\xE3 \xE9p \u0111\u1ED3ng b\u1ED9 l\u1EA1i v\xE0 l\xE0m s\u1EA1ch cache d\u1EEF li\u1EC7u th\xE0nh c\xF4ng." : "\u0110\xE3 c\u1EADp nh\u1EADt k\u1EBFt qu\u1EA3 m\u1EDBi nh\u1EA5t." }, 200, {}, req);
       }
-      return json({ error: "Thao t\xE1c kh\xF4ng \u0111\u01B0\u1EE3c h\u1ED7 tr\u1EE3." }, 400);
+      if (action === "toggle_auto_sync" || action === "tournament_update_auto_sync") {
+        const id = String(b.id || "");
+        if (!id) return json({ error: "M\xE3 gi\u1EA3i \u0111\u1EA5u kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+        const tour = await get(id, true);
+        if (!tour) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404, {}, req);
+        const newAutoSync = b.auto_sync !== void 0 ? !!b.auto_sync : b.autoSync !== void 0 ? !!b.autoSync : !(tour.autoSync ?? true);
+        const newInterval = Number(b.sync_interval || b.syncInterval || tour.syncInterval || 5);
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const nextSyncIso = newAutoSync ? new Date(Date.now() + newInterval * 60 * 1e3).toISOString() : null;
+        tour.autoSync = newAutoSync;
+        tour.auto_sync = newAutoSync;
+        tour.syncInterval = newInterval;
+        tour.sync_interval = newInterval;
+        tour.nextSync = nextSyncIso;
+        tour.next_sync = nextSyncIso;
+        try {
+          await db2.prepare("UPDATE tournaments SET payload = ?, auto_sync = ?, sync_interval = ?, next_sync = ? WHERE id = ?").bind(JSON.stringify(tour), newAutoSync ? 1 : 0, newInterval, nextSyncIso, id).run();
+        } catch {
+          await db2.prepare("UPDATE tournaments SET payload = ? WHERE id = ?").bind(JSON.stringify(tour), id).run();
+        }
+        await log(true, `${newAutoSync ? "B\u1EADt" : "T\u1EAFt"} t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 cho gi\u1EA3i: ${tour.name}`);
+        return json({ message: `\u0110\xE3 ${newAutoSync ? "b\u1EADt" : "t\u1EAFt"} t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 cho gi\u1EA3i \u0111\u1EA5u.`, tournament: tour }, 200, {}, req);
+      }
+      if (action === "tournament_update_info") {
+        const id = String(b.id || "");
+        if (!id) return json({ error: "M\xE3 gi\u1EA3i \u0111\u1EA5u kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+        const oldTour = await get(id, true);
+        if (!oldTour) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404, {}, req);
+        const info = typeof b.info === "object" && b.info ? b.info : {};
+        const prizes = Array.isArray(b.prizes) ? b.prizes : [];
+        const updatedTour = {
+          ...oldTour,
+          info,
+          prizes,
+          updated: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(updatedTour), updatedTour.updated, id).run();
+        await log(true, `C\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng gi\u1EA3i: ${oldTour.name}`);
+        return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng!" }, 200, {}, req);
+      }
+      return json({ error: "Thao t\xE1c kh\xF4ng \u0111\u01B0\u1EE3c h\u1ED7 tr\u1EE3." }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle"].includes(action)) try {
-        await log(false, m);
-      } catch {
+      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info", "toggle_auto_sync", "tournament_update_auto_sync"].includes(action)) {
+        try {
+          await log(false, m);
+          await logSync({
+            tournament_id: b.id || void 0,
+            tournament_name: b.name || void 0,
+            url: b.url || b.source || "",
+            status: "failed",
+            players_updated: 0,
+            message: `L\u1ED7i \u0111\u1ED3ng b\u1ED9 Chess-Results: ${m}`
+          });
+        } catch {
+        }
       }
-      return json({ error: m }, 502);
+      return json({ error: m }, 502, {}, req);
     }
   };
 }
 
 // database.ts
+import pg from "pg";
+import dns from "node:dns";
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync, readdirSync, mkdirSync as mkdirSync2 } from "node:fs";
+import { readFileSync as readFileSync2, readdirSync, mkdirSync as mkdirSync2, existsSync as existsSync2 } from "node:fs";
 import { dirname, resolve as resolve2 } from "node:path";
-function openDatabase(file, migrations) {
-  mkdirSync2(dirname(file), { recursive: true });
-  const sql = new DatabaseSync(file);
+try {
+  dns.setDefaultResultOrder("ipv4first");
+} catch {
+}
+function openDatabase(fileOrUrl, migrations) {
+  const isPostgres = fileOrUrl.startsWith("postgres://") || fileOrUrl.startsWith("postgresql://");
+  if (isPostgres) {
+    let convertSqlForPg = function(sql2) {
+      let paramIndex = 1;
+      let converted = sql2.replace(/\?/g, () => `$${paramIndex++}`);
+      if (/INSERT\s+OR\s+IGNORE\s+INTO/i.test(converted)) {
+        converted = converted.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, "INSERT INTO");
+        if (!/ON\s+CONFLICT/i.test(converted)) {
+          converted += " ON CONFLICT DO NOTHING";
+        }
+      }
+      return converted;
+    };
+    const useSsl = process.env.NODE_ENV === "production" || fileOrUrl.includes("render.com") || fileOrUrl.includes("supabase") || fileOrUrl.includes("neon") || fileOrUrl.includes("railway") || process.env.PGSSLMODE === "require" || process.env.PGSSLMODE === "no-verify";
+    const pool = new pg.Pool({
+      connectionString: fileOrUrl,
+      ssl: useSsl ? { rejectUnauthorized: false } : false
+    });
+    const initPgSchema = async () => {
+      try {
+        let ddl = "";
+        const possibleSchemaPaths = [
+          resolve2(migrations, "pg_schema.sql"),
+          resolve2(process.cwd(), "backend", "migrations", "pg_schema.sql"),
+          resolve2(process.cwd(), "migrations", "pg_schema.sql")
+        ];
+        for (const p of possibleSchemaPaths) {
+          if (existsSync2(p)) {
+            ddl = readFileSync2(p, "utf8");
+            break;
+          }
+        }
+        if (ddl) {
+          await pool.query(ddl);
+        }
+      } catch (err) {
+        console.error("Error initializing PostgreSQL schema:", err);
+      }
+    };
+    initPgSchema();
+    class PgQuery {
+      text;
+      args = [];
+      constructor(text) {
+        this.text = text;
+      }
+      bind(...args) {
+        const q = new PgQuery(this.text);
+        q.args = args;
+        return q;
+      }
+      async executePg(client) {
+        const target = client || pool;
+        const pgSql = convertSqlForPg(this.text);
+        const res = await target.query(pgSql, this.args);
+        return res;
+      }
+      async first() {
+        const res = await this.executePg();
+        return res.rows[0] || null;
+      }
+      async all() {
+        const res = await this.executePg();
+        return { results: res.rows };
+      }
+      async run() {
+        const res = await this.executePg();
+        return { meta: { changes: res.rowCount || 0 } };
+      }
+      execute() {
+        return this.run();
+      }
+    }
+    return {
+      prepare: (s) => new PgQuery(s),
+      async batch(ss) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const results = [];
+          for (const s of ss) {
+            const pgQ = s;
+            results.push(await pgQ.executePg(client));
+          }
+          await client.query("COMMIT");
+          return results;
+        } catch (e) {
+          await client.query("ROLLBACK");
+          throw e;
+        } finally {
+          client.release();
+        }
+      },
+      close: () => {
+        pool.end();
+      }
+    };
+  }
+  mkdirSync2(dirname(fileOrUrl), { recursive: true });
+  const sql = new DatabaseSync(fileOrUrl);
   sql.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
   sql.exec("CREATE TABLE IF NOT EXISTS sgc_migrations (name TEXT PRIMARY KEY, applied TEXT NOT NULL)");
-  if (readdirSync(migrations).length > 0) {
+  if (existsSync2(migrations)) {
     for (const name of readdirSync(migrations).filter((n) => n.endsWith(".sql")).sort()) {
       if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
-        sql.exec("BEGIN");
+        sql.exec("BEGIN IMMEDIATE");
         try {
-          sql.exec(readFileSync(resolve2(migrations, name), "utf8"));
-          sql.prepare("INSERT INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
+          if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
+            sql.exec(readFileSync2(resolve2(migrations, name), "utf8"));
+            sql.prepare("INSERT OR IGNORE INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
+          }
           sql.exec("COMMIT");
         } catch (e) {
           sql.exec("ROLLBACK");
@@ -934,14 +2346,138 @@ function openDatabase(file, migrations) {
   };
 }
 
+// jobs/sync-scheduler.ts
+import cron from "node-cron";
+var isSyncRunning = false;
+function startSyncScheduler(db2, sourceOverride) {
+  console.log("[Sync Scheduler] Initializing automatic 5-minute Chess-Results sync scheduler...");
+  cron.schedule("*/5 * * * *", async () => {
+    if (isSyncRunning) {
+      console.log("[Sync Scheduler] Previous sync cycle still running, skipping...");
+      return;
+    }
+    isSyncRunning = true;
+    try {
+      await runAutoSyncCycle(db2, sourceOverride);
+    } catch (err) {
+      console.error("[Sync Scheduler] Error in auto sync cycle:", err);
+    } finally {
+      isSyncRunning = false;
+    }
+  });
+  setTimeout(() => {
+    runAutoSyncCycle(db2, sourceOverride).catch((e) => console.error("[Sync Scheduler] Initial check error:", e));
+  }, 1e4);
+}
+async function runAutoSyncCycle(db2, sourceOverride) {
+  try {
+    let rows = [];
+    try {
+      const res = await db2.prepare("SELECT payload, published, auto_sync, sync_interval, last_sync, next_sync FROM tournaments").all();
+      rows = res.results || [];
+    } catch {
+      const res = await db2.prepare("SELECT payload, published FROM tournaments").all();
+      rows = res.results || [];
+    }
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+    for (const r of rows) {
+      let t;
+      try {
+        t = JSON.parse(r.payload);
+      } catch {
+        continue;
+      }
+      const published = r.published !== void 0 && r.published !== null ? !!r.published : !!t.published;
+      if (!published) continue;
+      const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
+      if (!autoSync) continue;
+      const interval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
+      const lastSyncStr = r.last_sync || t.lastSync || t.last_sync || null;
+      const lastSyncTime = lastSyncStr ? new Date(lastSyncStr).getTime() : 0;
+      const intervalMs = interval * 60 * 1e3;
+      if (lastSyncTime > 0 && now - lastSyncTime < intervalMs - 3e4) {
+        continue;
+      }
+      console.log(`[Sync Scheduler] Auto syncing tournament "${t.name}" (${t.id})...`);
+      try {
+        const fetcher = sourceOverride?.tournament ? sourceOverride.tournament : importTournament;
+        const updatedTour = await fetcher(t.source, t.group);
+        updatedTour.name = t.name;
+        updatedTour.published = true;
+        updatedTour.info = t.info;
+        updatedTour.prizes = t.prizes;
+        const nextSyncIso = new Date(now + intervalMs).toISOString();
+        updatedTour.autoSync = true;
+        updatedTour.auto_sync = true;
+        updatedTour.syncInterval = interval;
+        updatedTour.sync_interval = interval;
+        updatedTour.lastSync = nowIso;
+        updatedTour.last_sync = nowIso;
+        updatedTour.nextSync = nextSyncIso;
+        updatedTour.next_sync = nextSyncIso;
+        const payloadStr = JSON.stringify(updatedTour);
+        try {
+          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = 1, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, interval, nowIso, nextSyncIso, t.id).run();
+        } catch {
+          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, t.id).run();
+        }
+        try {
+          const logId = crypto.randomUUID();
+          await db2.prepare(`
+            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            logId,
+            t.id,
+            t.name,
+            t.source,
+            nowIso,
+            "success",
+            updatedTour.players ? updatedTour.players.length : 0,
+            `T\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results: ${t.name} (${updatedTour.players ? updatedTour.players.length : 0} k\u1EF3 th\u1EE7)`
+          ).run();
+        } catch (logErr) {
+          console.error("[Sync Scheduler] Failed to write sync log:", logErr);
+        }
+        console.log(`[Sync Scheduler] Auto synced "${t.name}" successfully (${updatedTour.players?.length || 0} players).`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[Sync Scheduler] Error auto syncing "${t.name}":`, errMsg);
+        try {
+          const logId = crypto.randomUUID();
+          await db2.prepare(`
+            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            logId,
+            t.id,
+            t.name,
+            t.source,
+            nowIso,
+            "failed",
+            0,
+            `L\u1ED7i t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9: ${errMsg}`
+          ).run();
+        } catch {
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Sync Scheduler] Error in runAutoSyncCycle:", err);
+  }
+}
+
 // server.ts
-var root = process.cwd();
+var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
 var host = process.env.HOST || "0.0.0.0";
-var dbPath = process.env.DATABASE_URL ? resolve3(root, process.env.DATABASE_URL) : resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
-var migrationsPath = resolve3(root, "migrations");
-var db = openDatabase(dbPath, migrationsPath);
+var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
+var dbUrl = process.env.DATABASE_URL || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
+var db = openDatabase(dbUrl, resolve3(root, "migrations"));
+startSyncScheduler(db);
 var api = createApi(db);
+var web = resolve3(root, "web");
 var types = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -955,61 +2491,45 @@ var types = {
   ".ico": "image/x-icon",
   ".json": "application/json"
 };
-function getCorsHeaders(reqOrigin) {
-  const allowedOrigins = [
-    process.env.FRONTEND_URL,
-    process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : null,
-    process.env.PUBLIC_ORIGIN,
-    process.env.API_URL,
-    "https://chess-find-m38a.vercel.app",
-    "https://co-vua-sai-gon.vercel.app",
-    "http://localhost:5173",
-    "http://localhost:3000"
-  ].filter(Boolean);
-  let allowOrigin = reqOrigin || process.env.FRONTEND_URL || "https://chess-find-m38a.vercel.app";
-  if (reqOrigin) {
-    const cleanOrigin = reqOrigin.replace(/\/$/, "");
-    if (allowedOrigins.includes(reqOrigin) || allowedOrigins.includes(cleanOrigin) || cleanOrigin.endsWith(".vercel.app") || cleanOrigin.includes("localhost") || process.env.NODE_ENV !== "production") {
-      allowOrigin = reqOrigin;
-    }
-  }
-  return {
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-CSRF-Token, Authorization"
-  };
-}
+var security = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "same-origin",
+  "X-Frame-Options": "SAMEORIGIN",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; connect-src 'self'; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+};
 var server = createServer(async (req, res) => {
   try {
-    const reqOrigin = req.headers.origin;
-    const security = getCorsHeaders(reqOrigin);
-    if (req.method === "OPTIONS") {
-      res.writeHead(204, security);
-      res.end();
+    const requestedHost = req.headers.host || `localhost:${port}`;
+    const allowedHosts = /* @__PURE__ */ new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]);
+    if (publicOrigin) {
+      try {
+        allowedHosts.add(new URL(publicOrigin).host);
+      } catch {
+      }
+    }
+    const isCloudHost = requestedHost.endsWith(".onrender.com") || requestedHost.endsWith(".railway.app") || requestedHost.endsWith(".vercel.app");
+    if (publicOrigin && !allowedHosts.has(requestedHost) && !isCloudHost && process.env.STRICT_HOST_CHECK === "true") {
+      if (req.url?.startsWith("/api")) {
+        res.writeHead(400, { ...security, "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Host kh\xF4ng h\u1EE3p l\u1EC7. C\u1EA5u h\xECnh PUBLIC_ORIGIN khi d\xF9ng t\xEAn mi\u1EC1n." }));
+        return;
+      }
+      res.writeHead(400, security);
+      res.end("Host kh\xF4ng h\u1EE3p l\u1EC7. C\u1EA5u h\xECnh PUBLIC_ORIGIN khi d\xF9ng t\xEAn mi\u1EC1n.");
       return;
     }
-    const hostHeader = req.headers.host || `${host}:${port}`;
-    const protocol = req.headers["x-forwarded-proto"] || "http";
-    const origin = process.env.PUBLIC_ORIGIN || `${protocol}://${hostHeader}`;
+    const origin = publicOrigin || `http://${requestedHost}`;
     const url = new URL(req.url || "/", origin);
-    if (url.pathname === "/health" || url.pathname === "/api/health") {
-      res.writeHead(200, { ...security, "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", time: (/* @__PURE__ */ new Date()).toISOString(), env: process.env.NODE_ENV || "development" }));
-      return;
-    }
-    if (url.pathname.startsWith("/api/")) {
+    if (url.pathname.startsWith("/api/") || url.pathname === "/api") {
       let body;
       if (req.method !== "GET" && req.method !== "HEAD") {
         const chunks = [];
         let n = 0;
         for await (const chunk of req) {
           n += chunk.length;
-          if (n > 6e6) {
-            res.writeHead(413, security);
-            res.end("Y\xEAu c\u1EA7u qu\xE1 l\u1EDBn.");
+          if (n > 12e6) {
+            res.writeHead(413, { ...security, "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Y\xEAu c\u1EA7u qu\xE1 l\u1EDBn." }));
             return;
           }
           chunks.push(chunk);
@@ -1017,18 +2537,12 @@ var server = createServer(async (req, res) => {
         body = Buffer.concat(chunks);
       }
       const headers = new Headers();
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (v) headers.set(k, Array.isArray(v) ? v.join(",") : v);
-      }
-      const r = await api(
-        new Request(url, { method: req.method, headers, body }),
-        req.socket.remoteAddress || "unknown"
-      );
-      const outgoing = {};
+      for (const [k, v] of Object.entries(req.headers)) if (v) headers.set(k, Array.isArray(v) ? v.join(",") : v);
+      const r = await api(new Request(url, { method: req.method, headers, body }), req.socket.remoteAddress || "unknown");
+      const outgoing = { ...security, "Content-Type": "application/json" };
       r.headers.forEach((v, k) => {
         outgoing[k] = v;
       });
-      Object.assign(outgoing, security);
       const setCookies = r.headers.get("set-cookie");
       if (setCookies) outgoing["set-cookie"] = setCookies;
       res.writeHead(r.status, outgoing);
@@ -1043,9 +2557,12 @@ var server = createServer(async (req, res) => {
     const path = decodeURIComponent(url.pathname);
     if (path.startsWith("/uploads/")) {
       const candidates = [
-        resolve3(root, "." + path),
-        resolve3(root, "uploads", "." + path.replace("/uploads", "")),
-        resolve3(root, "public", "." + path)
+        resolve3(web, "." + path),
+        resolve3(root, "web", "." + path),
+        resolve3(root, "public", "." + path),
+        resolve3(process.cwd(), "web", "." + path),
+        resolve3(process.cwd(), "public", "." + path),
+        resolve3(process.cwd(), "." + path)
       ];
       let fileFound = null;
       for (const cand of candidates) {
@@ -1069,25 +2586,39 @@ var server = createServer(async (req, res) => {
         return;
       }
     }
-    res.writeHead(404, security);
-    res.end("C\u1EDD Vua S\xE0i G\xF2n API Server is running.");
-  } catch (err) {
-    res.writeHead(500, { "Content-Type": "application/json" });
+    const asset = path === "/" || path === "/admin" || path === "/admin/" ? "index.html" : "." + path;
+    const full = resolve3(web, asset);
+    if (!full.startsWith(web + sep)) {
+      res.writeHead(403, security);
+      res.end();
+      return;
+    }
+    try {
+      if (!(await stat(full)).isFile()) throw Error();
+      const bytes = await readFile(full);
+      res.writeHead(200, {
+        ...security,
+        "Content-Type": types[extname(full)] || "application/octet-stream",
+        "Cache-Control": path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache"
+      });
+      res.end(req.method === "HEAD" ? void 0 : bytes);
+    } catch {
+      res.writeHead(404, security);
+      res.end("Kh\xF4ng t\xECm th\u1EA5y trang.");
+    }
+  } catch {
+    res.writeHead(500, { ...security, "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Kh\xF4ng th\u1EC3 x\u1EED l\xFD y\xEAu c\u1EA7u. Vui l\xF2ng th\u1EED l\u1EA1i." }));
   }
 });
-server.listen(port, host, () => {
-  console.log(`[C\u1EDD Vua S\xE0i G\xF2n Backend Server] Listening on http://${host}:${port}`);
-  console.log(`[Environment] NODE_ENV=${process.env.NODE_ENV || "development"}`);
-  console.log(`[Database] Path=${dbPath}`);
-});
+server.listen(port, host, () => console.log(`C\u1EDD Vua S\xE0i G\xF2n \u0111ang ch\u1EA1y: ${publicOrigin || `http://localhost:${port}`}
+Qu\u1EA3n tr\u1ECB: ${publicOrigin || `http://localhost:${port}`}/admin
+Nh\u1EA5n Ctrl+C \u0111\u1EC3 d\u1EEBng.`));
 server.on("error", (e) => {
-  console.error(`Server startup error: ${e.message}`);
-  process.exit(1);
+  console.error(e.code === "EADDRINUSE" ? `C\u1ED5ng ${port} \u0111ang \u0111\u01B0\u1EE3c s\u1EED d\u1EE5ng. \u0110\u1ED5i PORT trong CAU-HINH.env r\u1ED3i ch\u1EA1y l\u1EA1i.` : e.message);
+  process.exitCode = 1;
 });
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => server.close(() => {
-    db.close();
-    process.exit(0);
-  }));
-}
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => server.close(() => {
+  db.close();
+  process.exit(0);
+}));

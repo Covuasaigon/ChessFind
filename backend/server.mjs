@@ -443,23 +443,29 @@ async function populateRoundsForTournament(tour) {
     for (const { rd, html } of roundResults) {
       if (!html) continue;
       const rows = rowsOf(html);
-      const hi = rows.findIndex((r) => findCol(r, ["white"]) >= 0 && findCol(r, ["black"]) >= 0);
+      const hi = rows.findIndex((r) => findCol(r, ["white", "trang", "weiss", "blancs"]) >= 0 && findCol(r, ["black", "den", "schwarz", "noirs"]) >= 0);
       if (hi < 0) continue;
       const h = rows[hi];
-      const boCol = findCol(h, ["bo", "board", "ban"]);
-      const wNameCol = findCol(h, ["white"]);
-      const bNameCol = findCol(h, ["black"]);
-      const resCol = findCol(h, ["result", "res"]);
-      const noCols = h.map((c, i) => ({ i, text: key(c.text) })).filter((c) => c.text === "no" || c.text === "stnr" || c.text === "sno");
-      const wNoCol = noCols[0]?.i ?? wNameCol - 1;
-      const bNoCol = noCols[1]?.i ?? bNameCol + 1;
+      let boCol = findCol(h, ["bo", "board", "ban", "banso", "br", "tbl", "tisch", "b"]);
+      const wCol = findCol(h, ["white", "trang", "weiss", "blancs"]);
+      const bCol = findCol(h, ["black", "den", "schwarz", "noirs"]);
+      const resCol = findCol(h, ["result", "res", "ketqua", "kq", "ergebnis"]);
+      if (boCol < 0 && h.length > 0) {
+        const col0Key = key(h[0].text || "");
+        if ((/^bo|^br|^tbl|^tisch|^ban|^#|^no/i.test(col0Key) || col0Key === "") && 0 !== wCol && 0 !== bCol) {
+          boCol = 0;
+        }
+      }
+      const noCols = h.map((c, i) => ({ i, text: key(c.text) })).filter((c) => c.text === "no" || c.text === "stnr" || c.text === "sno" || c.text === "stno" || c.text === "sbd");
+      const wNoCol = noCols[0]?.i ?? wCol - 1;
+      const bNoCol = noCols[1]?.i ?? bCol + 1;
       let foundPairs = false;
       for (const r of rows.slice(hi + 1)) {
-        if (!r[wNameCol] || !r[bNameCol]) continue;
-        const nameW = r[wNameCol]?.text;
-        const nameB = r[bNameCol]?.text;
-        const snrW = r[wNoCol]?.text || r[wNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
-        const snrB = r[bNoCol]?.text || r[bNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        if (!r[wCol] || !r[bCol]) continue;
+        const nameW = r[wCol]?.text;
+        const nameB = r[bCol]?.text;
+        const snrW = r[wNoCol]?.text || r[wCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        const snrB = r[bNoCol]?.text || r[bCol]?.raw.match(/snr=(\d+)/i)?.[1];
         if (!nameW || !nameB || !snrW || !snrB) continue;
         const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
         const rawRes = resCol >= 0 ? r[resCol]?.text.trim() : "";
@@ -491,7 +497,17 @@ async function populateRoundsForTournament(tour) {
         const pW = snrToPlayerMap.get(snrW);
         const pB = snrToPlayerMap.get(snrB);
         if (pW) {
-          if (!pW.rounds.some((x) => x.round === rd)) {
+          const existingR = pW.rounds.find((x) => x.round === rd);
+          if (existingR) {
+            if (bo != null) existingR.board = bo;
+            if (roundStatus === "played") existingR.status = "played";
+            if (scoreW != null) existingR.score = scoreW;
+            if (resFmt && resFmt !== "\u2014") existingR.result = resFmt;
+            if (nameB) existingR.opponent = nameB;
+            if (pB) existingR.opponentId = pB.id;
+            existingR.playerWhite = nameW;
+            existingR.playerBlack = nameB;
+          } else {
             pW.rounds.push({
               round: rd,
               board: bo,
@@ -508,7 +524,17 @@ async function populateRoundsForTournament(tour) {
           }
         }
         if (pB) {
-          if (!pB.rounds.some((x) => x.round === rd)) {
+          const existingR = pB.rounds.find((x) => x.round === rd);
+          if (existingR) {
+            if (bo != null) existingR.board = bo;
+            if (roundStatus === "played") existingR.status = "played";
+            if (scoreB != null) existingR.score = scoreB;
+            if (resFmt && resFmt !== "\u2014") existingR.result = resFmt;
+            if (nameW) existingR.opponent = nameW;
+            if (pW) existingR.opponentId = pW.id;
+            existingR.playerWhite = nameW;
+            existingR.playerBlack = nameB;
+          } else {
             pB.rounds.push({
               round: rd,
               board: bo,
@@ -703,22 +729,28 @@ async function detectCategories(source) {
 }
 function parsePlayer(html, p, t) {
   const rows = rowsOf(html);
-  const hi = rows.findIndex((r) => findCol(r, ["rd", "round"]) >= 0 && findCol(r, ["name"]) >= 0 && findCol(r, ["res", "result"]) >= 0);
+  const hi = rows.findIndex(
+    (r) => findCol(r, ["rd", "round", "vong", "v", "r"]) >= 0 && findCol(r, ["name", "ten", "doithu", "doi", "opp", "opponent", "kytthu", "hoten", "spieler"]) >= 0 && findCol(r, ["res", "result", "ketqua", "kq", "ergebnis"]) >= 0
+  );
   if (hi < 0) throw Error("Ch\u01B0a \u0111\u1ECDc \u0111\u01B0\u1EE3c chi ti\u1EBFt t\u1EEBng v\xF2ng t\u1EEB ngu\u1ED3n. \u0110i\u1EC3m v\xE0 th\u1EE9 h\u1EA1ng v\u1EABn \u0111\u01B0\u1EE3c gi\u1EEF theo b\u1EA3ng \u0111\xE3 \u0111\u1ED3ng b\u1ED9.");
   const h = rows[hi];
-  const ni = findCol(h, ["name"]);
-  const ri = findCol(h, ["rd", "round"]);
-  const boCol = findCol(h, ["bo", "board", "ban"]);
-  const rating = findCol(h, ["rtg", "rating"]);
-  const res = findCol(h, ["res", "result"]);
-  const colorCol = findCol(h, ["wb", "w/b", "color", "mau", "mauquan", "ks", "k/s"]);
+  const ni = findCol(h, ["name", "ten", "doithu", "doi", "opp", "opponent", "kytthu", "hoten", "spieler"]);
+  const ri = findCol(h, ["rd", "round", "vong", "v", "r"]);
+  const boCol = findCol(h, ["bo", "board", "ban", "banso", "br", "tbl", "tisch", "b"]);
+  const rating = findCol(h, ["rtg", "rating", "elo"]);
+  const res = findCol(h, ["res", "result", "ketqua", "kq", "ergebnis"]);
+  const colorCol = findCol(h, ["wb", "w/b", "color", "mau", "mauquan", "ks", "k/s", "farbe"]);
   const rounds = [];
   const seenRounds = /* @__PURE__ */ new Set();
   for (const r of rows.slice(hi + 1)) {
     const rd = num(r[ri]?.text || "");
     if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
     if (seenRounds.has(rd)) continue;
-    const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
+    let bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
+    const existingP = p.rounds?.find((x) => x.round === rd);
+    if (bo === null && existingP && existingP.board != null) {
+      bo = existingP.board;
+    }
     let rawCellText = res >= 0 ? (r[res]?.text || "").trim() : "";
     if (!rawCellText || /^(?:w|b|trắng|đen|\(w\)|\(b\))$/i.test(rawCellText)) {
       if (res >= 0 && r[res + 1] && /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(r[res + 1].text.trim())) {
@@ -1428,16 +1460,18 @@ function createApi(db2, sourceParam = {}) {
           if (r) {
             playerObj = JSON.parse(r.payload);
             if (p.rounds && p.rounds.length > 0) {
-              const scheduledRounds = p.rounds.filter((x) => x.status === "scheduled");
-              if (scheduledRounds.length > 0) {
-                playerObj.rounds = playerObj.rounds || [];
-                for (const sch of scheduledRounds) {
-                  if (!playerObj.rounds.some((x) => x.round === sch.round)) {
-                    playerObj.rounds.push(sch);
-                  }
+              playerObj.rounds = playerObj.rounds || [];
+              for (const sch of p.rounds) {
+                const existingIdx = playerObj.rounds.findIndex((x) => x.round === sch.round);
+                if (existingIdx >= 0) {
+                  if (sch.board != null) playerObj.rounds[existingIdx].board = sch.board;
+                  if (sch.playerWhite && !playerObj.rounds[existingIdx].playerWhite) playerObj.rounds[existingIdx].playerWhite = sch.playerWhite;
+                  if (sch.playerBlack && !playerObj.rounds[existingIdx].playerBlack) playerObj.rounds[existingIdx].playerBlack = sch.playerBlack;
+                } else {
+                  playerObj.rounds.push(sch);
                 }
-                playerObj.rounds.sort((a, b2) => a.round - b2.round);
               }
+              playerObj.rounds.sort((a, b2) => a.round - b2.round);
             }
           } else {
             if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429, {}, req);

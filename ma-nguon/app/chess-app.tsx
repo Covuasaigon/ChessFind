@@ -26,6 +26,14 @@ export const getHsVal = (p: Player, idx: number): number | null => {
   return null;
 };
 
+export function getBoardText(r?: { board?: number | null; status?: string; opponent?: string } | null) {
+  if (!r) return 'Bàn: Chưa công bố';
+  const isBye = r.status === 'bye' || /bye|miễn đấu|spielfrei|not paired|unpaired|u0\.5|u1\.0|u0\.0/i.test(r.opponent || '');
+  if (isBye) return 'Miễn đấu';
+  if (r.board != null && r.board > 0) return `Bàn ${r.board}`;
+  return 'Bàn: Chưa công bố';
+}
+
 function Avatar({ p, large = false }: { p: Player; large?: boolean }) {
   return <span className={'avatar ' + (large ? 'large' : '')} style={{ background: ['#e4edff', '#e5f3f0', '#f8e9df'][Number(p.snr) % 3] }}>{p.name.split(' ').slice(-2).map(x => x[0]).join('')}</span>
 }
@@ -345,7 +353,7 @@ export default function ChessApp() {
                         Vòng {next.round}
                       </span>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#E2E8F0', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 8 }}>
-                        Bàn số: {next.board ? `#${next.board}` : 'Chưa xếp'}
+                        {getBoardText(next)}
                       </span>
                       <span className={isNextWhite ? 'white-piece' : isNextBlack ? 'black-piece' : 'subtle'} style={{ fontSize: 13, fontWeight: 700 }}>
                         {isNextWhite ? '⚪ Bạn cầm quân Trắng' : isNextBlack ? '⚫ Bạn cầm quân Đen' : 'Màu quân: Chưa rõ'}
@@ -730,7 +738,7 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
 
           return (
             <div className="round-row" key={r.round}>
-              <span className="round-num" style={{ whiteSpace: 'nowrap' }}>Vòng {String(r.round).padStart(2, '0')}{r.board ? ` · Bàn ${r.board}` : ''}</span>
+              <span className="round-num" style={{ whiteSpace: 'nowrap' }}>Vòng {String(r.round).padStart(2, '0')} · {getBoardText(r)}</span>
               <span className="color-icon" style={{ textAlign: 'center', fontSize: 16 }}>
                 {isWhite ? '⚪' : isBlack ? '⚫' : '—'}
               </span>
@@ -758,7 +766,7 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
             <div className="mobile-match-card" key={r.round} style={{ background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', padding: 14, marginBottom: 12, boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
               <div className="match-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #F1F5F9' }}>
                 <span className="match-card-round" style={{ fontSize: 13, fontWeight: 800, color: '#062B4F' }}>
-                  Vòng {r.round} {r.board ? `· Bàn ${r.board}` : ''}
+                  Vòng {r.round} · {getBoardText(r)}
                 </span>
                 <span className="color-icon" style={{ fontSize: 16 }}>
                   {isWhite ? '⚪ Trắng' : isBlack ? '⚫ Đen' : '—'}

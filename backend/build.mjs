@@ -19,5 +19,10 @@ await build({
 
 mkdirSync(resolve(root, 'uploads/banner'), { recursive: true });
 mkdirSync(resolve(root, 'data'), { recursive: true });
+try {
+  mkdirSync(resolve(root, '../server'), { recursive: true });
+  cpSync(resolve(root, 'server.mjs'), resolve(root, '../server/server.mjs'));
+  console.log('Successfully synced server.mjs to root server folder!');
+} catch (e) {}
 
 console.log('Backend build completed successfully: server.mjs ready!');

@@ -287,27 +287,34 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
     for (const { rd, html } of roundResults) {
       if (!html) continue;
       const rows = rowsOf(html);
-      const hi = rows.findIndex(r => findCol(r, ['white']) >= 0 && findCol(r, ['black']) >= 0);
+      const hi = rows.findIndex(r => findCol(r, ['white', 'trang', 'weiss', 'blancs']) >= 0 && findCol(r, ['black', 'den', 'schwarz', 'noirs']) >= 0);
       if (hi < 0) continue;
 
       const h = rows[hi];
-      const boCol = findCol(h, ['bo', 'board', 'ban']);
-      const wNameCol = findCol(h, ['white']);
-      const bNameCol = findCol(h, ['black']);
-      const resCol = findCol(h, ['result', 'res']);
+      let boCol = findCol(h, ['bo', 'board', 'ban', 'banso', 'br', 'tbl', 'tisch', 'b']);
+      const wCol = findCol(h, ['white', 'trang', 'weiss', 'blancs']);
+      const bCol = findCol(h, ['black', 'den', 'schwarz', 'noirs']);
+      const resCol = findCol(h, ['result', 'res', 'ketqua', 'kq', 'ergebnis']);
 
-      const noCols = h.map((c, i) => ({ i, text: key(c.text) })).filter(c => c.text === 'no' || c.text === 'stnr' || c.text === 'sno');
-      const wNoCol = noCols[0]?.i ?? (wNameCol - 1);
-      const bNoCol = noCols[1]?.i ?? (bNameCol + 1);
+      if (boCol < 0 && h.length > 0) {
+        const col0Key = key(h[0].text || '');
+        if ((/^bo|^br|^tbl|^tisch|^ban|^#|^no/i.test(col0Key) || col0Key === '') && 0 !== wCol && 0 !== bCol) {
+          boCol = 0;
+        }
+      }
+
+      const noCols = h.map((c, i) => ({ i, text: key(c.text) })).filter(c => c.text === 'no' || c.text === 'stnr' || c.text === 'sno' || c.text === 'stno' || c.text === 'sbd');
+      const wNoCol = noCols[0]?.i ?? (wCol - 1);
+      const bNoCol = noCols[1]?.i ?? (bCol + 1);
 
       let foundPairs = false;
 
       for (const r of rows.slice(hi + 1)) {
-        if (!r[wNameCol] || !r[bNameCol]) continue;
-        const nameW = r[wNameCol]?.text;
-        const nameB = r[bNameCol]?.text;
-        const snrW = r[wNoCol]?.text || r[wNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
-        const snrB = r[bNoCol]?.text || r[bNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        if (!r[wCol] || !r[bCol]) continue;
+        const nameW = r[wCol]?.text;
+        const nameB = r[bCol]?.text;
+        const snrW = r[wNoCol]?.text || r[wCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        const snrB = r[bNoCol]?.text || r[bCol]?.raw.match(/snr=(\d+)/i)?.[1];
 
         if (!nameW || !nameB || !snrW || !snrB) continue;
 
@@ -336,7 +343,17 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
         const pB = snrToPlayerMap.get(snrB);
 
         if (pW) {
-          if (!pW.rounds.some(x => x.round === rd)) {
+          const existingR = pW.rounds.find(x => x.round === rd);
+          if (existingR) {
+            if (bo != null) existingR.board = bo;
+            if (roundStatus === 'played') existingR.status = 'played';
+            if (scoreW != null) existingR.score = scoreW;
+            if (resFmt && resFmt !== '—') existingR.result = resFmt;
+            if (nameB) existingR.opponent = nameB;
+            if (pB) existingR.opponentId = pB.id;
+            existingR.playerWhite = nameW;
+            existingR.playerBlack = nameB;
+          } else {
             pW.rounds.push({
               round: rd,
               board: bo,
@@ -354,7 +371,17 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
         }
 
         if (pB) {
-          if (!pB.rounds.some(x => x.round === rd)) {
+          const existingR = pB.rounds.find(x => x.round === rd);
+          if (existingR) {
+            if (bo != null) existingR.board = bo;
+            if (roundStatus === 'played') existingR.status = 'played';
+            if (scoreB != null) existingR.score = scoreB;
+            if (resFmt && resFmt !== '—') existingR.result = resFmt;
+            if (nameW) existingR.opponent = nameW;
+            if (pW) existingR.opponentId = pW.id;
+            existingR.playerWhite = nameW;
+            existingR.playerBlack = nameB;
+          } else {
             pB.rounds.push({
               round: rd,
               board: bo,
@@ -600,16 +627,20 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
 
 export function parsePlayer(html: string, p: Player, t: Tournament): Player {
   const rows = rowsOf(html);
-  const hi = rows.findIndex(r => findCol(r, ['rd', 'round']) >= 0 && findCol(r, ['name']) >= 0 && findCol(r, ['res', 'result']) >= 0);
+  const hi = rows.findIndex(r =>
+    findCol(r, ['rd', 'round', 'vong', 'v', 'r']) >= 0 &&
+    findCol(r, ['name', 'ten', 'doithu', 'doi', 'opp', 'opponent', 'kytthu', 'hoten', 'spieler']) >= 0 &&
+    findCol(r, ['res', 'result', 'ketqua', 'kq', 'ergebnis']) >= 0
+  );
   if (hi < 0) throw Error('Chưa đọc được chi tiết từng vòng từ nguồn. Điểm và thứ hạng vẫn được giữ theo bảng đã đồng bộ.');
 
   const h = rows[hi];
-  const ni = findCol(h, ['name']);
-  const ri = findCol(h, ['rd', 'round']);
-  const boCol = findCol(h, ['bo', 'board', 'ban']);
-  const rating = findCol(h, ['rtg', 'rating']);
-  const res = findCol(h, ['res', 'result']);
-  const colorCol = findCol(h, ['wb', 'w/b', 'color', 'mau', 'mauquan', 'ks', 'k/s']);
+  const ni = findCol(h, ['name', 'ten', 'doithu', 'doi', 'opp', 'opponent', 'kytthu', 'hoten', 'spieler']);
+  const ri = findCol(h, ['rd', 'round', 'vong', 'v', 'r']);
+  const boCol = findCol(h, ['bo', 'board', 'ban', 'banso', 'br', 'tbl', 'tisch', 'b']);
+  const rating = findCol(h, ['rtg', 'rating', 'elo']);
+  const res = findCol(h, ['res', 'result', 'ketqua', 'kq', 'ergebnis']);
+  const colorCol = findCol(h, ['wb', 'w/b', 'color', 'mau', 'mauquan', 'ks', 'k/s', 'farbe']);
 
   const rounds: Round[] = [];
   const seenRounds = new Set<number>();
@@ -619,7 +650,11 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
     if (seenRounds.has(rd)) continue;
 
-    const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
+    let bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
+    const existingP = p.rounds?.find(x => x.round === rd);
+    if (bo === null && existingP && existingP.board != null) {
+      bo = existingP.board;
+    }
 
     let rawCellText = res >= 0 ? (r[res]?.text || '').trim() : '';
     if (!rawCellText || /^(?:w|b|trắng|đen|\(w\)|\(b\))$/i.test(rawCellText)) {

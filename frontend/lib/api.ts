@@ -345,16 +345,18 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           if (r) {
             playerObj = JSON.parse(r.payload);
             if (p.rounds && p.rounds.length > 0) {
-              const scheduledRounds = p.rounds.filter(x => x.status === 'scheduled');
-              if (scheduledRounds.length > 0) {
-                playerObj.rounds = playerObj.rounds || [];
-                for (const sch of scheduledRounds) {
-                  if (!playerObj.rounds.some(x => x.round === sch.round)) {
-                    playerObj.rounds.push(sch);
-                  }
+              playerObj.rounds = playerObj.rounds || [];
+              for (const sch of p.rounds) {
+                const existingIdx = playerObj.rounds.findIndex(x => x.round === sch.round);
+                if (existingIdx >= 0) {
+                  if (sch.board != null) playerObj.rounds[existingIdx].board = sch.board;
+                  if (sch.playerWhite && !playerObj.rounds[existingIdx].playerWhite) playerObj.rounds[existingIdx].playerWhite = sch.playerWhite;
+                  if (sch.playerBlack && !playerObj.rounds[existingIdx].playerBlack) playerObj.rounds[existingIdx].playerBlack = sch.playerBlack;
+                } else {
+                  playerObj.rounds.push(sch);
                 }
-                playerObj.rounds.sort((a, b) => a.round - b.round);
               }
+              playerObj.rounds.sort((a, b) => a.round - b.round);
             }
           } else {
             if (!await lock('detail:' + id, 3)) return json({ error: 'Nguồn đang được tải. Hãy thử lại sau vài giây.' }, 429, {}, req);
