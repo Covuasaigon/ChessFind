@@ -16,6 +16,16 @@ import HeroSection from './hero-section';
 type View = 'home' | 'search' | 'tournaments' | 'saved' | 'player' | 'admin';
 const demo = makeDemo();
 
+export const getHsVal = (p: Player, idx: number): number | null => {
+  if (!p) return null;
+  if (idx === 0) return p.hs1 ?? p.tieBreakArray?.[0] ?? p.ties?.['HS1'] ?? p.ties?.['TB1'] ?? p.ties?.['Hệ số 1'] ?? null;
+  if (idx === 1) return p.hs2 ?? p.tieBreakArray?.[1] ?? p.ties?.['HS2'] ?? p.ties?.['TB2'] ?? p.ties?.['Hệ số 2'] ?? null;
+  if (idx === 2) return p.hs3 ?? p.tieBreakArray?.[2] ?? p.ties?.['HS3'] ?? p.ties?.['TB3'] ?? p.ties?.['Hệ số 3'] ?? null;
+  if (idx === 3) return p.hs4 ?? p.tieBreakArray?.[3] ?? p.ties?.['HS4'] ?? p.ties?.['TB4'] ?? p.ties?.['Hệ số 4'] ?? null;
+  if (idx === 4) return p.hs5 ?? p.tieBreakArray?.[4] ?? p.ties?.['HS5'] ?? p.ties?.['TB5'] ?? p.ties?.['Hệ số 5'] ?? null;
+  return null;
+};
+
 function Avatar({ p, large = false }: { p: Player; large?: boolean }) {
   return <span className={'avatar ' + (large ? 'large' : '')} style={{ background: ['#e4edff', '#e5f3f0', '#f8e9df'][Number(p.snr) % 3] }}>{p.name.split(' ').slice(-2).map(x => x[0]).join('')}</span>
 }
@@ -304,29 +314,9 @@ export default function ChessApp() {
                     <span className="dash-stat-sub">Thắng {s.wins} · Hòa {s.draws} · Thua {s.losses}</span>
                   </div>
                   <div className="dash-stat">
-                    <span className="dash-stat-label">⚪ Trắng</span>
-                    <span className="dash-stat-val">{(player.rounds && player.rounds.length > 0 || player.detailsLoaded || player.totalGames != null) && (s.whiteGames > 0 || s.played > 0) ? `${s.whiteGames ?? s.white} ván` : '—'}</span>
-                    <span className="dash-stat-sub">Thắng: {s.whiteWins} · Hòa: {s.whiteDraws} · Thua: {s.whiteLosses}</span>
-                  </div>
-                  <div className="dash-stat">
-                    <span className="dash-stat-label">⚫ Đen</span>
-                    <span className="dash-stat-val">{(player.rounds && player.rounds.length > 0 || player.detailsLoaded || player.totalGames != null) && (s.blackGames > 0 || s.played > 0) ? `${s.blackGames ?? s.black} ván` : '—'}</span>
-                    <span className="dash-stat-sub">Thắng: {s.blackWins} · Hòa: {s.blackDraws} · Thua: {s.blackLosses}</span>
-                  </div>
-                  <div className="dash-stat">
-                    <span className="dash-stat-label">📈 Tỷ lệ thắng (Win rate)</span>
-                    <span className="dash-stat-val">{s.winRate !== null ? `${s.winRate}%` : '—'}</span>
-                    <span className="dash-stat-sub">hiệu suất tổng thể</span>
-                  </div>
-                  <div className="dash-stat">
                     <span className="dash-stat-label">🥇 Dự đoán giải thưởng</span>
                     <span className="dash-stat-val">{medal ? `${medal.medal} ${medal.label}` : 'Chưa đạt huy chương'}</span>
                     <span className="dash-stat-sub">theo cơ cấu giải</span>
-                  </div>
-                  <div className="dash-stat">
-                    <span className="dash-stat-label">📊 Hệ số Buchholz / SB</span>
-                    <span className="dash-stat-val">{fmt(player.buchholz ?? player.ties['BH'] ?? player.ties['Buchholz'])} / {fmt(player.sonnebornBerger ?? player.ties['SB'])}</span>
-                    <span className="dash-stat-sub">Rp: {fmt(player.performance ?? player.ties['Rp']) || '—'}</span>
                   </div>
                 </div>
               </div>
@@ -457,10 +447,12 @@ export default function ChessApp() {
                     <div><span>Điểm số hiện tại</span><strong>{fmt(player.points)}<small> điểm</small></strong></div>
                     <div><span>Xếp hạng trong bảng</span><strong>{fmt(player.rank)}<small> / {current.players ? current.players.length : 0}</small></strong></div>
                   </div>
-                  <div className="tie-row">
-                    <div><span>Buchholz (BH)</span><b>{fmt(player.buchholz ?? player.ties['BH'] ?? player.ties['Buchholz'])}</b></div>
-                    <div><span>Sonneborn Berger (SB)</span><b>{fmt(player.sonnebornBerger ?? player.ties['SB'])}</b></div>
-                    <div><span>Performance (RP)</span><b>{fmt(player.performance ?? player.ties['Rp'] ?? player.ties['Performance'])}</b></div>
+                  <div className="tie-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
+                    <div><span>Hệ số 1</span><b>{fmt(getHsVal(player, 0))}</b></div>
+                    <div><span>Hệ số 2</span><b>{fmt(getHsVal(player, 1))}</b></div>
+                    <div><span>Hệ số 3</span><b>{fmt(getHsVal(player, 2))}</b></div>
+                    <div><span>Hệ số 4</span><b>{fmt(getHsVal(player, 3))}</b></div>
+                    <div><span>Hệ số 5</span><b>{fmt(getHsVal(player, 4))}</b></div>
                     <div><span>Hệ số Elo</span><b>{fmt(player.rating)}</b></div>
                   </div>
                 </div>
@@ -549,7 +541,7 @@ function TournamentCard({ t, onOpen }: { t: Tournament; onOpen: () => void }) {
       <div>
         <span className="banner-label">{t.demo ? 'BẢN MINH HỌA' : '♟ CHESS-RESULTS'}</span>
         <strong>{t.name}</strong>
-        <span>Bảng: {t.group || 'Toàn giải'}</span>
+        <span className="tournament-group">Bảng: {t.group || 'Toàn giải'}</span>
       </div>
       <Trophy size={48} strokeWidth={1.4} />
     </div>
@@ -798,19 +790,50 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
   );
 }
 
-function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onOpen: (p: Player) => void }) {
+function Ranking({ t, selected, onOpen }: { t: Tournament; selected?: string; onOpen: (p: Player) => void }) {
   const [q, setQ] = useState('');
+  const [activeHsInfo, setActiveHsInfo] = useState<number | null>(null);
   const ps = (t.players || [])
     .filter(p => matchPlayer(p, t.group, q))
     .sort((a, b) => {
       if (a.rank != null && b.rank != null) return a.rank - b.rank;
       if ((b.points ?? 0) !== (a.points ?? 0)) return (b.points ?? 0) - (a.points ?? 0);
-      if ((b.buchholz ?? 0) !== (a.buchholz ?? 0)) return (b.buchholz ?? 0) - (a.buchholz ?? 0);
-      if ((b.sonnebornBerger ?? 0) !== (a.sonnebornBerger ?? 0)) return (b.sonnebornBerger ?? 0) - (a.sonnebornBerger ?? 0);
-      return (b.performance ?? 0) - (a.performance ?? 0);
+      for (let i = 0; i < 5; i++) {
+        const valA = getHsVal(a, i) ?? 0;
+        const valB = getHsVal(b, i) ?? 0;
+        if (valB !== valA) return valB - valA;
+      }
+      return 0;
     });
 
   return <section className="panel ranking">
+    {activeHsInfo !== null && (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setActiveHsInfo(null)}>
+        <div style={{ background: '#FFFFFF', borderRadius: 16, padding: 24, maxWidth: 460, width: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#062B4F' }}>Mô tả Hệ số {activeHsInfo + 1}</h3>
+            <button className="text-btn" style={{ fontSize: 20, cursor: 'pointer', border: 'none', background: 'transparent' }} onClick={() => setActiveHsInfo(null)}>✕</button>
+          </div>
+          <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 10, border: '1px solid #CBD5E1', color: '#1E293B', fontSize: 14, lineHeight: '1.5' }}>
+            {t.tieBreakDescriptions?.[activeHsInfo] || (t.tieLabels?.[activeHsInfo] ? `${t.tieLabels[activeHsInfo]}` : `Tiêu chí Hệ số ${activeHsInfo + 1} lấy trực tiếp từ Chess-Results.`)}
+          </div>
+          {t.tieBreakDescriptions && t.tieBreakDescriptions.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <h4 style={{ fontSize: 13, fontWeight: 700, color: '#64748B', marginBottom: 8 }}>Tất cả tiêu chí hệ số phụ của giải:</h4>
+              <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#334155' }}>
+                {t.tieBreakDescriptions.map((desc, idx) => (
+                  <li key={idx} style={{ marginBottom: 6, fontWeight: idx === activeHsInfo ? 800 : 400, color: idx === activeHsInfo ? '#145DA0' : '#334155' }}>
+                    <strong>HS{idx + 1}:</strong> {desc}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          <button className="primary" style={{ width: '100%', marginTop: 20 }} onClick={() => setActiveHsInfo(null)}>Đóng</button>
+        </div>
+      </div>
+    )}
+
     <div className="section-heading">
       <h2>Bảng xếp hạng toàn giải</h2>
       <span className="soft-badge">{t.group || 'Toàn bảng'}</span>
@@ -822,49 +845,77 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected: string; onO
       </div>
       <button className="outline" onClick={() => { setQ(''); setTimeout(() => document.getElementById('selected-player')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50) }}>Vị trí của con</button>
     </div>
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Hạng</TableHead>
-          <TableHead>Họ và tên kỳ thủ</TableHead>
-          <TableHead>CLB / Tỉnh</TableHead>
-          <TableHead>SBD</TableHead>
-          <TableHead>Điểm</TableHead>
-          <TableHead>Buchholz (BH)</TableHead>
-          <TableHead>Sonneborn Berger (SB)</TableHead>
-          <TableHead>Performance (RP)</TableHead>
-          <TableHead>Số ván đấu</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {ps.map((p, idx) => {
-          const rankVal = p.rank ?? (idx + 1);
-          const bhVal = p.buchholz ?? p.ties['BH'] ?? p.ties['Buchholz'] ?? p.ties['BH.'] ?? p.ties['BH-1'] ?? p.ties['TB2'] ?? p.ties['TB1'] ?? null;
-          const sbVal = p.sonnebornBerger ?? p.ties['SB'] ?? p.ties['Sonneborn'] ?? p.ties['SB.'] ?? p.ties['TB3'] ?? p.ties['TB5'] ?? null;
-          const rpVal = p.performance ?? p.ties['Rp'] ?? p.ties['Performance'] ?? p.ties['RP'] ?? null;
-          const gamesCount = p.detailsLoaded ? `${stats(p).played} ván` : (t.rounds ? `${t.rounds} ván` : '—');
-          const clubName = p.club || formatClubName(p.federation || '');
+    <div style={{ overflowX: 'auto', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
+      <Table style={{ minWidth: 950 }}>
+        <TableHeader>
+          <TableRow>
+            <TableHead style={{ textAlign: 'center', width: 60 }}>Hạng</TableHead>
+            <TableHead>Họ và tên kỳ thủ</TableHead>
+            <TableHead>CLB / Tỉnh</TableHead>
+            <TableHead style={{ textAlign: 'center', width: 70 }}>SBD</TableHead>
+            <TableHead style={{ textAlign: 'right', width: 70 }}>Điểm</TableHead>
+            {[0, 1, 2, 3, 4].map(idx => (
+              <TableHead key={idx} style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                  <span>Hệ số {idx + 1}</span>
+                  <button
+                    type="button"
+                    aria-label={`Thông tin Hệ số ${idx + 1}`}
+                    onClick={(e) => { e.stopPropagation(); setActiveHsInfo(idx); }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 16,
+                      height: 16,
+                      borderRadius: '50%',
+                      background: '#E2E8F0',
+                      color: '#475569',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: 0
+                    }}
+                    title={t.tieBreakDescriptions?.[idx] || `Hệ số ${idx + 1}`}
+                  >
+                    i
+                  </button>
+                </div>
+              </TableHead>
+            ))}
+            <TableHead style={{ textAlign: 'right', width: 100 }}>Số ván đấu</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {ps.map((p, idx) => {
+            const rankVal = p.rank ?? (idx + 1);
+            const gamesCount = p.detailsLoaded ? `${stats(p).played} ván` : (t.rounds ? `${t.rounds} ván` : '—');
+            const clubName = p.club || formatClubName(p.federation || '');
 
-          return (
-            <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
-              <TableCell><span className={rankVal <= 3 ? 'rank-medal' : 'rank-number'}>{rankVal}</span></TableCell>
-              <TableCell>
-                <button className="rank-player" onClick={() => onOpen(p)}>
-                  <b>{p.name}</b>
-                </button>
-              </TableCell>
-              <TableCell>{clubName}</TableCell>
-              <TableCell>{p.snr}</TableCell>
-              <TableCell className="points">{fmt(p.points)}</TableCell>
-              <TableCell>{fmt(bhVal)}</TableCell>
-              <TableCell>{fmt(sbVal)}</TableCell>
-              <TableCell>{fmt(rpVal)}</TableCell>
-              <TableCell>{gamesCount}</TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+            return (
+              <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
+                <TableCell style={{ textAlign: 'center' }}><span className={rankVal <= 3 ? 'rank-medal' : 'rank-number'}>{rankVal}</span></TableCell>
+                <TableCell>
+                  <button className="rank-player" onClick={() => onOpen(p)}>
+                    <b>{p.name}</b>
+                  </button>
+                </TableCell>
+                <TableCell>{clubName}</TableCell>
+                <TableCell style={{ textAlign: 'center' }}>{p.snr}</TableCell>
+                <TableCell className="points" style={{ textAlign: 'right', fontWeight: 800, color: '#145DA0' }}>{fmt(p.points)}</TableCell>
+                <TableCell style={{ textAlign: 'right' }}>{fmt(getHsVal(p, 0))}</TableCell>
+                <TableCell style={{ textAlign: 'right' }}>{fmt(getHsVal(p, 1))}</TableCell>
+                <TableCell style={{ textAlign: 'right' }}>{fmt(getHsVal(p, 2))}</TableCell>
+                <TableCell style={{ textAlign: 'right' }}>{fmt(getHsVal(p, 3))}</TableCell>
+                <TableCell style={{ textAlign: 'right' }}>{fmt(getHsVal(p, 4))}</TableCell>
+                <TableCell style={{ textAlign: 'right' }}>{gamesCount}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
     {!ps.length && <p className="empty-text">Không có kết quả phù hợp.</p>}
     <p className="subtle below">{t.demo ? 'Bảng xếp hạng minh họa.' : 'Thứ hạng và các hệ số theo phiên đồng bộ Chess-Results mới nhất.'}</p>
   </section>

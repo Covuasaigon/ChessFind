@@ -634,6 +634,13 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
           const fullPlayer = {
             ...playerObj,
+            hs1: p.hs1 ?? playerObj.hs1 ?? null,
+            hs2: p.hs2 ?? playerObj.hs2 ?? null,
+            hs3: p.hs3 ?? playerObj.hs3 ?? null,
+            hs4: p.hs4 ?? playerObj.hs4 ?? null,
+            hs5: p.hs5 ?? playerObj.hs5 ?? null,
+            tieBreakArray: p.tieBreakArray || playerObj.tieBreakArray || [],
+            ties: p.ties || playerObj.ties || {},
             rank,
             totalPlayers,
             club,

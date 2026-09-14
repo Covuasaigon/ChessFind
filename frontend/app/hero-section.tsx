@@ -46,8 +46,7 @@ export default function HeroSection({ q, setQ, onSearch, config }: HeroSectionPr
 
           {/* 2. Heading */}
           <h1 className="hero-heading animate-fade-up delay-100">
-            {titleLine1}
-            <br />
+            <span>{titleLine1} </span>
             <span className="hero-heading-gold">{titleHighlight}</span>
           </h1>
 

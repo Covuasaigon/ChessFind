@@ -27,12 +27,18 @@ export type Player = {
   rank: number | null;
   totalPlayers?: number;
   points: number | null;
+  hs1?: number | null;
+  hs2?: number | null;
+  hs3?: number | null;
+  hs4?: number | null;
+  hs5?: number | null;
   buchholz?: number | null;
   sonnebornBerger?: number | null;
   performance?: number | null;
   gender?: string | null;
   ageGroup?: string | null;
   ties: Record<string, number | null>;
+  tieBreakArray?: (number | null)[];
   rounds: Round[];
   detailsLoaded: boolean;
   games?: number;
@@ -100,6 +106,7 @@ export type Tournament = {
   categories?: Category[];
   players: Player[];
   tieLabels: string[];
+  tieBreakDescriptions?: string[];
   rounds: number | null;
   currentRound?: number | null;
   completedRounds?: number | null;

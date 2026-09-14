@@ -278,6 +278,38 @@ var key = (s) => normalize(s).replace(/[^a-z0-9]/g, "");
 function findCol(headers, names) {
   return headers.findIndex((h) => names.includes(key(h.text)));
 }
+function parseTieBreakDescriptions(html) {
+  const result = [];
+  const map = /* @__PURE__ */ new Map();
+  const lines = [...html.matchAll(/(?:Tie-?Break|TB|HS)\s*(\d+)[\s:\-:=]+([^\r\n<]+)/gi)];
+  for (const m of lines) {
+    const numIdx = parseInt(m[1], 10);
+    const desc = textOf(m[2]).trim();
+    if (numIdx >= 1 && numIdx <= 10 && desc && !map.has(numIdx)) {
+      map.set(numIdx, desc);
+    }
+  }
+  if (map.size < 5) {
+    const blockMatch = html.match(/(?:Tie-?Break\s*(?:match rule|details|legend|criteria|tiêu chí)?|Hệ số phụ)\s*[:：]?([\s\S]*?)(?=<\/div>|<\/table>|<\/p>|<h\d|$)/i);
+    if (blockMatch) {
+      const blockText = textOf(blockMatch[1]);
+      const items = [...blockText.matchAll(/(?:TB|HS)?\s*(\d+)[\.:\)\-]\s*([^\r\n,;]+(?:\([^)]+\))?)/gi)];
+      for (const item of items) {
+        const numIdx = parseInt(item[1], 10);
+        const desc = item[2].trim();
+        if (numIdx >= 1 && numIdx <= 10 && desc && !map.has(numIdx)) {
+          map.set(numIdx, desc);
+        }
+      }
+    }
+  }
+  for (let i = 1; i <= 5; i++) {
+    if (map.has(i)) {
+      result.push(map.get(i));
+    }
+  }
+  return result;
+}
 function parseRanking(html, source, group) {
   const { id } = validateSource(source);
   let rows = rowsOf(html);
@@ -288,7 +320,7 @@ function parseRanking(html, source, group) {
   const h = rows[hi];
   const ni = findCol(h, ["name", "ten", "namekytthu", "hoten"]);
   const ri = findCol(h, ["rk", "rank", "pos", "hang", "thuhang"]);
-  const si = findCol(h, ["sno", "stnr", "sbd", "no"]);
+  const si = findCol(h, ["sno", "stnr", "stno", "sbd", "no"]);
   const pi = findCol(h, ["pts", "points", "diem"]);
   const rating = findCol(h, ["rtg", "rating", "rtgi", "elo"]);
   const fedCol = findCol(h, ["fed", "federation", "ld", "ldo", "land"]);
@@ -296,7 +328,18 @@ function parseRanking(html, source, group) {
   const fideIdCol = findCol(h, ["fideid", "fide", "id", "identnumber", "ident"]);
   const sexCol = findCol(h, ["sex", "gender", "gioitinh"]);
   const typCol = findCol(h, ["typ", "gr", "group", "typgr", "kat", "cat", "category"]);
-  const ties = h.map((c, i) => ({ label: c.text, i })).filter((c) => /^tb\d+$/i.test(key(c.label)) || /^bh|^sb|buchholz|sonneborn|performance|rp|fide rtg/i.test(key(c.label)));
+  const knownStandardCols = new Set([ri, si, ni, pi, rating, fedCol, clubCol, fideIdCol, sexCol, typCol].filter((i) => i >= 0));
+  const tieBreakCols = [];
+  h.forEach((cell, index) => {
+    if (knownStandardCols.has(index)) return;
+    const textClean = cell.text.trim();
+    if (!textClean) return;
+    const k = key(textClean);
+    if (/^tb\d+$/i.test(k) || !knownStandardCols.has(index) && pi >= 0 && index > pi) {
+      tieBreakCols.push({ label: cell.text || `TB${tieBreakCols.length + 1}`, index });
+    }
+  });
+  const tieBreakDescriptions = parseTieBreakDescriptions(html);
   const players = [];
   const seen = /* @__PURE__ */ new Set();
   for (const row of rows.slice(hi + 1)) {
@@ -307,10 +350,22 @@ function parseRanking(html, source, group) {
     if (!snr || !/^\d+$/.test(snr)) continue;
     if (seen.has(snr)) continue;
     seen.add(snr);
-    const tieValues = Object.fromEntries(ties.map((t) => [t.label, num(row[t.i]?.text || "")]));
-    const bhVal = tieValues["BH"] ?? tieValues["Buchholz"] ?? tieValues["BH."] ?? tieValues["BH-1"] ?? tieValues["TB2"] ?? tieValues["TB1"] ?? tieValues["TB3"] ?? null;
-    const sbVal = tieValues["SB"] ?? tieValues["Sonneborn-Berger"] ?? tieValues["Sonneborn"] ?? tieValues["SB."] ?? tieValues["TB3"] ?? tieValues["TB5"] ?? null;
-    const rpVal = tieValues["Rp"] ?? tieValues["RP"] ?? tieValues["Performance"] ?? tieValues["Rp."] ?? null;
+    const tieValues = {};
+    const tieBreakArray = [];
+    tieBreakCols.forEach((col, idx) => {
+      const rawCellVal = row[col.index]?.text || "";
+      const numVal = num(rawCellVal);
+      tieValues[col.label] = numVal;
+      tieValues[`TB${idx + 1}`] = numVal;
+      tieValues[`HS${idx + 1}`] = numVal;
+      tieValues[`H\u1EC7 s\u1ED1 ${idx + 1}`] = numVal;
+      tieBreakArray.push(numVal);
+    });
+    const hs1 = tieBreakArray[0] ?? null;
+    const hs2 = tieBreakArray[1] ?? null;
+    const hs3 = tieBreakArray[2] ?? null;
+    const hs4 = tieBreakArray[3] ?? null;
+    const hs5 = tieBreakArray[4] ?? null;
     const parsedRank = ri >= 0 ? num(row[ri]?.text || "") : null;
     const finalRank = parsedRank ?? players.length + 1;
     const rowSex = sexCol >= 0 ? row[sexCol]?.text : "";
@@ -330,12 +385,18 @@ function parseRanking(html, source, group) {
       rating: rating >= 0 ? num(row[rating].text) : null,
       rank: finalRank,
       points: pi >= 0 ? num(row[pi].text) : null,
-      buchholz: bhVal,
-      sonnebornBerger: sbVal,
-      performance: rpVal,
+      hs1,
+      hs2,
+      hs3,
+      hs4,
+      hs5,
+      buchholz: hs2 ?? hs1,
+      sonnebornBerger: hs3,
+      performance: null,
       gender,
       ageGroup: ageGroupMatch,
       ties: tieValues,
+      tieBreakArray,
       rounds: [],
       detailsLoaded: false
     });
@@ -351,7 +412,8 @@ function parseRanking(html, source, group) {
     source,
     updated: (/* @__PURE__ */ new Date()).toISOString(),
     players,
-    tieLabels: ties.map((t) => t.label),
+    tieLabels: tieBreakCols.map((t, idx) => `H\u1EC7 s\u1ED1 ${idx + 1}`),
+    tieBreakDescriptions,
     rounds: total ? Number(total[1]) : null,
     published: false
   };
@@ -1415,6 +1477,13 @@ function createApi(db2, sourceParam = {}) {
           const medalPrediction = getMedal(rank, p.ageGroup || t.group, t.prizes);
           const fullPlayer = {
             ...playerObj,
+            hs1: p.hs1 ?? playerObj.hs1 ?? null,
+            hs2: p.hs2 ?? playerObj.hs2 ?? null,
+            hs3: p.hs3 ?? playerObj.hs3 ?? null,
+            hs4: p.hs4 ?? playerObj.hs4 ?? null,
+            hs5: p.hs5 ?? playerObj.hs5 ?? null,
+            tieBreakArray: p.tieBreakArray || playerObj.tieBreakArray || [],
+            ties: p.ties || playerObj.ties || {},
             rank,
             totalPlayers,
             club,
