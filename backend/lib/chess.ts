@@ -284,11 +284,16 @@ export function getNextMatch(p: Player): Round | null {
   const match = p.rounds.find(r => r.status === 'scheduled' || r.status === 'pending');
   if (!match) return null;
 
-  let colorClean = match.color ? match.color.toLowerCase() : '';
-  if (!colorClean) {
-    if (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase()) colorClean = 'white';
-    else if (match.playerBlack && match.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase()) colorClean = 'black';
-    else colorClean = match.round % 2 === 1 ? 'white' : 'black';
+  let colorClean: 'white' | 'black' = 'white';
+  const cLower = match.color ? match.color.toLowerCase() : '';
+  if (cLower === 'white' || cLower === 'black') {
+    colorClean = cLower;
+  } else if (match.playerBlack && match.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase()) {
+    colorClean = 'black';
+  } else if (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase()) {
+    colorClean = 'white';
+  } else {
+    colorClean = match.round % 2 === 1 ? 'white' : 'black';
   }
 
   const isWhite = colorClean === 'white' || (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());

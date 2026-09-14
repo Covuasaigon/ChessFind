@@ -370,7 +370,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
     return formatTourObj(r);
   };
 
-  const list = async (admin = false) => {
+  const list = async (admin = false): Promise<Tournament[]> => {
     let res: any = { results: [] };
     try {
       res = await db.prepare(admin ? 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<any>();
@@ -456,8 +456,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             bannersList = (await db.prepare('SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC').all()).results;
           } catch {}
           try {
-            const tList = await list(true);
-            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const tList: Tournament[] = await list(true);
+            const tourMap = new Map<string, string>(tList.map((t: Tournament) => [t.id, t.name]));
             const r = await db.prepare('SELECT * FROM prizes ORDER BY created_at DESC').all<any>();
             prizesList = (r.results || []).map(p => ({
               ...p,
@@ -465,8 +465,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             }));
           } catch {}
           try {
-            const tList = await list(true);
-            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const tList: Tournament[] = await list(true);
+            const tourMap = new Map<string, string>(tList.map((t: Tournament) => [t.id, t.name]));
             const r = await db.prepare('SELECT * FROM tournament_slides ORDER BY display_order ASC, created_at DESC').all<any>();
             slidesList = (r.results || []).map(item => ({
               ...item,
@@ -484,8 +484,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           await ensureSlidesTableSchema(db);
           const tid = u.searchParams.get('tournament_id') || u.searchParams.get('t') || '';
           try {
-            const tList = await list(true);
-            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const tList: Tournament[] = await list(true);
+            const tourMap = new Map<string, string>(tList.map((t: Tournament) => [t.id, t.name]));
             let sqlStr = "SELECT * FROM tournament_slides WHERE status = 'active'";
             const params: any[] = [];
             if (tid) {
@@ -515,8 +515,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const s = await session(req);
           if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn.' }, 401, {}, req);
           try {
-            const tList = await list(true);
-            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const tList: Tournament[] = await list(true);
+            const tourMap = new Map<string, string>(tList.map((t: Tournament) => [t.id, t.name]));
             const tid = u.searchParams.get('tournament_id') || u.searchParams.get('t') || '';
             let sqlStr = 'SELECT * FROM tournament_slides';
             const params: any[] = [];
@@ -539,8 +539,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const s = await session(req);
           if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn.' }, 401, {}, req);
           try {
-            const tList = await list(true);
-            const tourMap = new Map(tList.map(t => [t.id, t.name]));
+            const tList: Tournament[] = await list(true);
+            const tourMap = new Map<string, string>(tList.map((t: Tournament) => [t.id, t.name]));
             const r = await db.prepare('SELECT * FROM prizes ORDER BY created_at DESC').all<any>();
             const prizes = (r.results || []).map(p => ({
               ...p,

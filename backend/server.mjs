@@ -159,11 +159,16 @@ function getNextMatch(p) {
   if (!p.rounds || !p.rounds.length) return null;
   const match = p.rounds.find((r) => r.status === "scheduled" || r.status === "pending");
   if (!match) return null;
-  let colorClean = match.color ? match.color.toLowerCase() : "";
-  if (!colorClean) {
-    if (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase()) colorClean = "white";
-    else if (match.playerBlack && match.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase()) colorClean = "black";
-    else colorClean = match.round % 2 === 1 ? "white" : "black";
+  let colorClean = "white";
+  const cLower = match.color ? match.color.toLowerCase() : "";
+  if (cLower === "white" || cLower === "black") {
+    colorClean = cLower;
+  } else if (match.playerBlack && match.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase()) {
+    colorClean = "black";
+  } else if (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase()) {
+    colorClean = "white";
+  } else {
+    colorClean = match.round % 2 === 1 ? "white" : "black";
   }
   const isWhite = colorClean === "white" || match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase();
   const playerWhite = match.playerWhite || (isWhite ? p.name : match.opponent);
