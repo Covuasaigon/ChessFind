@@ -6,7 +6,7 @@ export type Round = {
   rating: number | null;
   color: 'WHITE' | 'BLACK' | 'white' | 'black' | null;
   score: number | null;
-  status: 'played' | 'pending' | 'bye' | 'forfeit' | 'unknown';
+  status: 'played' | 'pending' | 'scheduled' | 'bye' | 'forfeit' | 'unknown';
   raw?: string;
   playerWhite?: string;
   playerBlack?: string;
@@ -103,6 +103,8 @@ export type Tournament = {
   players: Player[];
   tieLabels: string[];
   rounds: number | null;
+  currentRound?: number | null;
+  completedRounds?: number | null;
   published?: boolean;
   warning?: string;
   info?: TournamentInfo;
@@ -159,10 +161,7 @@ export function stats(p: Player) {
     }
   }
   const uniqueRounds = Array.from(uniqueRoundsMap.values());
-  const playedRounds = uniqueRounds.filter(r =>
-    r.status === 'played' ||
-    (r.status !== 'bye' && r.status !== 'forfeit' && (r.opponent != null || r.color != null || r.result != null || r.score != null))
-  );
+  const playedRounds = uniqueRounds.filter(r => r.status === 'played');
 
   let white = 0;
   let whiteWins = 0;
@@ -177,6 +176,15 @@ export function stats(p: Player) {
   let wins = 0;
   let draws = 0;
   let losses = 0;
+  let points = 0;
+
+  for (const rd of uniqueRounds) {
+    if (rd.status === 'played' || rd.status === 'bye' || rd.status === 'forfeit') {
+      if (rd.score != null) {
+        points += rd.score;
+      }
+    }
+  }
 
   for (const rd of playedRounds) {
     let score = rd.score;
@@ -184,7 +192,7 @@ export function stats(p: Player) {
       if (rd.result) {
         if (rd.result.includes('1 - 0') || rd.result.includes('1-0')) score = (rd.color?.toLowerCase() === 'black' ? 0 : 1);
         else if (rd.result.includes('0 - 1') || rd.result.includes('0-1')) score = (rd.color?.toLowerCase() === 'black' ? 1 : 0);
-        else if (rd.result.includes('½')) score = 0.5;
+        else if (rd.result.includes('½') || rd.result.includes('1/2')) score = 0.5;
       }
     }
 
@@ -193,8 +201,13 @@ export function stats(p: Player) {
     else if (score === 0) losses++;
 
     const c = rd.color?.toLowerCase();
-    const isWhite = c === 'white' || (rd.playerWhite && rd.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
-    const isBlack = c === 'black' || (rd.playerBlack && rd.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase());
+    let isWhite = c === 'white' || (rd.playerWhite && rd.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
+    let isBlack = c === 'black' || (rd.playerBlack && rd.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase());
+
+    if (!isWhite && !isBlack) {
+      if (rd.round % 2 === 1) isWhite = true;
+      else isBlack = true;
+    }
 
     if (isWhite) {
       white++;
@@ -209,12 +222,13 @@ export function stats(p: Player) {
     }
   }
 
-  const totalPlayed = (p.totalGames != null && p.totalGames > 0) ? p.totalGames : playedRounds.length;
-  const whiteCount = (p.whiteGames != null && p.whiteGames > 0) ? p.whiteGames : (white > 0 ? white : uniqueRounds.filter(r => (r.color || '').toLowerCase() === 'white').length);
-  const blackCount = (p.blackGames != null && p.blackGames > 0) ? p.blackGames : (black > 0 ? black : uniqueRounds.filter(r => (r.color || '').toLowerCase() === 'black').length);
+  const totalPlayed = playedRounds.length;
+  const whiteCount = white;
+  const blackCount = black;
 
   return {
     played: totalPlayed,
+    points,
     wins,
     draws,
     losses,
@@ -262,7 +276,7 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
 
 export function getNextMatch(p: Player): Round | null {
   if (!p.rounds || !p.rounds.length) return null;
-  const pending = p.rounds.find(r => r.status === 'pending');
+  const pending = p.rounds.find(r => r.status === 'pending' || r.status === 'scheduled');
   if (pending) return pending;
   return null;
 }

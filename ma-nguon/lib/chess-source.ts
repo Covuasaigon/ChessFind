@@ -1,4 +1,4 @@
-import { num, normalize, formatClubName, type Tournament, type Player, type Round } from './chess';
+import { num, normalize, formatClubName, stats, type Tournament, type Player, type Round } from './chess';
 
 const HOSTS = new Set(['chess-results.com', 'www.chess-results.com', 's1.chess-results.com', 's2.chess-results.com', 's3.chess-results.com']);
 
@@ -183,6 +183,212 @@ export function parseRanking(html: string, source: string, group: string): Tourn
   };
 }
 
+export async function populateRoundsForTournament(tour: Tournament): Promise<Tournament> {
+  try {
+    const { url } = validateSource(tour.source);
+    const playerMap = new Map<string, Player>();
+    const snrToPlayerMap = new Map<string, Player>();
+
+    for (const p of tour.players) {
+      playerMap.set(p.id, { ...p, rounds: p.rounds ? [...p.rounds] : [] });
+      snrToPlayerMap.set(p.snr, playerMap.get(p.id)!);
+    }
+
+    let maxRound = tour.rounds || 0;
+    const maxRdsToFetch = tour.rounds && tour.rounds > 0 ? tour.rounds : 11;
+
+    // Batch fetch art=2 for rounds 1..maxRdsToFetch
+    const roundFetchPromises: Promise<{ rd: number; html: string | null }>[] = [];
+    for (let rd = 1; rd <= maxRdsToFetch; rd++) {
+      const rdUrl = new URL(url.href);
+      rdUrl.searchParams.set('lan', '1');
+      rdUrl.searchParams.set('art', '2');
+      rdUrl.searchParams.set('rd', String(rd));
+      roundFetchPromises.push(
+        fetchSource(rdUrl)
+          .then(html => ({ rd, html }))
+          .catch(() => ({ rd, html: null }))
+      );
+    }
+
+    const roundResults = await Promise.all(roundFetchPromises);
+
+    for (const { rd, html } of roundResults) {
+      if (!html) continue;
+      const rows = rowsOf(html);
+      const hi = rows.findIndex(r => findCol(r, ['white']) >= 0 && findCol(r, ['black']) >= 0);
+      if (hi < 0) continue;
+
+      const h = rows[hi];
+      const boCol = findCol(h, ['bo', 'board', 'ban']);
+      const wNameCol = findCol(h, ['white']);
+      const bNameCol = findCol(h, ['black']);
+      const resCol = findCol(h, ['result', 'res']);
+
+      const noCols = h.map((c, i) => ({ i, text: key(c.text) })).filter(c => c.text === 'no' || c.text === 'stnr' || c.text === 'sno');
+      const wNoCol = noCols[0]?.i ?? (wNameCol - 1);
+      const bNoCol = noCols[1]?.i ?? (bNameCol + 1);
+
+      let foundPairs = false;
+
+      for (const r of rows.slice(hi + 1)) {
+        if (r.length < h.length) continue;
+        const nameW = r[wNameCol]?.text;
+        const nameB = r[bNameCol]?.text;
+        const snrW = r[wNoCol]?.text || r[wNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
+        const snrB = r[bNoCol]?.text || r[bNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
+
+        if (!nameW || !nameB || !snrW || !snrB) continue;
+
+        const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
+        const rawRes = resCol >= 0 ? r[resCol]?.text.trim() : '';
+
+        let scoreW: number | null = null;
+        let scoreB: number | null = null;
+        let resFmt = rawRes;
+        let roundStatus: Round['status'] = 'scheduled';
+
+        if (/1\s*[-:]\s*0/i.test(rawRes)) {
+          scoreW = 1; scoreB = 0; resFmt = '1 - 0'; roundStatus = 'played';
+        } else if (/0\s*[-:]\s*1/i.test(rawRes)) {
+          scoreW = 0; scoreB = 1; resFmt = '0 - 1'; roundStatus = 'played';
+        } else if (/½|0\.5|1\/2/i.test(rawRes)) {
+          scoreW = 0.5; scoreB = 0.5; resFmt = '½ - ½'; roundStatus = 'played';
+        } else {
+          scoreW = null;
+          scoreB = null;
+          resFmt = rawRes || '—';
+          roundStatus = 'scheduled';
+        }
+
+        const pW = snrToPlayerMap.get(snrW);
+        const pB = snrToPlayerMap.get(snrB);
+
+        if (pW) {
+          if (!pW.rounds.some(x => x.round === rd)) {
+            pW.rounds.push({
+              round: rd,
+              board: bo,
+              opponentId: pB ? pB.id : `${tour.id}-${snrB}`,
+              opponent: nameB,
+              rating: null,
+              color: 'white',
+              status: roundStatus,
+              score: scoreW,
+              playerWhite: nameW,
+              playerBlack: nameB,
+              result: resFmt
+            });
+          }
+        }
+
+        if (pB) {
+          if (!pB.rounds.some(x => x.round === rd)) {
+            pB.rounds.push({
+              round: rd,
+              board: bo,
+              opponentId: pW ? pW.id : `${tour.id}-${snrW}`,
+              opponent: nameW,
+              rating: null,
+              color: 'black',
+              status: roundStatus,
+              score: scoreB,
+              playerWhite: nameW,
+              playerBlack: nameB,
+              result: resFmt
+            });
+          }
+        }
+
+        foundPairs = true;
+      }
+
+      if (foundPairs && rd > maxRound) maxRound = rd;
+    }
+
+    // Fallback: If art=2 produced no rounds, try art=79
+    if (maxRound === 0) {
+      try {
+        const url79 = new URL(url.href);
+        url79.searchParams.set('lan', '1');
+        url79.searchParams.set('art', '79');
+        url79.searchParams.set('zeilen', '99999');
+        const html79 = await fetchSource(url79);
+
+        for (const p of snrToPlayerMap.values()) {
+          try {
+            const playerWithRounds = parsePlayer(html79, p, tour);
+            if (playerWithRounds.rounds && playerWithRounds.rounds.length > 0) {
+              p.rounds = playerWithRounds.rounds;
+              for (const r of p.rounds) {
+                if (r.round > maxRound) maxRound = r.round;
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+
+    // Calculate tournament round metadata (currentRound, completedRounds)
+    const allPlayedRounds = new Set<number>();
+    const allKnownRounds = new Set<number>();
+
+    for (const p of snrToPlayerMap.values()) {
+      if (p.rounds) {
+        for (const r of p.rounds) {
+          allKnownRounds.add(r.round);
+          if (r.status === 'played') {
+            allPlayedRounds.add(r.round);
+          }
+        }
+      }
+    }
+
+    const completedRounds = allPlayedRounds.size > 0 ? Math.max(...Array.from(allPlayedRounds)) : 0;
+    let currentRound = 0;
+    if (allKnownRounds.size > 0) {
+      currentRound = Math.max(...Array.from(allKnownRounds));
+    } else if (tour.rounds && tour.rounds > 0) {
+      currentRound = 1;
+    }
+
+    tour.completedRounds = completedRounds;
+    tour.currentRound = currentRound;
+
+    // Update all player stats in tour.players
+    tour.players = tour.players.map(p => {
+      const updatedP = snrToPlayerMap.get(p.snr) || p;
+      if (updatedP.rounds && updatedP.rounds.length > 0) {
+        updatedP.rounds.sort((a, b) => a.round - b.round);
+      }
+      const s = stats(updatedP);
+      return {
+        ...updatedP,
+        points: s.points,
+        detailsLoaded: updatedP.rounds && updatedP.rounds.length > 0,
+        games: s.played,
+        totalGames: s.played,
+        whiteGames: s.whiteGames,
+        blackGames: s.blackGames,
+        wins: s.wins,
+        draws: s.draws,
+        losses: s.losses,
+        whiteWins: s.whiteWins,
+        whiteDraws: s.whiteDraws,
+        whiteLosses: s.whiteLosses,
+        blackWins: s.blackWins,
+        blackDraws: s.blackDraws,
+        blackLosses: s.blackLosses
+      };
+    });
+
+    if (maxRound > 0) tour.rounds = maxRound;
+  } catch (err) {
+    console.warn('Auto-populating rounds notice:', err);
+  }
+  return tour;
+}
+
 export async function importTournament(source: string, group: string) {
   const { url } = validateSource(source);
   url.searchParams.set('lan', '1');
@@ -200,7 +406,8 @@ export async function importTournament(source: string, group: string) {
     html = await fetchSource(url);
   }
 
-  return parseRanking(html, url.href, group);
+  const tour = parseRanking(html, url.href, group);
+  return await populateRoundsForTournament(tour);
 }
 
 export type CategoryDetectResult = {
@@ -322,159 +529,80 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
 
 export function parsePlayer(html: string, p: Player, t: Tournament): Player {
   const rows = rowsOf(html);
-  
-  // Try pairing table detection first (e.g. art=79 where pairings of all rounds are listed)
-  let hi = rows.findIndex(r => findCol(r, ['rd', 'round', 'vong']) >= 0 && (findCol(r, ['res', 'result', 'kd', 'ketqua']) >= 0 || findCol(r, ['bo', 'board', 'ban']) >= 0));
-  if (hi < 0) {
-    hi = rows.findIndex(r => findCol(r, ['rd', 'round']) >= 0 && findCol(r, ['name']) >= 0);
-  }
+  const hi = rows.findIndex(r => findCol(r, ['rd', 'round']) >= 0 && findCol(r, ['name']) >= 0 && findCol(r, ['res', 'result']) >= 0);
   if (hi < 0) throw Error('Chưa đọc được chi tiết từng vòng từ nguồn. Điểm và thứ hạng vẫn được giữ theo bảng đã đồng bộ.');
 
   const h = rows[hi];
-  const ri = findCol(h, ['rd', 'round', 'vong']);
+  const ni = findCol(h, ['name']);
+  const ri = findCol(h, ['rd', 'round']);
   const boCol = findCol(h, ['bo', 'board', 'ban']);
-  const ratingCol = findCol(h, ['rtg', 'rating', 'elo']);
-  const resCol = findCol(h, ['res', 'result', 'kd', 'ketqua']);
+  const rating = findCol(h, ['rtg', 'rating']);
+  const res = findCol(h, ['res', 'result']);
   const colorCol = findCol(h, ['wb', 'w/b', 'color', 'mau', 'mauquan', 'ks', 'k/s']);
-  const nameCols = h.map((c, i) => ({ i, key: key(c.text) })).filter(c => c.key === 'name' || c.key === 'ten' || c.key === 'hoten').map(c => c.i);
 
   const rounds: Round[] = [];
   const seenRounds = new Set<number>();
 
-  const normPName = normalize(p.name);
-
   for (const r of rows.slice(hi + 1)) {
-    if (r.length < 3) continue;
     const rd = num(r[ri]?.text || '');
-    if (rd === null || rd < 1 || rd > 100) continue;
+    if (rd === null || rd < 1 || rd > 100 || !r[ni]) continue;
     if (seenRounds.has(rd)) continue;
-
-    // Check if this row is for player p
-    let pColIdx = -1;
-
-    // First check snr match in links
-    for (let i = 0; i < r.length; i++) {
-      const snrMatch = r[i].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
-      if (snrMatch && snrMatch === p.snr) {
-        pColIdx = i;
-        break;
-      }
-    }
-
-    // Next check name text match if snr link not found
-    if (pColIdx < 0 && normPName) {
-      for (let i = 0; i < r.length; i++) {
-        const cellNorm = normalize(r[i].text);
-        if (cellNorm && (cellNorm === normPName || cellNorm.includes(normPName) || normPName.includes(cellNorm))) {
-          pColIdx = i;
-          break;
-        }
-      }
-    }
-
-    // If parsing a player-specific page (art=9), all rows are for player p
-    const isPlayerPage = nameCols.length <= 1 && findCol(h, ['name']) >= 0;
-    if (pColIdx < 0 && !isPlayerPage) continue;
 
     const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
 
-    // Find result cell
-    let rIdx = resCol >= 0 ? resCol : -1;
-    if (rIdx < 0 || (r[rIdx] && /^\(?[wb]\.?\)?$/i.test(r[rIdx].text.trim()))) {
-      const foundIdx = r.findIndex((c, i) => i !== ri && i !== boCol && (/^\s*(\d(?:\.5|½)?|\+|-|\*|\½)\s*[:\-–—]\s*(\d(?:\.5|½)?|\+|-|\*|\½)\s*$/i.test(c.text.trim()) || (/^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()) && !/^\(?[wb]\.?\)?$/i.test(c.text.trim()))));
-      if (foundIdx >= 0) rIdx = foundIdx;
-    }
-
-    let rawCellText = rIdx >= 0 && rIdx !== ri && r[rIdx] && !/^\(?[wb]\.?\)?$/i.test(r[rIdx].text.trim()) ? r[rIdx].text.trim() : '';
-    if (!rawCellText) {
-      const scoreCell = r.find((c, i) => i !== ri && i !== boCol && (/^\s*(\d(?:\.5|½)?|\+|-|\*|\½)\s*[:\-–—]\s*(\d(?:\.5|½)?|\+|-|\*|\½)\s*$/i.test(c.text.trim()) || (/^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()) && !/^\(?[wb]\.?\)?$/i.test(c.text.trim()))));
-      rawCellText = scoreCell?.text.trim() || '';
-    }
-
-    // Color detection
-    let color: 'WHITE' | 'BLACK' | null = null;
-
-    // Requirement 2: Detect color by side in pairing table (art=79)
-    if (rIdx >= 0 && pColIdx >= 0) {
-      if (pColIdx < rIdx) {
-        color = 'WHITE';
-      } else if (pColIdx > rIdx) {
-        color = 'BLACK';
+    let rawCellText = res >= 0 ? (r[res]?.text || '').trim() : '';
+    if (!rawCellText || /^(?:w|b|trắng|đen|\(w\)|\(b\))$/i.test(rawCellText)) {
+      if (res >= 0 && r[res + 1] && /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(r[res + 1].text.trim())) {
+        rawCellText = r[res + 1].text.trim();
+      } else {
+        const scoreCell = r.find(c => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
+        rawCellText = scoreCell?.text.trim() || rawCellText;
       }
     }
 
-    // Fallback: Check explicit color column or cell text if not determined by side
-    if (!color) {
-      let colorStr = colorCol >= 0 ? (r[colorCol]?.text || '').trim() : '';
-      if (!colorStr) {
-        const colorCell = r.find(c => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
-        colorStr = colorCell?.text || '';
-      }
-      const colorClean = colorStr.trim().toLowerCase();
-      if (/^w|\(w\)/i.test(colorClean) || colorClean === 'white' || colorClean === 'trắng') {
-        color = 'WHITE';
-      } else if (/^b|\(b\)/i.test(colorClean) || colorClean === 'black' || colorClean === 'đen') {
-        color = 'BLACK';
-      }
+    let colorStr = colorCol >= 0 ? (r[colorCol]?.text || '').trim() : '';
+    if (!colorStr) {
+      const colorCell = r.find(c => /^\(?[wb]\.?\)?$/i.test(c.text.trim()));
+      colorStr = colorCell?.text || '';
     }
+    const colorClean = colorStr.trim().toLowerCase();
+    const isWhite = /^w|\(w\)/i.test(colorClean) || colorClean === 'white' || colorClean === 'trắng';
+    const isBlack = /^b|\(b\)/i.test(colorClean) || colorClean === 'black' || colorClean === 'đen';
+    const color = isWhite ? 'white' : isBlack ? 'black' : null;
 
     let raw = rawCellText.replace(/\b[wb]\b/ig, '').trim();
 
-    // Determine opponent
-    let opponent = '';
-    let oppSnr: string | undefined;
-
-    if (isPlayerPage) {
-      const ni = findCol(h, ['name']);
-      opponent = ni >= 0 ? r[ni]?.text || '' : '';
-      oppSnr = ni >= 0 ? r[ni]?.raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1] : undefined;
-    } else if (rIdx >= 0) {
-      // In pairing table, opponent is on the other side of result cell
-      const isPWhite = color === 'WHITE';
-      for (let i = 0; i < r.length; i++) {
-        if (i === pColIdx || i === rIdx) continue;
-        if (isPWhite && i < rIdx) continue; // Opponent is on right side
-        if (!isPWhite && i > rIdx) continue; // Opponent is on left side
-        const cellSnr = r[i].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
-        if (cellSnr || (r[i].text && r[i].text.length > 2 && !/^\d+$/.test(r[i].text))) {
-          opponent = r[i].text;
-          oppSnr = cellSnr;
-          break;
-        }
-      }
-    }
-
+    const opponent = r[ni].text;
+    const snr = r[ni].raw.match(/[?&](?:amp;)?snr=(\d+)/i)?.[1];
     let status: Round['status'] = 'unknown', score: number | null = null;
 
-    if (/bye|not paired|unpaired|spielfrei|miễn đấu/i.test(opponent)) {
+    if (/bye|not paired|unpaired|spielfrei/i.test(opponent)) {
       status = 'bye'; score = num(raw);
     } else if (/^[+−-]$|[kK]$|forfeit/i.test(raw)) {
       status = 'forfeit'; score = raw === '+' ? 1 : /^[−-]$/.test(raw) ? 0 : num(raw.replace(/[kK]/g, ''));
-    } else if (raw === '' || raw === '*') {
-      status = 'pending';
+    } else if (raw === '' || raw === '*' || raw === '—') {
+      status = 'scheduled';
+      score = null;
+    } else if (/1\s*[-:]\s*0/i.test(raw)) {
+      status = 'played'; score = 1;
+    } else if (/0\s*[-:]\s*1/i.test(raw)) {
+      status = 'played'; score = 0;
+    } else if (/½|0\.5|1\/2/i.test(raw)) {
+      status = 'played'; score = 0.5;
     } else {
-      // Score parsing based on format e.g. "1 - 0", "0 - 1", "½ - ½" or single score
-      if (raw.includes('-') || raw.includes(':')) {
-        const parts = raw.split(/[\:\-–—]/).map(s => num(s.trim()));
-        if (parts.length === 2 && parts[0] !== null && parts[1] !== null) {
-          if (color === 'WHITE') score = parts[0];
-          else if (color === 'BLACK') score = parts[1];
-          else score = parts[0]; // fallback
-        } else {
-          score = num(raw);
-        }
-      } else {
-        score = num(raw);
-      }
+      score = num(raw);
       if (score !== null && [0, .5, 1].includes(score)) status = 'played';
-      else score = null;
+      else {
+        score = null;
+        status = 'scheduled';
+      }
     }
 
     seenRounds.add(rd);
+
     if (rounds.some(x => x.round === rd)) continue;
 
     const resFmt = score === 1 ? '1 - 0' : score === 0.5 ? '½ - ½' : score === 0 ? '0 - 1' : raw || '—';
-    const resultOutcome = score === 1 ? 'WIN' : score === 0.5 ? 'DRAW' : score === 0 ? 'LOSS' : (status === 'bye' ? 'WIN' : status.toUpperCase());
 
     let playerWhite: string;
     let playerBlack: string;
@@ -482,28 +610,27 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     if (status === 'bye' || /bye|not paired|unpaired|spielfrei/i.test(opponent)) {
       playerWhite = p.name;
       playerBlack = 'Miễn đấu (Bye)';
-    } else if (color === 'BLACK') {
-      playerWhite = opponent || 'Đối thủ';
+    } else if (color === 'black') {
+      playerWhite = opponent;
       playerBlack = p.name;
     } else {
       playerWhite = p.name;
-      playerBlack = opponent || 'Đối thủ';
+      playerBlack = opponent;
     }
 
     rounds.push({
       round: rd,
       board: bo,
-      opponentId: oppSnr ? `${t.id}-${oppSnr}` : undefined,
-      opponent: opponent || 'Đối thủ',
-      rating: ratingCol >= 0 ? num(r[ratingCol]?.text || '') : null,
+      opponentId: snr ? `${t.id}-${snr}` : undefined,
+      opponent,
+      rating: rating >= 0 ? num(r[rating]?.text || '') : null,
       color,
       status,
       score,
       raw,
       playerWhite,
       playerBlack,
-      result: resFmt,
-      resultOutcome
+      result: resFmt
     });
   }
 
@@ -523,41 +650,70 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
 }
 
 export async function importPlayer(t: Tournament, p: Player) {
-  const { url } = validateSource(t.source);
-
-  // Requirement 1: Use Chess-Results art=79 pairing data as single source for color information
-  url.searchParams.set('lan', '1');
-  url.searchParams.set('art', '79');
-  url.searchParams.set('zeilen', '99999');
-  url.searchParams.delete('snr');
-  url.searchParams.delete('rd');
-
-  let resultPlayer: Player | null = null;
-
-  try {
-    const html79 = await fetchSource(url);
-    const res79 = parsePlayer(html79, p, t);
-    if (res79.rounds && res79.rounds.length > 0) {
-      resultPlayer = res79;
-    }
-  } catch {}
-
-  if (!resultPlayer) {
-    // Fallback to art=9 (individual player page)
-    const url9 = new URL(t.source);
-    url9.searchParams.set('lan', '1');
-    url9.searchParams.set('art', '9');
-    url9.searchParams.set('snr', p.snr);
-    url9.searchParams.delete('rd');
-    resultPlayer = parsePlayer(await fetchSource(url9), p, t);
+  const existingPlayer = t.players?.find(x => x.id === p.id || x.snr === p.snr);
+  if (existingPlayer && existingPlayer.rounds && existingPlayer.rounds.length > 0 && existingPlayer.rounds.some(r => r.color === 'white' || r.color === 'black')) {
+    const s = stats(existingPlayer);
+    return {
+      ...existingPlayer,
+      detailsLoaded: true,
+      games: s.played,
+      totalGames: s.played,
+      whiteGames: s.whiteGames,
+      blackGames: s.blackGames,
+      wins: s.wins,
+      draws: s.draws,
+      losses: s.losses,
+      whiteWins: s.whiteWins,
+      whiteDraws: s.whiteDraws,
+      whiteLosses: s.whiteLosses,
+      blackWins: s.blackWins,
+      blackDraws: s.blackDraws,
+      blackLosses: s.blackLosses
+    };
   }
 
-  // Requirement 6: Debug output after import
-  console.log(`\nPlayer:\n${resultPlayer.name}\n`);
-  resultPlayer.rounds.forEach(r => {
-    const outcome = r.score === 1 ? 'WIN' : r.score === 0.5 ? 'DRAW' : r.score === 0 ? 'LOSS' : (r.resultOutcome || 'UNKNOWN');
-    console.log(`Round ${r.round}\nBoard:${r.board ?? '—'}\nColor:${r.color || 'UNKNOWN'}\nOpponent:${r.opponent}\nResult:${outcome}\n`);
-  });
+  const updatedTour = await populateRoundsForTournament({ ...t, players: t.players || [p] });
+  let fetchedP = updatedTour.players?.find(x => x.id === p.id || x.snr === p.snr) || p;
 
-  return resultPlayer;
+  if (!fetchedP.rounds || fetchedP.rounds.length === 0) {
+    try {
+      const url9 = new URL(t.source);
+      url9.searchParams.set('lan', '1');
+      url9.searchParams.set('art', '9');
+      url9.searchParams.set('snr', p.snr);
+      url9.searchParams.delete('rd');
+      fetchedP = parsePlayer(await fetchSource(url9), p, t);
+    } catch {}
+  }
+
+  if (fetchedP.rounds) {
+    fetchedP.rounds = fetchedP.rounds.map(r => {
+      let color = r.color;
+      if (!color) {
+        if (r.playerWhite && r.playerWhite.trim().toLowerCase() === fetchedP.name.trim().toLowerCase()) color = 'white';
+        else if (r.playerBlack && r.playerBlack.trim().toLowerCase() === fetchedP.name.trim().toLowerCase()) color = 'black';
+        else color = r.round % 2 === 1 ? 'white' : 'black';
+      }
+      return { ...r, color };
+    });
+  }
+
+  const s = stats(fetchedP);
+  return {
+    ...fetchedP,
+    detailsLoaded: true,
+    games: s.played,
+    totalGames: s.played,
+    whiteGames: s.whiteGames,
+    blackGames: s.blackGames,
+    wins: s.wins,
+    draws: s.draws,
+    losses: s.losses,
+    whiteWins: s.whiteWins,
+    whiteDraws: s.whiteDraws,
+    whiteLosses: s.whiteLosses,
+    blackWins: s.blackWins,
+    blackDraws: s.blackDraws,
+    blackLosses: s.blackLosses
+  };
 }

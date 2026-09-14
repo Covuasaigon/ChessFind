@@ -36,4 +36,49 @@ assert.equal(statsReq7.blackGames, 1);
 assert.equal(statsReq7.white, 2);
 assert.equal(statsReq7.black, 1);
 
-console.log('PASS: demo consistency, search normalization, score parsing, blocked URLs, ranking parsing, Black win, forfeit exclusion, mismatched snapshot rejection, 3-match color stats.');
+// Case 1 Test: Tournament in round 5, round 6 is paired (scheduled, no result)
+const playerCase1 = {
+  id: 'c1-p1',
+  snr: '1',
+  name: 'Player Case 1',
+  club: 'CLB A',
+  rating: 1400,
+  rank: 1,
+  points: 4.5,
+  ties: {},
+  detailsLoaded: true,
+  rounds: [
+    { round: 1, opponent: 'Opp 1', color: 'WHITE' as const, score: 1, status: 'played' as const, result: '1 - 0' },
+    { round: 2, opponent: 'Opp 2', color: 'BLACK' as const, score: 1, status: 'played' as const, result: '0 - 1' },
+    { round: 3, opponent: 'Opp 3', color: 'WHITE' as const, score: 1, status: 'played' as const, result: '1 - 0' },
+    { round: 4, opponent: 'Opp 4', color: 'BLACK' as const, score: 1, status: 'played' as const, result: '0 - 1' },
+    { round: 5, opponent: 'Opp 5', color: 'WHITE' as const, score: 0.5, status: 'played' as const, result: '½ - ½' },
+    { round: 6, opponent: 'Opp 6', color: 'BLACK' as const, score: null, status: 'scheduled' as const, result: '—' }
+  ]
+};
+const statsCase1 = stats(playerCase1);
+assert.equal(statsCase1.played, 5, 'Case 1: totalGames should equal 5 (round 6 scheduled is ignored)');
+assert.equal(statsCase1.points, 4.5, 'Case 1: points should equal 4.5 from played games');
+assert.equal(playerCase1.rounds.filter(r => r.status === 'played').length, 5, 'Case 1: No round 6 in played history');
+
+// Case 2 Test: Newly created tournament not yet played
+const playerCase2 = {
+  id: 'c2-p1',
+  snr: '1',
+  name: 'Player Case 2',
+  club: 'CLB B',
+  rating: 1200,
+  rank: 1,
+  points: null,
+  ties: {},
+  detailsLoaded: true,
+  rounds: [
+    { round: 1, opponent: 'Opp 1', color: 'WHITE' as const, score: null, status: 'scheduled' as const, result: '' }
+  ]
+};
+const statsCase2 = stats(playerCase2);
+assert.equal(statsCase2.played, 0, 'Case 2: games should equal 0');
+assert.equal(statsCase2.points, 0, 'Case 2: points should equal 0');
+
+console.log('PASS: demo consistency, search normalization, score parsing, blocked URLs, ranking parsing, Black win, forfeit exclusion, mismatched snapshot rejection, 3-match color stats, Case 1 future pairings ignored, Case 2 unplayed stats = 0.');
+

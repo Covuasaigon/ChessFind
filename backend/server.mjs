@@ -55,9 +55,7 @@ function stats(p) {
     }
   }
   const uniqueRounds = Array.from(uniqueRoundsMap.values());
-  const playedRounds = uniqueRounds.filter(
-    (r) => r.status === "played" || r.status !== "bye" && r.status !== "forfeit" && (r.opponent != null || r.color != null || r.result != null || r.score != null)
-  );
+  const playedRounds = uniqueRounds.filter((r) => r.status === "played");
   let white = 0;
   let whiteWins = 0;
   let whiteDraws = 0;
@@ -69,13 +67,21 @@ function stats(p) {
   let wins = 0;
   let draws = 0;
   let losses = 0;
+  let points = 0;
+  for (const rd of uniqueRounds) {
+    if (rd.status === "played" || rd.status === "bye" || rd.status === "forfeit") {
+      if (rd.score != null) {
+        points += rd.score;
+      }
+    }
+  }
   for (const rd of playedRounds) {
     let score = rd.score;
     if (score === null || score === void 0) {
       if (rd.result) {
         if (rd.result.includes("1 - 0") || rd.result.includes("1-0")) score = rd.color?.toLowerCase() === "black" ? 0 : 1;
         else if (rd.result.includes("0 - 1") || rd.result.includes("0-1")) score = rd.color?.toLowerCase() === "black" ? 1 : 0;
-        else if (rd.result.includes("\xBD")) score = 0.5;
+        else if (rd.result.includes("\xBD") || rd.result.includes("1/2")) score = 0.5;
       }
     }
     if (score === 1) wins++;
@@ -100,11 +106,12 @@ function stats(p) {
       else if (score === 0) blackLosses++;
     }
   }
-  const totalPlayed = p.totalGames != null && p.totalGames > 0 ? p.totalGames : playedRounds.length;
-  const whiteCount = p.whiteGames != null && p.whiteGames > 0 ? p.whiteGames : white;
-  const blackCount = p.blackGames != null && p.blackGames > 0 ? p.blackGames : black;
+  const totalPlayed = playedRounds.length;
+  const whiteCount = white;
+  const blackCount = black;
   return {
     played: totalPlayed,
+    points,
     wins,
     draws,
     losses,
@@ -150,7 +157,7 @@ function getMedal(rank, group, prizes) {
 }
 function getNextMatch(p) {
   if (!p.rounds || !p.rounds.length) return null;
-  const pending = p.rounds.find((r) => r.status === "pending");
+  const pending = p.rounds.find((r) => r.status === "pending" || r.status === "scheduled");
   if (pending) return pending;
   return null;
 }
@@ -369,27 +376,30 @@ async function populateRoundsForTournament(tour) {
         if (!nameW || !nameB || !snrW || !snrB) continue;
         const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
         const rawRes = resCol >= 0 ? r[resCol]?.text.trim() : "";
-        let scoreW = 0;
-        let scoreB = 0;
+        let scoreW = null;
+        let scoreB = null;
         let resFmt = rawRes;
+        let roundStatus = "scheduled";
         if (/1\s*[-:]\s*0/i.test(rawRes)) {
           scoreW = 1;
           scoreB = 0;
           resFmt = "1 - 0";
+          roundStatus = "played";
         } else if (/0\s*[-:]\s*1/i.test(rawRes)) {
           scoreW = 0;
           scoreB = 1;
           resFmt = "0 - 1";
+          roundStatus = "played";
         } else if (/½|0\.5|1\/2/i.test(rawRes)) {
           scoreW = 0.5;
           scoreB = 0.5;
           resFmt = "\xBD - \xBD";
+          roundStatus = "played";
         } else {
-          const scoreParsed = num(rawRes);
-          if (scoreParsed !== null) {
-            scoreW = scoreParsed;
-            scoreB = scoreParsed;
-          }
+          scoreW = null;
+          scoreB = null;
+          resFmt = rawRes || "\u2014";
+          roundStatus = "scheduled";
         }
         const pW = snrToPlayerMap.get(snrW);
         const pB = snrToPlayerMap.get(snrB);
@@ -402,7 +412,7 @@ async function populateRoundsForTournament(tour) {
               opponent: nameB,
               rating: null,
               color: "white",
-              status: "played",
+              status: roundStatus,
               score: scoreW,
               playerWhite: nameW,
               playerBlack: nameB,
@@ -419,7 +429,7 @@ async function populateRoundsForTournament(tour) {
               opponent: nameW,
               rating: null,
               color: "black",
-              status: "played",
+              status: roundStatus,
               score: scoreB,
               playerWhite: nameW,
               playerBlack: nameB,
@@ -453,6 +463,27 @@ async function populateRoundsForTournament(tour) {
       } catch {
       }
     }
+    const allPlayedRounds = /* @__PURE__ */ new Set();
+    const allKnownRounds = /* @__PURE__ */ new Set();
+    for (const p of snrToPlayerMap.values()) {
+      if (p.rounds) {
+        for (const r of p.rounds) {
+          allKnownRounds.add(r.round);
+          if (r.status === "played") {
+            allPlayedRounds.add(r.round);
+          }
+        }
+      }
+    }
+    const completedRounds = allPlayedRounds.size > 0 ? Math.max(...Array.from(allPlayedRounds)) : 0;
+    let currentRound = 0;
+    if (allKnownRounds.size > 0) {
+      currentRound = Math.max(...Array.from(allKnownRounds));
+    } else if (tour.rounds && tour.rounds > 0) {
+      currentRound = 1;
+    }
+    tour.completedRounds = completedRounds;
+    tour.currentRound = currentRound;
     tour.players = tour.players.map((p) => {
       const updatedP = snrToPlayerMap.get(p.snr) || p;
       if (updatedP.rounds && updatedP.rounds.length > 0) {
@@ -461,6 +492,7 @@ async function populateRoundsForTournament(tour) {
       const s = stats(updatedP);
       return {
         ...updatedP,
+        points: s.points,
         detailsLoaded: updatedP.rounds && updatedP.rounds.length > 0,
         games: s.played,
         totalGames: s.played,
@@ -601,9 +633,13 @@ function parsePlayer(html, p, t) {
     if (seenRounds.has(rd)) continue;
     const bo = boCol >= 0 ? num(r[boCol]?.text || "") : null;
     let rawCellText = res >= 0 ? (r[res]?.text || "").trim() : "";
-    if (!rawCellText) {
-      const scoreCell = r.find((c) => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
-      rawCellText = scoreCell?.text.trim() || "";
+    if (!rawCellText || /^(?:w|b|trắng|đen|\(w\)|\(b\))$/i.test(rawCellText)) {
+      if (res >= 0 && r[res + 1] && /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(r[res + 1].text.trim())) {
+        rawCellText = r[res + 1].text.trim();
+      } else {
+        const scoreCell = r.find((c) => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
+        rawCellText = scoreCell?.text.trim() || rawCellText;
+      }
     }
     let colorStr = colorCol >= 0 ? (r[colorCol]?.text || "").trim() : "";
     if (!colorStr) {
@@ -624,12 +660,25 @@ function parsePlayer(html, p, t) {
     } else if (/^[+−-]$|[kK]$|forfeit/i.test(raw)) {
       status = "forfeit";
       score = raw === "+" ? 1 : /^[−-]$/.test(raw) ? 0 : num(raw.replace(/[kK]/g, ""));
-    } else if (raw === "" || raw === "*") {
-      status = "pending";
+    } else if (raw === "" || raw === "*" || raw === "\u2014") {
+      status = "scheduled";
+      score = null;
+    } else if (/1\s*[-:]\s*0/i.test(raw)) {
+      status = "played";
+      score = 1;
+    } else if (/0\s*[-:]\s*1/i.test(raw)) {
+      status = "played";
+      score = 0;
+    } else if (/½|0\.5|1\/2/i.test(raw)) {
+      status = "played";
+      score = 0.5;
     } else {
       score = num(raw);
       if (score !== null && [0, 0.5, 1].includes(score)) status = "played";
-      else score = null;
+      else {
+        score = null;
+        status = "scheduled";
+      }
     }
     seenRounds.add(rd);
     if (rounds.some((x) => x.round === rd)) continue;

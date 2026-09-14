@@ -243,22 +243,22 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
         const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
         const rawRes = resCol >= 0 ? r[resCol]?.text.trim() : '';
 
-        let scoreW = 0;
-        let scoreB = 0;
+        let scoreW: number | null = null;
+        let scoreB: number | null = null;
         let resFmt = rawRes;
+        let roundStatus: Round['status'] = 'scheduled';
 
         if (/1\s*[-:]\s*0/i.test(rawRes)) {
-          scoreW = 1; scoreB = 0; resFmt = '1 - 0';
+          scoreW = 1; scoreB = 0; resFmt = '1 - 0'; roundStatus = 'played';
         } else if (/0\s*[-:]\s*1/i.test(rawRes)) {
-          scoreW = 0; scoreB = 1; resFmt = '0 - 1';
+          scoreW = 0; scoreB = 1; resFmt = '0 - 1'; roundStatus = 'played';
         } else if (/½|0\.5|1\/2/i.test(rawRes)) {
-          scoreW = 0.5; scoreB = 0.5; resFmt = '½ - ½';
+          scoreW = 0.5; scoreB = 0.5; resFmt = '½ - ½'; roundStatus = 'played';
         } else {
-          const scoreParsed = num(rawRes);
-          if (scoreParsed !== null) {
-            scoreW = scoreParsed;
-            scoreB = scoreParsed;
-          }
+          scoreW = null;
+          scoreB = null;
+          resFmt = rawRes || '—';
+          roundStatus = 'scheduled';
         }
 
         const pW = snrToPlayerMap.get(snrW);
@@ -273,7 +273,7 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
               opponent: nameB,
               rating: null,
               color: 'white',
-              status: 'played',
+              status: roundStatus,
               score: scoreW,
               playerWhite: nameW,
               playerBlack: nameB,
@@ -291,7 +291,7 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
               opponent: nameW,
               rating: null,
               color: 'black',
-              status: 'played',
+              status: roundStatus,
               score: scoreB,
               playerWhite: nameW,
               playerBlack: nameB,
@@ -329,6 +329,32 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
       } catch {}
     }
 
+    // Calculate tournament round metadata (currentRound, completedRounds)
+    const allPlayedRounds = new Set<number>();
+    const allKnownRounds = new Set<number>();
+
+    for (const p of snrToPlayerMap.values()) {
+      if (p.rounds) {
+        for (const r of p.rounds) {
+          allKnownRounds.add(r.round);
+          if (r.status === 'played') {
+            allPlayedRounds.add(r.round);
+          }
+        }
+      }
+    }
+
+    const completedRounds = allPlayedRounds.size > 0 ? Math.max(...Array.from(allPlayedRounds)) : 0;
+    let currentRound = 0;
+    if (allKnownRounds.size > 0) {
+      currentRound = Math.max(...Array.from(allKnownRounds));
+    } else if (tour.rounds && tour.rounds > 0) {
+      currentRound = 1;
+    }
+
+    tour.completedRounds = completedRounds;
+    tour.currentRound = currentRound;
+
     // Update all player stats in tour.players
     tour.players = tour.players.map(p => {
       const updatedP = snrToPlayerMap.get(p.snr) || p;
@@ -338,6 +364,7 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
       const s = stats(updatedP);
       return {
         ...updatedP,
+        points: s.points,
         detailsLoaded: updatedP.rounds && updatedP.rounds.length > 0,
         games: s.played,
         totalGames: s.played,
@@ -524,9 +551,13 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     const bo = boCol >= 0 ? num(r[boCol]?.text || '') : null;
 
     let rawCellText = res >= 0 ? (r[res]?.text || '').trim() : '';
-    if (!rawCellText) {
-      const scoreCell = r.find(c => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
-      rawCellText = scoreCell?.text.trim() || '';
+    if (!rawCellText || /^(?:w|b|trắng|đen|\(w\)|\(b\))$/i.test(rawCellText)) {
+      if (res >= 0 && r[res + 1] && /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(r[res + 1].text.trim())) {
+        rawCellText = r[res + 1].text.trim();
+      } else {
+        const scoreCell = r.find(c => /^[01½\.]+$|^[+−-]$|^[01][kK]$/i.test(c.text.trim()));
+        rawCellText = scoreCell?.text.trim() || rawCellText;
+      }
     }
 
     let colorStr = colorCol >= 0 ? (r[colorCol]?.text || '').trim() : '';
@@ -549,12 +580,22 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
       status = 'bye'; score = num(raw);
     } else if (/^[+−-]$|[kK]$|forfeit/i.test(raw)) {
       status = 'forfeit'; score = raw === '+' ? 1 : /^[−-]$/.test(raw) ? 0 : num(raw.replace(/[kK]/g, ''));
-    } else if (raw === '' || raw === '*') {
-      status = 'pending';
+    } else if (raw === '' || raw === '*' || raw === '—') {
+      status = 'scheduled';
+      score = null;
+    } else if (/1\s*[-:]\s*0/i.test(raw)) {
+      status = 'played'; score = 1;
+    } else if (/0\s*[-:]\s*1/i.test(raw)) {
+      status = 'played'; score = 0;
+    } else if (/½|0\.5|1\/2/i.test(raw)) {
+      status = 'played'; score = 0.5;
     } else {
       score = num(raw);
       if (score !== null && [0, .5, 1].includes(score)) status = 'played';
-      else score = null;
+      else {
+        score = null;
+        status = 'scheduled';
+      }
     }
 
     seenRounds.add(rd);
