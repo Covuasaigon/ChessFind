@@ -232,7 +232,7 @@ export async function populateRoundsForTournament(tour: Tournament): Promise<Tou
       let foundPairs = false;
 
       for (const r of rows.slice(hi + 1)) {
-        if (r.length < h.length) continue;
+        if (!r[wNameCol] || !r[bNameCol]) continue;
         const nameW = r[wNameCol]?.text;
         const nameB = r[bNameCol]?.text;
         const snrW = r[wNoCol]?.text || r[wNameCol]?.raw.match(/snr=(\d+)/i)?.[1];

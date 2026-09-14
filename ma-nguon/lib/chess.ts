@@ -276,9 +276,32 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
 
 export function getNextMatch(p: Player): Round | null {
   if (!p.rounds || !p.rounds.length) return null;
-  const pending = p.rounds.find(r => r.status === 'pending' || r.status === 'scheduled');
-  if (pending) return pending;
-  return null;
+  const match = p.rounds.find(r => r.status === 'scheduled' || r.status === 'pending');
+  if (!match) return null;
+
+  let colorClean = match.color ? match.color.toLowerCase() : '';
+  if (!colorClean) {
+    if (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase()) colorClean = 'white';
+    else if (match.playerBlack && match.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase()) colorClean = 'black';
+    else colorClean = match.round % 2 === 1 ? 'white' : 'black';
+  }
+
+  const isWhite = colorClean === 'white' || (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase());
+  const playerWhite = match.playerWhite || (isWhite ? p.name : match.opponent);
+  const playerBlack = match.playerBlack || (!isWhite ? p.name : match.opponent);
+
+  return {
+    round: match.round,
+    board: match.board ?? null,
+    playerWhite,
+    playerBlack,
+    opponent: match.opponent,
+    color: colorClean,
+    status: 'scheduled',
+    opponentId: match.opponentId,
+    rating: match.rating ?? null,
+    score: null
+  };
 }
 
 export function matchPlayer(p: Player, group: string, query: string): boolean {

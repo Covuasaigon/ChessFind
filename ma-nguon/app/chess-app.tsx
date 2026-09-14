@@ -339,7 +339,7 @@ export default function ChessApp() {
                   </span>
                   {next ? (
                     <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,0.15)', padding: '4px 12px', borderRadius: 20 }}>
-                      Trạng thái: <b>Đang chờ thi đấu</b>
+                      Trạng thái: <b>Chờ thi đấu</b>
                     </span>
                   ) : (
                     <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(34,197,94,0.2)', color: '#4ADE80', padding: '4px 12px', borderRadius: 20, border: '1px solid rgba(34,197,94,0.3)' }}>

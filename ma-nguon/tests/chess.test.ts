@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {makeDemo,stats,normalize,num} from '../lib/chess';
+import {makeDemo,stats,normalize,num,getNextMatch} from '../lib/chess';
 import {parseRanking,parsePlayer,validateSource} from '../lib/chess-source';
 const demo=makeDemo(),main=demo.players.find(p=>p.name==='Nguyễn Minh Anh')!;
 assert.equal(main.points,4.5);assert.equal(stats(main).wins,4);assert.equal(stats(main).draws,1);assert.equal(stats(main).losses,2);assert.equal(stats(main).white+stats(main).black,7);assert.equal(stats(main).winRate,57);assert.equal(demo.players.reduce((n,p)=>n+p.points!,0),28);
@@ -60,6 +60,15 @@ const statsCase1 = stats(playerCase1);
 assert.equal(statsCase1.played, 5, 'Case 1: totalGames should equal 5 (round 6 scheduled is ignored)');
 assert.equal(statsCase1.points, 4.5, 'Case 1: points should equal 4.5 from played games');
 assert.equal(playerCase1.rounds.filter(r => r.status === 'played').length, 5, 'Case 1: No round 6 in played history');
+
+const nextMatchCase1 = getNextMatch(playerCase1);
+assert.ok(nextMatchCase1, 'nextMatch should be present for scheduled round 6');
+assert.equal(nextMatchCase1?.round, 6);
+assert.equal(nextMatchCase1?.opponent, 'Opp 6');
+assert.equal(nextMatchCase1?.status, 'scheduled');
+assert.equal(nextMatchCase1?.color, 'black');
+assert.equal(nextMatchCase1?.playerWhite, 'Opp 6');
+assert.equal(nextMatchCase1?.playerBlack, 'Player Case 1');
 
 // Case 2 Test: Newly created tournament not yet played
 const playerCase2 = {

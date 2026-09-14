@@ -157,9 +157,29 @@ function getMedal(rank, group, prizes) {
 }
 function getNextMatch(p) {
   if (!p.rounds || !p.rounds.length) return null;
-  const pending = p.rounds.find((r) => r.status === "pending" || r.status === "scheduled");
-  if (pending) return pending;
-  return null;
+  const match = p.rounds.find((r) => r.status === "scheduled" || r.status === "pending");
+  if (!match) return null;
+  let colorClean = match.color ? match.color.toLowerCase() : "";
+  if (!colorClean) {
+    if (match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase()) colorClean = "white";
+    else if (match.playerBlack && match.playerBlack.trim().toLowerCase() === p.name.trim().toLowerCase()) colorClean = "black";
+    else colorClean = match.round % 2 === 1 ? "white" : "black";
+  }
+  const isWhite = colorClean === "white" || match.playerWhite && match.playerWhite.trim().toLowerCase() === p.name.trim().toLowerCase();
+  const playerWhite = match.playerWhite || (isWhite ? p.name : match.opponent);
+  const playerBlack = match.playerBlack || (!isWhite ? p.name : match.opponent);
+  return {
+    round: match.round,
+    board: match.board ?? null,
+    playerWhite,
+    playerBlack,
+    opponent: match.opponent,
+    color: colorClean,
+    status: "scheduled",
+    opponentId: match.opponentId,
+    rating: match.rating ?? null,
+    score: null
+  };
 }
 
 // lib/chess-source.ts
@@ -368,7 +388,7 @@ async function populateRoundsForTournament(tour) {
       const bNoCol = noCols[1]?.i ?? bNameCol + 1;
       let foundPairs = false;
       for (const r of rows.slice(hi + 1)) {
-        if (r.length < h.length) continue;
+        if (!r[wNameCol] || !r[bNameCol]) continue;
         const nameW = r[wNameCol]?.text;
         const nameB = r[bNameCol]?.text;
         const snrW = r[wNoCol]?.text || r[wNameCol]?.raw.match(/snr=(\d+)/i)?.[1];
@@ -1305,6 +1325,18 @@ function createApi(db2, sourceParam = {}) {
           const r = await db2.prepare("SELECT payload FROM details WHERE tid = ? AND pid = ? ORDER BY revision DESC LIMIT 1").bind(id, pid).first();
           if (r) {
             playerObj = JSON.parse(r.payload);
+            if (p.rounds && p.rounds.length > 0) {
+              const scheduledRounds = p.rounds.filter((x) => x.status === "scheduled");
+              if (scheduledRounds.length > 0) {
+                playerObj.rounds = playerObj.rounds || [];
+                for (const sch of scheduledRounds) {
+                  if (!playerObj.rounds.some((x) => x.round === sch.round)) {
+                    playerObj.rounds.push(sch);
+                  }
+                }
+                playerObj.rounds.sort((a, b2) => a.round - b2.round);
+              }
+            }
           } else {
             if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429, {}, req);
             playerObj = await source.player(t, p);

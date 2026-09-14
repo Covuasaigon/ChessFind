@@ -508,6 +508,18 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const r = await db.prepare('SELECT payload FROM details WHERE tid = ? AND pid = ? ORDER BY revision DESC LIMIT 1').bind(id, pid).first<{ payload: string }>();
           if (r) {
             playerObj = JSON.parse(r.payload);
+            if (p.rounds && p.rounds.length > 0) {
+              const scheduledRounds = p.rounds.filter(x => x.status === 'scheduled');
+              if (scheduledRounds.length > 0) {
+                playerObj.rounds = playerObj.rounds || [];
+                for (const sch of scheduledRounds) {
+                  if (!playerObj.rounds.some(x => x.round === sch.round)) {
+                    playerObj.rounds.push(sch);
+                  }
+                }
+                playerObj.rounds.sort((a, b) => a.round - b.round);
+              }
+            }
           } else {
             if (!await lock('detail:' + id, 3)) return json({ error: 'Nguồn đang được tải. Hãy thử lại sau vài giây.' }, 429, {}, req);
             playerObj = await source.player(t, p);
