@@ -338,14 +338,46 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   const log = async (ok: boolean, m: string) => { await db.batch([db.prepare('INSERT INTO logs (id, created, ok, message) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), new Date().toISOString(), ok ? 1 : 0, m.slice(0, 500)), db.prepare('DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY created DESC LIMIT 100)')]) };
   const lock = async (k: string, s: number) => { const now = Date.now(); return (await db.prepare('INSERT INTO locks (key, until) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until WHERE locks.until < ?').bind(k, now + s * 1000, now).run()).meta.changes > 0 };
 
+  const formatTourObj = (r: any): Tournament | null => {
+    if (!r) return null;
+    let t: Tournament;
+    try { t = JSON.parse(r.payload); } catch { return null; }
+    const autoSync = r.auto_sync !== undefined && r.auto_sync !== null ? !!r.auto_sync : (t.autoSync ?? t.auto_sync ?? true);
+    const syncInterval = r.sync_interval ? Number(r.sync_interval) : (t.syncInterval ?? t.sync_interval ?? 5);
+    const lastSync = r.last_sync || t.lastSync || t.last_sync || null;
+    const nextSync = r.next_sync || t.nextSync || t.next_sync || null;
+    return {
+      ...t,
+      published: !!r.published,
+      autoSync,
+      auto_sync: autoSync,
+      syncInterval,
+      sync_interval: syncInterval,
+      lastSync,
+      last_sync: lastSync,
+      nextSync,
+      next_sync: nextSync
+    };
+  };
+
   const get = async (id: string, admin = false): Promise<Tournament | null> => {
-    const r = await db.prepare(admin ? 'SELECT payload,published FROM tournaments WHERE id = ?' : 'SELECT payload,published FROM tournaments WHERE id = ? AND published = 1').bind(id).first<{ payload: string; published: number }>();
-    return r ? { ...JSON.parse(r.payload), published: !!r.published } : null;
+    let r: any = null;
+    try {
+      r = await db.prepare(admin ? 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE id = ?' : 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE id = ? AND published = 1').bind(id).first<any>();
+    } catch {
+      r = await db.prepare(admin ? 'SELECT payload,published FROM tournaments WHERE id = ?' : 'SELECT payload,published FROM tournaments WHERE id = ? AND published = 1').bind(id).first<any>();
+    }
+    return formatTourObj(r);
   };
 
   const list = async (admin = false) => {
-    const r = await db.prepare(admin ? 'SELECT payload,published FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<{ payload: string; published: number }>();
-    return r.results.map(x => ({ ...JSON.parse(x.payload), published: !!x.published }));
+    let res: any = { results: [] };
+    try {
+      res = await db.prepare(admin ? 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<any>();
+    } catch {
+      res = await db.prepare(admin ? 'SELECT payload,published FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<any>();
+    }
+    return res.results.map(formatTourObj).filter((x: any): x is Tournament => x !== null);
   };
 
   async function session(req: Request) {
@@ -1241,11 +1273,33 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           t.name = old.name;
         }
         t.published = old.published; const statements = [];
+        const nowSyncIso = new Date().toISOString();
+        const syncIntervalVal = old.syncInterval ?? old.sync_interval ?? 5;
+        const autoSyncVal = old.autoSync ?? old.auto_sync ?? true;
+        const nextSyncIso = autoSyncVal ? new Date(Date.now() + syncIntervalVal * 60 * 1000).toISOString() : null;
+
+        t.autoSync = autoSyncVal;
+        t.auto_sync = autoSyncVal;
+        t.syncInterval = syncIntervalVal;
+        t.sync_interval = syncIntervalVal;
+        t.lastSync = nowSyncIso;
+        t.last_sync = nowSyncIso;
+        t.nextSync = nextSyncIso;
+        t.next_sync = nextSyncIso;
+
         if (t.id !== old.id) {
-          statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)').bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          try {
+            statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,auto_sync,sync_interval,last_sync,next_sync,updated) VALUES (?,?,?,?,?,?,?,?)').bind(t.id, JSON.stringify(t), old.published ? 1 : 0, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.updated));
+          } catch {
+            statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)').bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          }
           statements.push(db.prepare('DELETE FROM tournaments WHERE id = ?').bind(old.id));
         } else {
-          statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, t.id));
+          try {
+            statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.id));
+          } catch {
+            statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, t.id));
+          }
         }
         if (t.updated !== old.updated || t.id !== old.id || action === 'force_sync') statements.push(db.prepare('DELETE FROM details WHERE tid = ?').bind(old.id));
         await db.batch(statements);
@@ -1259,6 +1313,35 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           message: `Đồng bộ thành công từ Chess-Results (${action}): ${t.name} (${t.players.length} kỳ thủ)`
         });
         return json({ message: action === 'edit' ? 'Đã lưu chỉnh sửa.' : action === 'force_sync' ? 'Đã ép đồng bộ lại và làm sạch cache dữ liệu thành công.' : 'Đã cập nhật kết quả mới nhất.' }, 200, {}, req);
+      }
+
+      if (action === 'toggle_auto_sync' || action === 'tournament_update_auto_sync') {
+        const id = String(b.id || '');
+        if (!id) return json({ error: 'Mã giải đấu không hợp lệ.' }, 400, {}, req);
+        const tour = await get(id, true);
+        if (!tour) return json({ error: 'Giải đấu không tồn tại.' }, 404, {}, req);
+
+        const newAutoSync = b.auto_sync !== undefined ? !!b.auto_sync : (b.autoSync !== undefined ? !!b.autoSync : !(tour.autoSync ?? true));
+        const newInterval = Number(b.sync_interval || b.syncInterval || tour.syncInterval || 5);
+        const nowIso = new Date().toISOString();
+        const nextSyncIso = newAutoSync ? new Date(Date.now() + newInterval * 60 * 1000).toISOString() : null;
+
+        tour.autoSync = newAutoSync;
+        tour.auto_sync = newAutoSync;
+        tour.syncInterval = newInterval;
+        tour.sync_interval = newInterval;
+        tour.nextSync = nextSyncIso;
+        tour.next_sync = nextSyncIso;
+
+        try {
+          await db.prepare('UPDATE tournaments SET payload = ?, auto_sync = ?, sync_interval = ?, next_sync = ? WHERE id = ?')
+            .bind(JSON.stringify(tour), newAutoSync ? 1 : 0, newInterval, nextSyncIso, id).run();
+        } catch {
+          await db.prepare('UPDATE tournaments SET payload = ? WHERE id = ?').bind(JSON.stringify(tour), id).run();
+        }
+
+        await log(true, `${newAutoSync ? 'Bật' : 'Tắt'} tự động đồng bộ cho giải: ${tour.name}`);
+        return json({ message: `Đã ${newAutoSync ? 'bật' : 'tắt'} tự động đồng bộ cho giải đấu.`, tournament: tour }, 200, {}, req);
       }
 
       if (action === 'tournament_update_info') {
@@ -1288,7 +1371,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       return json({ error: 'Thao tác không được hỗ trợ.' }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info'].includes(action)) {
+      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info', 'toggle_auto_sync', 'tournament_update_auto_sync'].includes(action)) {
         try {
           await log(false, m);
           await logSync({

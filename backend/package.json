@@ -13,6 +13,8 @@
     "build": "node build.mjs"
   },
   "dependencies": {
+    "@types/node-cron": "^3.0.11",
+    "node-cron": "^4.6.0",
     "pg": "^8.13.3"
   },
   "devDependencies": {
@@ -22,4 +24,3 @@
     "typescript": "5.9.3"
   }
 }
-

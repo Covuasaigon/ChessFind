@@ -9,8 +9,16 @@ CREATE TABLE IF NOT EXISTS tournaments (
     id VARCHAR(255) PRIMARY KEY,
     payload TEXT NOT NULL,
     published INT NOT NULL DEFAULT 0,
+    auto_sync INT NOT NULL DEFAULT 1,
+    sync_interval INT NOT NULL DEFAULT 5,
+    last_sync VARCHAR(255),
+    next_sync VARCHAR(255),
     updated VARCHAR(255) NOT NULL
 );
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS auto_sync INT NOT NULL DEFAULT 1;
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS sync_interval INT NOT NULL DEFAULT 5;
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS last_sync VARCHAR(255);
+ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS next_sync VARCHAR(255);
 CREATE INDEX IF NOT EXISTS idx_tournaments_published ON tournaments (published);
 
 CREATE TABLE IF NOT EXISTS categories (

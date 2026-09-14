@@ -185,7 +185,7 @@ export default function Admin({ onChanged }: AdminProps) {
       try {
         const ok = await action('sync', { id });
         if (ok) successCount++;
-      } catch {}
+      } catch { }
     }
     toast.success(`Đã đồng bộ ${successCount}/${selectedTournamentIds.length} giải đấu.`);
     setBusy('');
@@ -534,7 +534,7 @@ export default function Admin({ onChanged }: AdminProps) {
       }
 
       if (d.token) {
-        try { localStorage.setItem('sgc_token', d.token); } catch {}
+        try { localStorage.setItem('sgc_token', d.token); } catch { }
       }
 
       if (type === 'detect') {
@@ -568,7 +568,7 @@ export default function Admin({ onChanged }: AdminProps) {
         }
         if (type === 'login') setPassword('');
         if (type === 'logout') {
-          try { localStorage.removeItem('sgc_token'); } catch {}
+          try { localStorage.removeItem('sgc_token'); } catch { }
           setState({ admin: false });
           setEdit(null);
           setRemove(null);
@@ -1640,8 +1640,8 @@ export default function Admin({ onChanged }: AdminProps) {
                 {(state?.prizes || []).map((pz: PrizeRuleItem) => {
                   const medalLabel = pz.medal === 'Gold Medal' || pz.medal === 'gold' ? '🥇 Gold Medal'
                     : pz.medal === 'Silver Medal' || pz.medal === 'silver' ? '🥈 Silver Medal'
-                    : pz.medal === 'Bronze Medal' || pz.medal === 'bronze' ? '🥉 Bronze Medal'
-                    : pz.medal === 'Certificate' ? '📜 Certificate' : '🏆 Other';
+                      : pz.medal === 'Bronze Medal' || pz.medal === 'bronze' ? '🥉 Bronze Medal'
+                        : pz.medal === 'Certificate' ? '📜 Certificate' : '🏆 Other';
 
                   return (
                     <tr key={pz.id}>
@@ -2050,7 +2050,7 @@ export default function Admin({ onChanged }: AdminProps) {
             }}>
               <label className="saas-label">Tiêu đề banner (*)<input className="saas-input" style={{ paddingLeft: 16 }} required maxLength={200} placeholder="Ví dụ: Giải đấu mới đã cập nhật" value={bannerModal.title || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBannerModal({ ...bannerModal, title: e.target.value })} /></label>
               <label className="saas-label">Mô tả ngắn<input className="saas-input" style={{ paddingLeft: 16 }} maxLength={300} placeholder="Mô tả phụ cho banner..." value={bannerModal.description || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBannerModal({ ...bannerModal, description: e.target.value })} /></label>
-              
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '8px 0' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#062B4F' }}>Hình ảnh Banner (*)</span>
 

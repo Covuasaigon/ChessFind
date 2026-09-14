@@ -106,6 +106,14 @@ export type Tournament = {
   currentRound?: number | null;
   completedRounds?: number | null;
   published?: boolean;
+  autoSync?: boolean;
+  auto_sync?: boolean;
+  syncInterval?: number;
+  sync_interval?: number;
+  lastSync?: string | null;
+  last_sync?: string | null;
+  nextSync?: string | null;
+  next_sync?: string | null;
   warning?: string;
   info?: TournamentInfo;
   prizes?: PrizeRule[];

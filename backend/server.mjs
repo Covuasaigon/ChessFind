@@ -1123,13 +1123,48 @@ function createApi(db2, sourceParam = {}) {
     const now = Date.now();
     return (await db2.prepare("INSERT INTO locks (key, until) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until WHERE locks.until < ?").bind(k, now + s * 1e3, now).run()).meta.changes > 0;
   };
+  const formatTourObj = (r) => {
+    if (!r) return null;
+    let t;
+    try {
+      t = JSON.parse(r.payload);
+    } catch {
+      return null;
+    }
+    const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
+    const syncInterval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
+    const lastSync = r.last_sync || t.lastSync || t.last_sync || null;
+    const nextSync = r.next_sync || t.nextSync || t.next_sync || null;
+    return {
+      ...t,
+      published: !!r.published,
+      autoSync,
+      auto_sync: autoSync,
+      syncInterval,
+      sync_interval: syncInterval,
+      lastSync,
+      last_sync: lastSync,
+      nextSync,
+      next_sync: nextSync
+    };
+  };
   const get = async (id, admin = false) => {
-    const r = await db2.prepare(admin ? "SELECT payload,published FROM tournaments WHERE id = ?" : "SELECT payload,published FROM tournaments WHERE id = ? AND published = 1").bind(id).first();
-    return r ? { ...JSON.parse(r.payload), published: !!r.published } : null;
+    let r = null;
+    try {
+      r = await db2.prepare(admin ? "SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE id = ?" : "SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE id = ? AND published = 1").bind(id).first();
+    } catch {
+      r = await db2.prepare(admin ? "SELECT payload,published FROM tournaments WHERE id = ?" : "SELECT payload,published FROM tournaments WHERE id = ? AND published = 1").bind(id).first();
+    }
+    return formatTourObj(r);
   };
   const list = async (admin = false) => {
-    const r = await db2.prepare(admin ? "SELECT payload,published FROM tournaments ORDER BY updated DESC" : "SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC").all();
-    return r.results.map((x) => ({ ...JSON.parse(x.payload), published: !!x.published }));
+    let res = { results: [] };
+    try {
+      res = await db2.prepare(admin ? "SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments ORDER BY updated DESC" : "SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE published = 1 ORDER BY updated DESC").all();
+    } catch {
+      res = await db2.prepare(admin ? "SELECT payload,published FROM tournaments ORDER BY updated DESC" : "SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC").all();
+    }
+    return res.results.map(formatTourObj).filter((x) => x !== null);
   };
   async function session(req) {
     const token = req.headers.get("cookie")?.match(/(?:^|;\s*)sgc_session=([a-f0-9]{64})(?:;|$)/)?.[1] || req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || req.headers.get("x-admin-token")?.trim();
@@ -1930,11 +1965,31 @@ function createApi(db2, sourceParam = {}) {
         }
         t.published = old.published;
         const statements = [];
+        const nowSyncIso = (/* @__PURE__ */ new Date()).toISOString();
+        const syncIntervalVal = old.syncInterval ?? old.sync_interval ?? 5;
+        const autoSyncVal = old.autoSync ?? old.auto_sync ?? true;
+        const nextSyncIso = autoSyncVal ? new Date(Date.now() + syncIntervalVal * 60 * 1e3).toISOString() : null;
+        t.autoSync = autoSyncVal;
+        t.auto_sync = autoSyncVal;
+        t.syncInterval = syncIntervalVal;
+        t.sync_interval = syncIntervalVal;
+        t.lastSync = nowSyncIso;
+        t.last_sync = nowSyncIso;
+        t.nextSync = nextSyncIso;
+        t.next_sync = nextSyncIso;
         if (t.id !== old.id) {
-          statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          try {
+            statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,auto_sync,sync_interval,last_sync,next_sync,updated) VALUES (?,?,?,?,?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.updated));
+          } catch {
+            statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          }
           statements.push(db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(old.id));
         } else {
-          statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
+          try {
+            statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.id));
+          } catch {
+            statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
+          }
         }
         if (t.updated !== old.updated || t.id !== old.id || action === "force_sync") statements.push(db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id));
         await db2.batch(statements);
@@ -1948,6 +2003,29 @@ function createApi(db2, sourceParam = {}) {
           message: `\u0110\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results (${action}): ${t.name} (${t.players.length} k\u1EF3 th\u1EE7)`
         });
         return json({ message: action === "edit" ? "\u0110\xE3 l\u01B0u ch\u1EC9nh s\u1EEDa." : action === "force_sync" ? "\u0110\xE3 \xE9p \u0111\u1ED3ng b\u1ED9 l\u1EA1i v\xE0 l\xE0m s\u1EA1ch cache d\u1EEF li\u1EC7u th\xE0nh c\xF4ng." : "\u0110\xE3 c\u1EADp nh\u1EADt k\u1EBFt qu\u1EA3 m\u1EDBi nh\u1EA5t." }, 200, {}, req);
+      }
+      if (action === "toggle_auto_sync" || action === "tournament_update_auto_sync") {
+        const id = String(b.id || "");
+        if (!id) return json({ error: "M\xE3 gi\u1EA3i \u0111\u1EA5u kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
+        const tour = await get(id, true);
+        if (!tour) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404, {}, req);
+        const newAutoSync = b.auto_sync !== void 0 ? !!b.auto_sync : b.autoSync !== void 0 ? !!b.autoSync : !(tour.autoSync ?? true);
+        const newInterval = Number(b.sync_interval || b.syncInterval || tour.syncInterval || 5);
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const nextSyncIso = newAutoSync ? new Date(Date.now() + newInterval * 60 * 1e3).toISOString() : null;
+        tour.autoSync = newAutoSync;
+        tour.auto_sync = newAutoSync;
+        tour.syncInterval = newInterval;
+        tour.sync_interval = newInterval;
+        tour.nextSync = nextSyncIso;
+        tour.next_sync = nextSyncIso;
+        try {
+          await db2.prepare("UPDATE tournaments SET payload = ?, auto_sync = ?, sync_interval = ?, next_sync = ? WHERE id = ?").bind(JSON.stringify(tour), newAutoSync ? 1 : 0, newInterval, nextSyncIso, id).run();
+        } catch {
+          await db2.prepare("UPDATE tournaments SET payload = ? WHERE id = ?").bind(JSON.stringify(tour), id).run();
+        }
+        await log(true, `${newAutoSync ? "B\u1EADt" : "T\u1EAFt"} t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 cho gi\u1EA3i: ${tour.name}`);
+        return json({ message: `\u0110\xE3 ${newAutoSync ? "b\u1EADt" : "t\u1EAFt"} t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 cho gi\u1EA3i \u0111\u1EA5u.`, tournament: tour }, 200, {}, req);
       }
       if (action === "tournament_update_info") {
         const id = String(b.id || "");
@@ -1969,7 +2047,7 @@ function createApi(db2, sourceParam = {}) {
       return json({ error: "Thao t\xE1c kh\xF4ng \u0111\u01B0\u1EE3c h\u1ED7 tr\u1EE3." }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info"].includes(action)) {
+      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info", "toggle_auto_sync", "tournament_update_auto_sync"].includes(action)) {
         try {
           await log(false, m);
           await logSync({
@@ -2160,6 +2238,128 @@ function openDatabase(fileOrUrl, migrations) {
   };
 }
 
+// jobs/sync-scheduler.ts
+import cron from "node-cron";
+var isSyncRunning = false;
+function startSyncScheduler(db2, sourceOverride) {
+  console.log("[Sync Scheduler] Initializing automatic 5-minute Chess-Results sync scheduler...");
+  cron.schedule("*/5 * * * *", async () => {
+    if (isSyncRunning) {
+      console.log("[Sync Scheduler] Previous sync cycle still running, skipping...");
+      return;
+    }
+    isSyncRunning = true;
+    try {
+      await runAutoSyncCycle(db2, sourceOverride);
+    } catch (err) {
+      console.error("[Sync Scheduler] Error in auto sync cycle:", err);
+    } finally {
+      isSyncRunning = false;
+    }
+  });
+  setTimeout(() => {
+    runAutoSyncCycle(db2, sourceOverride).catch((e) => console.error("[Sync Scheduler] Initial check error:", e));
+  }, 1e4);
+}
+async function runAutoSyncCycle(db2, sourceOverride) {
+  try {
+    let rows = [];
+    try {
+      const res = await db2.prepare("SELECT payload, published, auto_sync, sync_interval, last_sync, next_sync FROM tournaments").all();
+      rows = res.results || [];
+    } catch {
+      const res = await db2.prepare("SELECT payload, published FROM tournaments").all();
+      rows = res.results || [];
+    }
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+    for (const r of rows) {
+      let t;
+      try {
+        t = JSON.parse(r.payload);
+      } catch {
+        continue;
+      }
+      const published = r.published !== void 0 && r.published !== null ? !!r.published : !!t.published;
+      if (!published) continue;
+      const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
+      if (!autoSync) continue;
+      const interval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
+      const lastSyncStr = r.last_sync || t.lastSync || t.last_sync || null;
+      const lastSyncTime = lastSyncStr ? new Date(lastSyncStr).getTime() : 0;
+      const intervalMs = interval * 60 * 1e3;
+      if (lastSyncTime > 0 && now - lastSyncTime < intervalMs - 3e4) {
+        continue;
+      }
+      console.log(`[Sync Scheduler] Auto syncing tournament "${t.name}" (${t.id})...`);
+      try {
+        const fetcher = sourceOverride?.tournament ? sourceOverride.tournament : importTournament;
+        const updatedTour = await fetcher(t.source, t.group);
+        updatedTour.name = t.name;
+        updatedTour.published = true;
+        updatedTour.info = t.info;
+        updatedTour.prizes = t.prizes;
+        const nextSyncIso = new Date(now + intervalMs).toISOString();
+        updatedTour.autoSync = true;
+        updatedTour.auto_sync = true;
+        updatedTour.syncInterval = interval;
+        updatedTour.sync_interval = interval;
+        updatedTour.lastSync = nowIso;
+        updatedTour.last_sync = nowIso;
+        updatedTour.nextSync = nextSyncIso;
+        updatedTour.next_sync = nextSyncIso;
+        const payloadStr = JSON.stringify(updatedTour);
+        try {
+          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = 1, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, interval, nowIso, nextSyncIso, t.id).run();
+        } catch {
+          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, t.id).run();
+        }
+        try {
+          const logId = crypto.randomUUID();
+          await db2.prepare(`
+            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            logId,
+            t.id,
+            t.name,
+            t.source,
+            nowIso,
+            "success",
+            updatedTour.players ? updatedTour.players.length : 0,
+            `T\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results: ${t.name} (${updatedTour.players ? updatedTour.players.length : 0} k\u1EF3 th\u1EE7)`
+          ).run();
+        } catch (logErr) {
+          console.error("[Sync Scheduler] Failed to write sync log:", logErr);
+        }
+        console.log(`[Sync Scheduler] Auto synced "${t.name}" successfully (${updatedTour.players?.length || 0} players).`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[Sync Scheduler] Error auto syncing "${t.name}":`, errMsg);
+        try {
+          const logId = crypto.randomUUID();
+          await db2.prepare(`
+            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            logId,
+            t.id,
+            t.name,
+            t.source,
+            nowIso,
+            "failed",
+            0,
+            `L\u1ED7i t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9: ${errMsg}`
+          ).run();
+        } catch {
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Sync Scheduler] Error in runAutoSyncCycle:", err);
+  }
+}
+
 // server.ts
 var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
@@ -2167,6 +2367,7 @@ var host = process.env.HOST || "0.0.0.0";
 var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
 var dbUrl = process.env.DATABASE_URL || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
 var db = openDatabase(dbUrl, resolve3(root, "migrations"));
+startSyncScheduler(db);
 var api = createApi(db);
 var web = resolve3(root, "web");
 var types = {

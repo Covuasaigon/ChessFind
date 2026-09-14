@@ -1122,6 +1122,7 @@ export default function Admin({ onChanged }: AdminProps) {
                   </th>
                   <th>Tên giải đấu</th>
                   <th>Bảng đấu / Nhóm</th>
+                  <th style={{ textAlign: 'center' }}>Tự động đồng bộ</th>
                   <th style={{ textAlign: 'center' }}>Kỳ thủ</th>
                   <th style={{ textAlign: 'center' }}>Trạng thái</th>
                   <th style={{ textAlign: 'right' }}>Thao tác</th>
@@ -1155,6 +1156,48 @@ export default function Admin({ onChanged }: AdminProps) {
                     <td>
                       <span style={{ fontWeight: 600, color: '#334155' }}>{t.group || 'Toàn giải'}</span>
                       {t.updated && <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>Cập nhật: {new Date(t.updated).toLocaleString('vi-VN')}</div>}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                        <button
+                          className="outline"
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            borderRadius: 20,
+                            fontWeight: 600,
+                            background: t.autoSync !== false ? '#EFF6FF' : '#F1F5F9',
+                            color: t.autoSync !== false ? '#1D4ED8' : '#64748B',
+                            borderColor: t.autoSync !== false ? '#BFDBFE' : '#CBD5E1',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6
+                          }}
+                          disabled={!!busy}
+                          onClick={() => action('toggle_auto_sync', { id: t.id, auto_sync: t.autoSync === false })}
+                          title={t.autoSync !== false ? 'Bấm để TẮT tự động đồng bộ' : 'Bấm để BẬT tự động đồng bộ (mỗi 5 phút)'}
+                        >
+                          <span style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: t.autoSync !== false ? '#2563EB' : '#94A3B8'
+                          }} />
+                          {t.autoSync !== false ? 'Auto Sync (5m)' : 'Tắt Auto Sync'}
+                        </button>
+                        <div style={{ fontSize: 11, color: '#64748B', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {t.lastSync || t.last_sync ? (
+                            <span>Lần cuối: {new Date(t.lastSync || t.last_sync!).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          ) : (
+                            <span>Chưa đồng bộ</span>
+                          )}
+                          {t.autoSync !== false && (t.nextSync || t.next_sync) && (
+                            <span style={{ color: '#2563EB', fontWeight: 500 }}>
+                              Kế tiếp: {new Date(t.nextSync || t.next_sync!).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 800, color: '#062B4F' }}>
                       {t.players ? t.players.length : 0}

@@ -149,14 +149,46 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   const log = async (ok: boolean, m: string) => { await db.batch([db.prepare('INSERT INTO logs (id, created, ok, message) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), new Date().toISOString(), ok ? 1 : 0, m.slice(0, 500)), db.prepare('DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY created DESC LIMIT 100)')]) };
   const lock = async (k: string, s: number) => { const now = Date.now(); return (await db.prepare('INSERT INTO locks (key, until) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET until = excluded.until WHERE locks.until < ?').bind(k, now + s * 1000, now).run()).meta.changes > 0 };
 
+  const formatTourObj = (r: any): Tournament | null => {
+    if (!r) return null;
+    let t: Tournament;
+    try { t = JSON.parse(r.payload); } catch { return null; }
+    const autoSync = r.auto_sync !== undefined && r.auto_sync !== null ? !!r.auto_sync : (t.autoSync ?? t.auto_sync ?? true);
+    const syncInterval = r.sync_interval ? Number(r.sync_interval) : (t.syncInterval ?? t.sync_interval ?? 5);
+    const lastSync = r.last_sync || t.lastSync || t.last_sync || null;
+    const nextSync = r.next_sync || t.nextSync || t.next_sync || null;
+    return {
+      ...t,
+      published: !!r.published,
+      autoSync,
+      auto_sync: autoSync,
+      syncInterval,
+      sync_interval: syncInterval,
+      lastSync,
+      last_sync: lastSync,
+      nextSync,
+      next_sync: nextSync
+    };
+  };
+
   const get = async (id: string, admin = false): Promise<Tournament | null> => {
-    const r = await db.prepare(admin ? 'SELECT payload,published FROM tournaments WHERE id = ?' : 'SELECT payload,published FROM tournaments WHERE id = ? AND published = 1').bind(id).first<{ payload: string; published: number }>();
-    return r ? { ...JSON.parse(r.payload), published: !!r.published } : null;
+    let r: any = null;
+    try {
+      r = await db.prepare(admin ? 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE id = ?' : 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE id = ? AND published = 1').bind(id).first<any>();
+    } catch {
+      r = await db.prepare(admin ? 'SELECT payload,published FROM tournaments WHERE id = ?' : 'SELECT payload,published FROM tournaments WHERE id = ? AND published = 1').bind(id).first<any>();
+    }
+    return formatTourObj(r);
   };
 
   const list = async (admin = false) => {
-    const r = await db.prepare(admin ? 'SELECT payload,published FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<{ payload: string; published: number }>();
-    return r.results.map(x => ({ ...JSON.parse(x.payload), published: !!x.published }));
+    let res: any = { results: [] };
+    try {
+      res = await db.prepare(admin ? 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published,auto_sync,sync_interval,last_sync,next_sync FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<any>();
+    } catch {
+      res = await db.prepare(admin ? 'SELECT payload,published FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<any>();
+    }
+    return res.results.map(formatTourObj).filter((x: any): x is Tournament => x !== null);
   };
 
   async function session(req: Request) {
