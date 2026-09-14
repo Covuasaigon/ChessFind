@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm --prefix ma-nguon run dev",
-    "build": "npm --prefix ma-nguon run build",
+    "build": "npm --prefix ma-nguon run build && npm --prefix frontend run build && node scripts/copy-dist.mjs",
     "build:backend": "npm --prefix backend run build",
     "start": "npm --prefix ma-nguon run start",
     "migrate:db": "node scripts/migrate-sqlite-to-pg.mjs",
