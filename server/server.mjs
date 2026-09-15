@@ -206,48 +206,59 @@ function validateSource(input) {
 }
 async function fetchSource(url) {
   let u = url;
-  for (let hop = 0; hop < 4; hop++) {
-    validateSource(u.href);
-    let r;
-    try {
-      r = await fetch(u.href, { redirect: "manual", signal: AbortSignal.timeout(2e4), headers: { "Accept": "text/html", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } });
-    } catch {
-      throw Error("Kh\xF4ng k\u1EBFt n\u1ED1i \u0111\u01B0\u1EE3c Chess-Results. H\xE3y th\u1EED l\u1EA1i sau; d\u1EEF li\u1EC7u c\u0169 kh\xF4ng b\u1ECB thay \u0111\u1ED5i.");
-    }
-    if (r.status >= 300 && r.status < 400) {
-      const target = r.headers.get("location");
-      if (!target) throw Error("Ngu\u1ED3n chuy\u1EC3n h\u01B0\u1EDBng kh\xF4ng h\u1EE3p l\u1EC7.");
-      u = new URL(target, u);
-      continue;
-    }
-    if (!r.ok) throw Error(r.status === 429 ? "Chess-Results \u0111ang gi\u1EDBi h\u1EA1n truy c\u1EADp. Vui l\xF2ng ch\u1EDD r\u1ED3i th\u1EED l\u1EA1i." : `Ngu\u1ED3n Chess-Results tr\u1EA3 l\u1ED7i ${r.status}. D\u1EEF li\u1EC7u c\u0169 \u0111\u01B0\u1EE3c gi\u1EEF nguy\xEAn.`);
-    if (Number(r.headers.get("content-length") || 0) > 5e6) throw Error("Trang ngu\u1ED3n qu\xE1 l\u1EDBn. H\xE3y ch\u1ECDn link t\u1EEBng b\u1EA3ng \u0111\u1EA5u.");
-    const reader = r.body?.getReader();
-    if (!reader) throw Error("Ngu\u1ED3n kh\xF4ng c\xF3 d\u1EEF li\u1EC7u.");
-    const chunks = [];
-    let n = 0;
-    while (true) {
-      const x = await reader.read();
-      if (x.done) break;
-      n += x.value.byteLength;
-      if (n > 5e6) {
-        await reader.cancel();
-        throw Error("Trang ngu\u1ED3n v\u01B0\u1EE3t gi\u1EDBi h\u1EA1n k\xEDch th\u01B0\u1EDBc.");
+  const hostsToTry = [u.hostname, "chess-results.com", "s2.chess-results.com", "s1.chess-results.com"];
+  const uniqueHosts = Array.from(new Set(hostsToTry));
+  let lastErr = null;
+  for (const host2 of uniqueHosts) {
+    const currentUrl = new URL(u.href);
+    currentUrl.hostname = host2;
+    for (let hop = 0; hop < 4; hop++) {
+      validateSource(currentUrl.href);
+      let r;
+      try {
+        r = await fetch(currentUrl.href, { redirect: "manual", signal: AbortSignal.timeout(1e4), headers: { "Accept": "text/html", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } });
+      } catch (err) {
+        lastErr = err;
+        break;
       }
-      chunks.push(x.value);
+      if (r.status >= 300 && r.status < 400) {
+        const target = r.headers.get("location");
+        if (!target) break;
+        currentUrl.href = new URL(target, currentUrl).href;
+        continue;
+      }
+      if (!r.ok) {
+        if (r.status === 429) throw Error("Chess-Results \u0111ang gi\u1EDBi h\u1EA1n truy c\u1EADp. Vui l\xF2ng ch\u1EDD r\u1ED3i th\u1EED l\u1EA1i.");
+        break;
+      }
+      if (Number(r.headers.get("content-length") || 0) > 5e6) throw Error("Trang ngu\u1ED3n qu\xE1 l\u1EDBn. H\xE3y ch\u1ECDn link t\u1EEBng b\u1EA3ng \u0111\u1EA5u.");
+      const reader = r.body?.getReader();
+      if (!reader) break;
+      const chunks = [];
+      let n = 0;
+      while (true) {
+        const x = await reader.read();
+        if (x.done) break;
+        n += x.value.byteLength;
+        if (n > 5e6) {
+          await reader.cancel();
+          throw Error("Trang ngu\u1ED3n v\u01B0\u1EE3t gi\u1EDBi h\u1EA1n k\xEDch th\u01B0\u1EDBc.");
+        }
+        chunks.push(x.value);
+      }
+      const buffer = new Uint8Array(n);
+      let pos = 0;
+      for (const c of chunks) {
+        buffer.set(c, pos);
+        pos += c.length;
+      }
+      const s = new TextDecoder("utf-8").decode(buffer);
+      if (/captcha|verify you are human|access denied|just a moment/i.test(s.slice(0, 1e4)))
+        throw Error("Chess-Results \u0111ang y\xEAu c\u1EA7u ki\u1EC3m tra truy c\u1EADp. \u1EE8ng d\u1EE5ng kh\xF4ng th\u1EC3 \u0111\u1ECDc ngu\u1ED3n l\xFAc n\xE0y.");
+      return s;
     }
-    const buffer = new Uint8Array(n);
-    let pos = 0;
-    for (const c of chunks) {
-      buffer.set(c, pos);
-      pos += c.length;
-    }
-    const s = new TextDecoder("utf-8").decode(buffer);
-    if (/captcha|verify you are human|access denied|just a moment/i.test(s.slice(0, 1e4)))
-      throw Error("Chess-Results \u0111ang y\xEAu c\u1EA7u ki\u1EC3m tra truy c\u1EADp. \u1EE8ng d\u1EE5ng kh\xF4ng th\u1EC3 \u0111\u1ECDc ngu\u1ED3n l\xFAc n\xE0y.");
-    return s;
   }
-  throw Error("Ngu\u1ED3n chuy\u1EC3n h\u01B0\u1EDBng qu\xE1 nhi\u1EC1u l\u1EA7n.");
+  throw Error("Kh\xF4ng k\u1EBFt n\u1ED1i \u0111\u01B0\u1EE3c Chess-Results. H\xE3y th\u1EED l\u1EA1i sau; d\u1EEF li\u1EC7u c\u0169 kh\xF4ng b\u1ECB thay \u0111\u1ED5i.");
 }
 var entities = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", frac12: "\xBD" };
 function textOf(s) {
@@ -645,7 +656,7 @@ async function importTournament(source, group) {
   const tour = parseRanking(html, url.href, group);
   return await populateRoundsForTournament(tour);
 }
-async function fetchSourceWithRetry(url, maxRetries = 3, delayMs = 1e3) {
+async function fetchSourceWithRetry(url, maxRetries = 3, delayMs = 800) {
   let lastErr;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -668,7 +679,7 @@ async function detectCategories(source) {
   let baseName = rawTitle;
   if (rawTitle.includes(" - ")) {
     const parts = rawTitle.split(/\s+[-–]\s+|\s*-\s*/);
-    const mainPart = parts.find((p) => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys)/i.test(p.trim()));
+    const mainPart = parts.find((p) => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys|group|cat|category)/i.test(p.trim()));
     if (mainPart) {
       baseName = mainPart.trim();
     } else {
@@ -679,21 +690,24 @@ async function detectCategories(source) {
   const seenIds = /* @__PURE__ */ new Set();
   async function checkTnrId(catId) {
     const catIdStr = String(catId);
-    if (seenIds.has(catIdStr)) return null;
+    if (seenIds.has(catIdStr)) return { result: null, extraLinks: [] };
     const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
     let pageHtml;
     try {
-      pageHtml = await fetchSourceWithRetry(u, 2, 800);
+      pageHtml = await fetchSourceWithRetry(u, 2, 600);
     } catch (fetchErr) {
       seenIds.add(catIdStr);
       return {
-        id: catIdStr,
-        group: `B\u1EA3ng ${catIdStr}`,
-        name: `Gi\u1EA3i \u0111\u1EA5u ${catIdStr}`,
-        source: u.href,
-        playerCount: 0,
-        status: "L\u1ED7i t\u1EA3i",
-        error: fetchErr?.message || "Kh\xF4ng th\u1EC3 t\u1EA3i ngu\u1ED3n"
+        result: {
+          id: catIdStr,
+          group: `B\u1EA3ng ${catIdStr}`,
+          name: `Gi\u1EA3i \u0111\u1EA5u ${catIdStr}`,
+          source: u.href,
+          playerCount: null,
+          status: "L\u1ED7i t\u1EA3i",
+          error: fetchErr?.message || "Kh\xF4ng th\u1EC3 k\u1EBFt n\u1ED1i ngu\u1ED3n"
+        },
+        extraLinks: []
       };
     }
     try {
@@ -701,16 +715,21 @@ async function detectCategories(source) {
       let hi = pageRows.findIndex((r) => findCol(r, ["name"]) >= 0 && (findCol(r, ["rk", "rank"]) >= 0 || findCol(r, ["sno", "no"]) >= 0));
       if (hi < 0) {
         u.searchParams.set("art", "0");
-        pageHtml = await fetchSourceWithRetry(u, 2, 800);
+        pageHtml = await fetchSourceWithRetry(u, 2, 600);
         pageRows = rowsOf(pageHtml);
         hi = pageRows.findIndex((r) => findCol(r, ["name"]) >= 0 && (findCol(r, ["rk", "rank"]) >= 0 || findCol(r, ["sno", "no"]) >= 0));
       }
       const tStr = textOf(pageHtml.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || "").replace(/^Chess-Results Server Chess-results\.com\s*-\s*/i, "").trim();
-      if (!tStr || tStr.includes("Tournament-Database") || tStr.includes("Error")) return null;
+      if (!tStr || tStr.includes("Tournament-Database") || tStr.includes("Error")) {
+        return { result: null, extraLinks: [] };
+      }
+      const foundLinks = [...pageHtml.matchAll(/(?:href=["']|tnr)(\d+)\.aspx/gi)].map((m) => parseInt(m[1], 10)).filter((n) => !isNaN(n));
       const normTitle = tStr.replace(/\s+/g, " ");
       const normBase = baseName.replace(/\s+/g, " ");
       const isMatch = normTitle.includes(normBase) || normBase.length > 6 && normTitle.includes(normBase.slice(0, 15)) || catId === targetId;
-      if (!isMatch) return null;
+      if (!isMatch) {
+        return { result: null, extraLinks: [] };
+      }
       seenIds.add(catIdStr);
       let catGroup = "To\xE0n gi\u1EA3i";
       if (tStr.includes(" - ")) {
@@ -729,23 +748,29 @@ async function detectCategories(source) {
       }
       const pCount = pageRows.slice(hi + 1).filter((r) => r.length >= 3 && /^\d+$/.test(r[0]?.text || r[1]?.text || "")).length;
       return {
-        id: catIdStr,
-        group: catGroup,
-        name: tStr,
-        source: u.href,
-        playerCount: pCount,
-        status: "Ch\u01B0a nh\u1EADp"
+        result: {
+          id: catIdStr,
+          group: catGroup,
+          name: tStr,
+          source: u.href,
+          playerCount: pCount,
+          status: "Ch\u01B0a nh\u1EADp"
+        },
+        extraLinks: foundLinks
       };
     } catch (parseErr) {
       seenIds.add(catIdStr);
       return {
-        id: catIdStr,
-        group: `B\u1EA3ng ${catIdStr}`,
-        name: `Gi\u1EA3i \u0111\u1EA5u ${catIdStr}`,
-        source: u.href,
-        playerCount: 0,
-        status: "L\u1ED7i t\u1EA3i",
-        error: parseErr?.message || "L\u1ED7i ph\xE2n t\xEDch d\u1EEF li\u1EC7u"
+        result: {
+          id: catIdStr,
+          group: `B\u1EA3ng ${catIdStr}`,
+          name: `Gi\u1EA3i \u0111\u1EA5u ${catIdStr}`,
+          source: u.href,
+          playerCount: null,
+          status: "L\u1ED7i t\u1EA3i",
+          error: parseErr?.message || "L\u1ED7i ph\xE2n t\xEDch d\u1EEF li\u1EC7u"
+        },
+        extraLinks: []
       };
     }
   }
@@ -756,21 +781,29 @@ async function detectCategories(source) {
     const cId = parseInt(m[1], 10);
     if (!isNaN(cId)) candidateIds.add(cId);
   }
-  for (let offset = -50; offset <= 50; offset++) {
+  for (let offset = -60; offset <= 60; offset++) {
     candidateIds.add(targetId + offset);
   }
-  const candidateList = Array.from(candidateIds);
+  const processedCandidates = /* @__PURE__ */ new Set();
+  let queue = Array.from(candidateIds);
   const CHUNK_SIZE = 5;
-  for (let i = 0; i < candidateList.length; i += CHUNK_SIZE) {
-    const chunk = candidateList.slice(i, i + CHUNK_SIZE);
-    const chunkResults = await Promise.all(chunk.map((cId) => checkTnrId(cId)));
-    for (const res of chunkResults) {
-      if (res && !categories.some((c) => c.id === res.id)) {
-        categories.push(res);
+  while (queue.length > 0) {
+    const currentChunk = queue.slice(0, CHUNK_SIZE);
+    queue = queue.slice(CHUNK_SIZE);
+    currentChunk.forEach((idNum) => processedCandidates.add(idNum));
+    const chunkResults = await Promise.all(currentChunk.map((cId) => checkTnrId(cId)));
+    for (const { result, extraLinks } of chunkResults) {
+      if (result && !categories.some((c) => c.id === result.id)) {
+        categories.push(result);
+      }
+      for (const extraId of extraLinks) {
+        if (!processedCandidates.has(extraId) && !queue.includes(extraId)) {
+          queue.push(extraId);
+        }
       }
     }
-    if (i + CHUNK_SIZE < candidateList.length) {
-      await new Promise((r) => setTimeout(r, 50));
+    if (queue.length > 0) {
+      await new Promise((r) => setTimeout(r, 40));
     }
   }
   categories.sort((a, b) => Number(a.id) - Number(b.id));

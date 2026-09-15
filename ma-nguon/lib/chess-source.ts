@@ -20,42 +20,55 @@ export function validateSource(input: string) {
 
 async function fetchSource(url: URL) {
   let u = url;
-  for (let hop = 0; hop < 4; hop++) {
-    validateSource(u.href);
-    let r: Response;
-    try {
-      r = await fetch(u.href, { redirect: 'manual', signal: AbortSignal.timeout(20000), headers: { 'Accept': 'text/html', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
-    } catch {
-      throw Error('Không kết nối được Chess-Results. Hãy thử lại sau; dữ liệu cũ không bị thay đổi.');
+  const hostsToTry = [u.hostname, 'chess-results.com', 's2.chess-results.com', 's1.chess-results.com'];
+  const uniqueHosts = Array.from(new Set(hostsToTry));
+
+  let lastErr: any = null;
+  for (const host of uniqueHosts) {
+    const currentUrl = new URL(u.href);
+    currentUrl.hostname = host;
+
+    for (let hop = 0; hop < 4; hop++) {
+      validateSource(currentUrl.href);
+      let r: Response;
+      try {
+        r = await fetch(currentUrl.href, { redirect: 'manual', signal: AbortSignal.timeout(10000), headers: { 'Accept': 'text/html', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+      } catch (err) {
+        lastErr = err;
+        break; // Try next host mirror if network fails
+      }
+      if (r.status >= 300 && r.status < 400) {
+        const target = r.headers.get('location');
+        if (!target) break;
+        currentUrl.href = new URL(target, currentUrl).href;
+        continue;
+      }
+      if (!r.ok) {
+        if (r.status === 429) throw Error('Chess-Results đang giới hạn truy cập. Vui lòng chờ rồi thử lại.');
+        break;
+      }
+      if (Number(r.headers.get('content-length') || 0) > 5_000_000) throw Error('Trang nguồn quá lớn. Hãy chọn link từng bảng đấu.');
+      const reader = r.body?.getReader();
+      if (!reader) break;
+      const chunks: Uint8Array[] = [];
+      let n = 0;
+      while (true) {
+        const x = await reader.read();
+        if (x.done) break;
+        n += x.value.byteLength;
+        if (n > 5_000_000) { await reader.cancel(); throw Error('Trang nguồn vượt giới hạn kích thước.'); }
+        chunks.push(x.value);
+      }
+      const buffer = new Uint8Array(n);
+      let pos = 0;
+      for (const c of chunks) { buffer.set(c, pos); pos += c.length; }
+      const s = new TextDecoder('utf-8').decode(buffer);
+      if (/captcha|verify you are human|access denied|just a moment/i.test(s.slice(0, 10000)))
+        throw Error('Chess-Results đang yêu cầu kiểm tra truy cập. Ứng dụng không thể đọc nguồn lúc này.');
+      return s;
     }
-    if (r.status >= 300 && r.status < 400) {
-      const target = r.headers.get('location');
-      if (!target) throw Error('Nguồn chuyển hướng không hợp lệ.');
-      u = new URL(target, u);
-      continue;
-    }
-    if (!r.ok) throw Error(r.status === 429 ? 'Chess-Results đang giới hạn truy cập. Vui lòng chờ rồi thử lại.' : `Nguồn Chess-Results trả lỗi ${r.status}. Dữ liệu cũ được giữ nguyên.`);
-    if (Number(r.headers.get('content-length') || 0) > 5_000_000) throw Error('Trang nguồn quá lớn. Hãy chọn link từng bảng đấu.');
-    const reader = r.body?.getReader();
-    if (!reader) throw Error('Nguồn không có dữ liệu.');
-    const chunks: Uint8Array[] = [];
-    let n = 0;
-    while (true) {
-      const x = await reader.read();
-      if (x.done) break;
-      n += x.value.byteLength;
-      if (n > 5_000_000) { await reader.cancel(); throw Error('Trang nguồn vượt giới hạn kích thước.'); }
-      chunks.push(x.value);
-    }
-    const buffer = new Uint8Array(n);
-    let pos = 0;
-    for (const c of chunks) { buffer.set(c, pos); pos += c.length; }
-    const s = new TextDecoder('utf-8').decode(buffer);
-    if (/captcha|verify you are human|access denied|just a moment/i.test(s.slice(0, 10000)))
-      throw Error('Chess-Results đang yêu cầu kiểm tra truy cập. Ứng dụng không thể đọc nguồn lúc này.');
-    return s;
   }
-  throw Error('Nguồn chuyển hướng quá nhiều lần.');
+  throw Error('Không kết nối được Chess-Results. Hãy thử lại sau; dữ liệu cũ không bị thay đổi.');
 }
 
 const entities: Record<string, string> = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", frac12: '½' };
@@ -513,12 +526,12 @@ export type CategoryDetectResult = {
   group: string;
   name: string;
   source: string;
-  playerCount: number;
+  playerCount?: number | null;
   status: 'Chưa nhập' | 'Đã nhập' | 'Lỗi tải';
   error?: string;
 };
 
-export async function fetchSourceWithRetry(url: URL, maxRetries = 3, delayMs = 1000): Promise<string> {
+export async function fetchSourceWithRetry(url: URL, maxRetries = 3, delayMs = 800): Promise<string> {
   let lastErr: any;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -547,7 +560,7 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
   let baseName = rawTitle;
   if (rawTitle.includes(' - ')) {
     const parts = rawTitle.split(/\s+[-–]\s+|\s*-\s*/);
-    const mainPart = parts.find(p => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys)/i.test(p.trim()));
+    const mainPart = parts.find(p => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys|group|cat|category)/i.test(p.trim()));
     if (mainPart) {
       baseName = mainPart.trim();
     } else {
@@ -559,25 +572,27 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
   const seenIds = new Set<string>();
 
   // Helper to scan a specific TNR ID
-  async function checkTnrId(catId: number): Promise<CategoryDetectResult | null> {
+  async function checkTnrId(catId: number): Promise<{ result: CategoryDetectResult | null; extraLinks: number[] }> {
     const catIdStr = String(catId);
-    if (seenIds.has(catIdStr)) return null;
+    if (seenIds.has(catIdStr)) return { result: null, extraLinks: [] };
 
     const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
     let pageHtml: string;
     try {
-      pageHtml = await fetchSourceWithRetry(u, 2, 800);
+      pageHtml = await fetchSourceWithRetry(u, 2, 600);
     } catch (fetchErr: any) {
-      // If fetching fails for a candidate explicitly found in the links or target range, return error status instead of dropping
       seenIds.add(catIdStr);
       return {
-        id: catIdStr,
-        group: `Bảng ${catIdStr}`,
-        name: `Giải đấu ${catIdStr}`,
-        source: u.href,
-        playerCount: 0,
-        status: 'Lỗi tải',
-        error: fetchErr?.message || 'Không thể tải nguồn'
+        result: {
+          id: catIdStr,
+          group: `Bảng ${catIdStr}`,
+          name: `Giải đấu ${catIdStr}`,
+          source: u.href,
+          playerCount: null,
+          status: 'Lỗi tải',
+          error: fetchErr?.message || 'Không thể kết nối nguồn'
+        },
+        extraLinks: []
       };
     }
 
@@ -587,19 +602,28 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
 
       if (hi < 0) {
         u.searchParams.set('art', '0');
-        pageHtml = await fetchSourceWithRetry(u, 2, 800);
+        pageHtml = await fetchSourceWithRetry(u, 2, 600);
         pageRows = rowsOf(pageHtml);
         hi = pageRows.findIndex(r => findCol(r, ['name']) >= 0 && (findCol(r, ['rk', 'rank']) >= 0 || findCol(r, ['sno', 'no']) >= 0));
       }
 
       const tStr = textOf(pageHtml.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || '').replace(/^Chess-Results Server Chess-results\.com\s*-\s*/i, '').trim();
-      if (!tStr || tStr.includes('Tournament-Database') || tStr.includes('Error')) return null;
+      if (!tStr || tStr.includes('Tournament-Database') || tStr.includes('Error')) {
+        return { result: null, extraLinks: [] };
+      }
+
+      // Extract extra TNR links from this category page HTML (Graph discovery)
+      const foundLinks = [...pageHtml.matchAll(/(?:href=["']|tnr)(\d+)\.aspx/gi)]
+        .map(m => parseInt(m[1], 10))
+        .filter(n => !isNaN(n));
 
       // Check title match (normalize spaces)
       const normTitle = tStr.replace(/\s+/g, ' ');
       const normBase = baseName.replace(/\s+/g, ' ');
       const isMatch = normTitle.includes(normBase) || (normBase.length > 6 && normTitle.includes(normBase.slice(0, 15))) || catId === targetId;
-      if (!isMatch) return null;
+      if (!isMatch) {
+        return { result: null, extraLinks: [] };
+      }
 
       seenIds.add(catIdStr);
 
@@ -622,28 +646,34 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
       const pCount = pageRows.slice(hi + 1).filter(r => r.length >= 3 && /^\d+$/.test(r[0]?.text || r[1]?.text || '')).length;
 
       return {
-        id: catIdStr,
-        group: catGroup,
-        name: tStr,
-        source: u.href,
-        playerCount: pCount,
-        status: 'Chưa nhập'
+        result: {
+          id: catIdStr,
+          group: catGroup,
+          name: tStr,
+          source: u.href,
+          playerCount: pCount,
+          status: 'Chưa nhập'
+        },
+        extraLinks: foundLinks
       };
     } catch (parseErr: any) {
       seenIds.add(catIdStr);
       return {
-        id: catIdStr,
-        group: `Bảng ${catIdStr}`,
-        name: `Giải đấu ${catIdStr}`,
-        source: u.href,
-        playerCount: 0,
-        status: 'Lỗi tải',
-        error: parseErr?.message || 'Lỗi phân tích dữ liệu'
+        result: {
+          id: catIdStr,
+          group: `Bảng ${catIdStr}`,
+          name: `Giải đấu ${catIdStr}`,
+          source: u.href,
+          playerCount: null,
+          status: 'Lỗi tải',
+          error: parseErr?.message || 'Lỗi phân tích dữ liệu'
+        },
+        extraLinks: []
       };
     }
   }
 
-  // Collect candidate TNR IDs (Page HTML links first, then scan range)
+  // Collect candidate TNR IDs (Page HTML links first, then offset scan range [-60, +60])
   const candidateIds = new Set<number>();
   candidateIds.add(targetId);
 
@@ -653,23 +683,37 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
     if (!isNaN(cId)) candidateIds.add(cId);
   }
 
-  for (let offset = -50; offset <= 50; offset++) {
+  for (let offset = -60; offset <= 60; offset++) {
     candidateIds.add(targetId + offset);
   }
 
-  // Throttled processing in chunks of 5 with 50ms delay
-  const candidateList = Array.from(candidateIds);
+  // Throttled processing in chunks of 5 with 40ms delay
+  const processedCandidates = new Set<number>();
+  let queue = Array.from(candidateIds);
   const CHUNK_SIZE = 5;
-  for (let i = 0; i < candidateList.length; i += CHUNK_SIZE) {
-    const chunk = candidateList.slice(i, i + CHUNK_SIZE);
-    const chunkResults = await Promise.all(chunk.map(cId => checkTnrId(cId)));
-    for (const res of chunkResults) {
-      if (res && !categories.some(c => c.id === res.id)) {
-        categories.push(res);
+
+  while (queue.length > 0) {
+    const currentChunk = queue.slice(0, CHUNK_SIZE);
+    queue = queue.slice(CHUNK_SIZE);
+
+    currentChunk.forEach(idNum => processedCandidates.add(idNum));
+
+    const chunkResults = await Promise.all(currentChunk.map(cId => checkTnrId(cId)));
+    
+    for (const { result, extraLinks } of chunkResults) {
+      if (result && !categories.some(c => c.id === result.id)) {
+        categories.push(result);
+      }
+      // Add extra graph links discovered from successful category pages
+      for (const extraId of extraLinks) {
+        if (!processedCandidates.has(extraId) && !queue.includes(extraId)) {
+          queue.push(extraId);
+        }
       }
     }
-    if (i + CHUNK_SIZE < candidateList.length) {
-      await new Promise(r => setTimeout(r, 50));
+
+    if (queue.length > 0) {
+      await new Promise(r => setTimeout(r, 40));
     }
   }
 
