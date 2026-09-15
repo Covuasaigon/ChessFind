@@ -5,7 +5,7 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
-export interface Database { prepare(sql: string): Statement; batch(statements: Statement[]): Promise<any[]> }
+export interface Database { prepare(sql: string): Statement; batch(statements: Statement[]): Promise<any[]>; source?: 'postgresql' | 'sqlite' }
 export interface Statement { bind(...args: any[]): Statement; first<T = any>(): Promise<T | null>; all<T = any>(): Promise<{ results: T[] }>; run(): Promise<{ meta: { changes: number } }> }
 
 export interface ApiSource {
@@ -536,18 +536,43 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const club = p.club || formatClubName(p.federation || '');
 
           let playerObj: Player;
+          let detailsFound = false;
+          let revisionSelected: string | null = null;
 
-          const r = await db.prepare('SELECT payload FROM details WHERE tid = ? AND pid = ? ORDER BY revision DESC LIMIT 1').bind(id, pid).first<{ payload: string }>();
-          if (r) {
-            playerObj = JSON.parse(r.payload);
+          const detailsRes = await db.prepare('SELECT tid, revision, payload FROM details WHERE pid = ? ORDER BY revision DESC').bind(pid).all<{ tid: string; revision: string; payload: string }>();
+
+          let selectedDetail: { tid: string; revision: string; payload: string } | null = null;
+          if (detailsRes && detailsRes.results && detailsRes.results.length > 0) {
+            const catId = p.categoryId || (t ? t.id : pid.split('-')[0]);
+            selectedDetail = detailsRes.results.find(row => row.tid === id || row.tid === catId || (t && row.tid === t.id)) || null;
+            if (!selectedDetail) {
+              selectedDetail = detailsRes.results.find(row => row.tid.startsWith(id + '-') || row.tid.startsWith(pid.split('-')[0])) || detailsRes.results[0];
+            }
+          }
+
+          if (selectedDetail) {
+            try {
+              playerObj = JSON.parse(selectedDetail.payload);
+              detailsFound = true;
+              revisionSelected = selectedDetail.revision;
+            } catch {
+              selectedDetail = null;
+            }
+          }
+
+          if (selectedDetail && playerObj!) {
             if (p.rounds && p.rounds.length > 0) {
               playerObj.rounds = playerObj.rounds || [];
               for (const sch of p.rounds) {
                 const existingIdx = playerObj.rounds.findIndex(x => x.round === sch.round);
                 if (existingIdx >= 0) {
-                  if (sch.board != null) playerObj.rounds[existingIdx].board = sch.board;
-                  if (sch.playerWhite && !playerObj.rounds[existingIdx].playerWhite) playerObj.rounds[existingIdx].playerWhite = sch.playerWhite;
-                  if (sch.playerBlack && !playerObj.rounds[existingIdx].playerBlack) playerObj.rounds[existingIdx].playerBlack = sch.playerBlack;
+                  const existingRd = playerObj.rounds[existingIdx];
+                  const isPlayed = existingRd.status === 'played' || existingRd.result != null || existingRd.score != null || existingRd.opponent != null || existingRd.color != null;
+                  if (!isPlayed) {
+                    if (sch.board != null) existingRd.board = sch.board;
+                    if (sch.playerWhite && !existingRd.playerWhite) existingRd.playerWhite = sch.playerWhite;
+                    if (sch.playerBlack && !existingRd.playerBlack) existingRd.playerBlack = sch.playerBlack;
+                  }
                 } else {
                   playerObj.rounds.push(sch);
                 }
@@ -557,6 +582,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           } else {
             if (!await lock('detail:' + id, 3)) return json({ error: 'Nguồn đang được tải. Hãy thử lại sau vài giây.' }, 429, {}, req);
             playerObj = await source.player(t, p);
+            detailsFound = false;
+            revisionSelected = t.updated;
 
             // Save matches to matches table
             try {
@@ -592,6 +619,12 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           }
 
           const s = stats(playerObj);
+
+          const dbSource = db.source || (process.env.DATABASE_URL ? 'postgresql' : 'sqlite');
+          const roundsCount = playerObj.rounds ? playerObj.rounds.length : 0;
+          const playedRoundsCount = playerObj.rounds ? playerObj.rounds.filter(r => r.status === 'played' || r.result != null || r.score != null || r.opponent != null).length : 0;
+
+          console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || 'none'} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
           const medalPrediction = getMedal(rank, t.group || p.ageGroup || undefined, t.prizes);
 

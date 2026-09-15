@@ -1509,17 +1509,39 @@ function createApi(db2, sourceParam = {}) {
           const totalPlayers = t.players ? t.players.length : 0;
           const club = p.club || formatClubName(p.federation || "");
           let playerObj;
-          const r = await db2.prepare("SELECT payload FROM details WHERE tid = ? AND pid = ? ORDER BY revision DESC LIMIT 1").bind(id, pid).first();
-          if (r) {
-            playerObj = JSON.parse(r.payload);
+          let detailsFound = false;
+          let revisionSelected = null;
+          const detailsRes = await db2.prepare("SELECT tid, revision, payload FROM details WHERE pid = ? ORDER BY revision DESC").bind(pid).all();
+          let selectedDetail = null;
+          if (detailsRes && detailsRes.results && detailsRes.results.length > 0) {
+            const catId = p.categoryId || (t ? t.id : pid.split("-")[0]);
+            selectedDetail = detailsRes.results.find((row) => row.tid === id || row.tid === catId || t && row.tid === t.id) || null;
+            if (!selectedDetail) {
+              selectedDetail = detailsRes.results.find((row) => row.tid.startsWith(id + "-") || row.tid.startsWith(pid.split("-")[0])) || detailsRes.results[0];
+            }
+          }
+          if (selectedDetail) {
+            try {
+              playerObj = JSON.parse(selectedDetail.payload);
+              detailsFound = true;
+              revisionSelected = selectedDetail.revision;
+            } catch {
+              selectedDetail = null;
+            }
+          }
+          if (selectedDetail && playerObj) {
             if (p.rounds && p.rounds.length > 0) {
               playerObj.rounds = playerObj.rounds || [];
               for (const sch of p.rounds) {
                 const existingIdx = playerObj.rounds.findIndex((x) => x.round === sch.round);
                 if (existingIdx >= 0) {
-                  if (sch.board != null) playerObj.rounds[existingIdx].board = sch.board;
-                  if (sch.playerWhite && !playerObj.rounds[existingIdx].playerWhite) playerObj.rounds[existingIdx].playerWhite = sch.playerWhite;
-                  if (sch.playerBlack && !playerObj.rounds[existingIdx].playerBlack) playerObj.rounds[existingIdx].playerBlack = sch.playerBlack;
+                  const existingRd = playerObj.rounds[existingIdx];
+                  const isPlayed = existingRd.status === "played" || existingRd.result != null || existingRd.score != null || existingRd.opponent != null || existingRd.color != null;
+                  if (!isPlayed) {
+                    if (sch.board != null) existingRd.board = sch.board;
+                    if (sch.playerWhite && !existingRd.playerWhite) existingRd.playerWhite = sch.playerWhite;
+                    if (sch.playerBlack && !existingRd.playerBlack) existingRd.playerBlack = sch.playerBlack;
+                  }
                 } else {
                   playerObj.rounds.push(sch);
                 }
@@ -1529,6 +1551,8 @@ function createApi(db2, sourceParam = {}) {
           } else {
             if (!await lock("detail:" + id, 3)) return json({ error: "Ngu\u1ED3n \u0111ang \u0111\u01B0\u1EE3c t\u1EA3i. H\xE3y th\u1EED l\u1EA1i sau v\xE0i gi\xE2y." }, 429, {}, req);
             playerObj = await source.player(t, p);
+            detailsFound = false;
+            revisionSelected = t.updated;
             try {
               for (const rd of playerObj.rounds) {
                 const matchId = `${playerObj.id}-rd${rd.round}`;
@@ -1549,21 +1573,26 @@ function createApi(db2, sourceParam = {}) {
             await db2.prepare("INSERT INTO details (tid,pid,revision,payload) VALUES (?,?,?,?) ON CONFLICT(tid,pid,revision) DO UPDATE SET payload=excluded.payload").bind(id, pid, t.updated, JSON.stringify(playerObj)).run();
           }
           if (playerObj.rounds) {
-            playerObj.rounds = playerObj.rounds.map((r2) => {
-              let color = r2.color;
+            playerObj.rounds = playerObj.rounds.map((r) => {
+              let color = r.color;
               if (!color) {
-                if (r2.playerWhite && r2.playerWhite.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = "white";
-                else if (r2.playerBlack && r2.playerBlack.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = "black";
-                else color = r2.round % 2 === 1 ? "white" : "black";
+                if (r.playerWhite && r.playerWhite.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = "white";
+                else if (r.playerBlack && r.playerBlack.trim().toLowerCase() === playerObj.name.trim().toLowerCase()) color = "black";
+                else color = r.round % 2 === 1 ? "white" : "black";
               }
-              return { ...r2, color };
+              return { ...r, color };
             });
           }
           const s2 = stats(playerObj);
+          const dbSource = db2.source || (process.env.DATABASE_URL ? "postgresql" : "sqlite");
+          const roundsCount = playerObj.rounds ? playerObj.rounds.length : 0;
+          const playedRoundsCount = playerObj.rounds ? playerObj.rounds.filter((r) => r.status === "played" || r.result != null || r.score != null || r.opponent != null).length : 0;
+          console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || "none"} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
-          const medalPrediction = getMedal(rank, p.ageGroup || t.group, t.prizes);
+          const medalPrediction = getMedal(rank, t.group || p.ageGroup || void 0, t.prizes);
           const fullPlayer = {
             ...playerObj,
+            categoryName: t.group || playerObj.categoryName || null,
             hs1: p.hs1 ?? playerObj.hs1 ?? null,
             hs2: p.hs2 ?? playerObj.hs2 ?? null,
             hs3: p.hs3 ?? playerObj.hs3 ?? null,
@@ -2296,9 +2325,115 @@ function createApi(db2, sourceParam = {}) {
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync as readFileSync2, readdirSync, mkdirSync as mkdirSync2, existsSync as existsSync2 } from "node:fs";
 import { dirname, resolve as resolve2 } from "node:path";
-function openDatabase(file, migrations) {
-  mkdirSync2(dirname(file), { recursive: true });
-  const sql = new DatabaseSync(file);
+import pg from "pg";
+import dns from "node:dns";
+try {
+  dns.setDefaultResultOrder("ipv4first");
+} catch {
+}
+function convertSql(sql) {
+  let paramCount = 0;
+  let inString = false;
+  let stringChar = "";
+  let result = "";
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    if (inString) {
+      result += char;
+      if (char === stringChar) {
+        if (i + 1 < sql.length && sql[i + 1] === stringChar) {
+          result += stringChar;
+          i++;
+        } else {
+          inString = false;
+        }
+      }
+    } else {
+      if (char === "'" || char === '"') {
+        inString = true;
+        stringChar = char;
+        result += char;
+      } else if (char === "?") {
+        paramCount++;
+        result += `$${paramCount}`;
+      } else {
+        result += char;
+      }
+    }
+  }
+  return result;
+}
+function openDatabase(connectionStringOrFile, migrations) {
+  const isPg = connectionStringOrFile.startsWith("postgres://") || connectionStringOrFile.startsWith("postgresql://");
+  if (isPg) {
+    const pool = new pg.Pool({
+      connectionString: connectionStringOrFile,
+      ssl: process.env.NODE_ENV === "production" || connectionStringOrFile.includes("render.com") || connectionStringOrFile.includes("supabase") || connectionStringOrFile.includes("neon") || connectionStringOrFile.includes("railway") || process.env.PGSSLMODE === "require" || process.env.PGSSLMODE === "no-verify" ? { rejectUnauthorized: false } : false,
+      connectionTimeoutMillis: 15e3,
+      max: 20
+    });
+    class PgQuery {
+      text;
+      args = [];
+      constructor(text) {
+        this.text = text;
+      }
+      bind(...args) {
+        const q = new PgQuery(this.text);
+        q.args = args;
+        return q;
+      }
+      async first() {
+        if (this.text.includes("PRAGMA")) return null;
+        if (this.text.includes("sqlite_master")) return null;
+        const pgSql = convertSql(this.text);
+        const res = await pool.query(pgSql, this.args);
+        return res.rows[0] || null;
+      }
+      async all() {
+        if (this.text.includes("PRAGMA")) return { results: [] };
+        if (this.text.includes("sqlite_master")) return { results: [] };
+        const pgSql = convertSql(this.text);
+        const res = await pool.query(pgSql, this.args);
+        return { results: res.rows };
+      }
+      async run() {
+        if (this.text.includes("PRAGMA")) return { meta: { changes: 0 } };
+        if (this.text.includes("sqlite_master")) return { meta: { changes: 0 } };
+        const pgSql = convertSql(this.text);
+        const res = await pool.query(pgSql, this.args);
+        return { meta: { changes: res.rowCount || 0 } };
+      }
+    }
+    return {
+      source: "postgresql",
+      prepare: (s) => new PgQuery(s),
+      async batch(ss) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const results = [];
+          for (const s of ss) {
+            const query = s;
+            if (query.text.includes("PRAGMA") || query.text.includes("sqlite_master")) continue;
+            const pgSql = convertSql(query.text);
+            const r = await client.query(pgSql, query.args);
+            results.push({ meta: { changes: r.rowCount || 0 } });
+          }
+          await client.query("COMMIT");
+          return results;
+        } catch (e) {
+          await client.query("ROLLBACK");
+          throw e;
+        } finally {
+          client.release();
+        }
+      },
+      close: () => pool.end()
+    };
+  }
+  mkdirSync2(dirname(connectionStringOrFile), { recursive: true });
+  const sql = new DatabaseSync(connectionStringOrFile);
   sql.exec("PRAGMA busy_timeout=30000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;");
   sql.exec("CREATE TABLE IF NOT EXISTS sgc_migrations (name TEXT PRIMARY KEY, applied TEXT NOT NULL)");
   if (existsSync2(migrations)) {
@@ -2360,6 +2495,7 @@ function openDatabase(file, migrations) {
     }
   }
   return {
+    source: "sqlite",
     prepare: (s) => new Query(s),
     async batch(ss) {
       sql.exec("BEGIN IMMEDIATE");
@@ -2381,7 +2517,9 @@ var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
 var host = process.env.HOST || "0.0.0.0";
 var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
-var db = openDatabase(resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite"), resolve3(root, "migrations"));
+var dbUrl = process.env.DATABASE_URL;
+var dbPath = dbUrl || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
+var db = openDatabase(dbPath, resolve3(root, "migrations"));
 var api = createApi(db);
 var web = resolve3(root, "web");
 var types = {
