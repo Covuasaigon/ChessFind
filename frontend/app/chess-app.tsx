@@ -477,8 +477,8 @@ export default function ChessApp() {
 
               <section className="panel recent-panel">
                 <div className="section-heading">
-                  <h2>Hành trình thi đấu qua các vòng</h2>
-                  <button className="text-btn" onClick={() => setTab('results')}>Xem chi tiết <ChevronRight size={16} /></button>
+                  <h2>Hành trình thi đấu</h2>
+                  <button className="text-btn text-btn-nowrap" onClick={() => setTab('results')}>Xem chi tiết <ChevronRight size={16} /></button>
                 </div>
                 <Rounds p={player} loading={detailLoading} error={detailError} compact onOpponent={id => { const p = current.players.find(p => p.id === id); if (p) open(current, p) }} />
               </section>
@@ -765,31 +765,29 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
           const { resClass, resText, isWhite, isBlack } = getMatchBadge(r);
 
           return (
-            <div className="mobile-match-card" key={r.round} style={{ background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', padding: 14, marginBottom: 12, boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
-              <div className="match-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid #F1F5F9' }}>
-                <span className="match-card-round" style={{ fontSize: 13, fontWeight: 800, color: '#062B4F' }}>
+            <div className="mobile-match-card" key={r.round}>
+              <div className="match-card-header">
+                <span className="match-card-round">
                   Vòng {r.round} · {getBoardText(r)}
                 </span>
-                <span className="color-icon" style={{ fontSize: 16 }}>
+                <span className="match-card-color">
                   {isWhite ? '⚪ Trắng' : isBlack ? '⚫ Đen' : '—'}
                 </span>
               </div>
 
-              <div style={{ marginBottom: 10 }}>
-                <span style={{ fontSize: 11, color: '#64748B', fontWeight: 600, display: 'block', marginBottom: 2 }}>Đối thủ:</span>
-                <div className="opponent" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {r.opponentId ? (
-                    <button style={{ fontSize: 15, fontWeight: 800, color: '#145DA0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }} onClick={() => onOpponent(r.opponentId!)}>
-                      {r.opponent} ➔
-                    </button>
-                  ) : (
-                    <strong style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{r.opponent || 'Chưa có đối thủ'}</strong>
-                  )}
-                  {r.rating && <small style={{ color: '#64748B', display: 'block', marginTop: 2 }}>Elo: {r.rating}</small>}
-                </div>
+              <div className="match-card-opponent">
+                <span className="opponent-label">Đối thủ:</span>
+                {r.opponentId ? (
+                  <button className="opponent-link" onClick={() => onOpponent(r.opponentId!)}>
+                    {r.opponent} <span className="opponent-arrow">➔</span>
+                  </button>
+                ) : (
+                  <strong className="opponent-name">{r.opponent || 'Chưa có đối thủ'}</strong>
+                )}
+                {r.rating && <small className="opponent-elo">Elo {r.rating}</small>}
               </div>
 
-              <div className="match-card-footer" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: 8, borderTop: '1px dashed #F1F5F9' }}>
+              <div className="match-card-result">
                 <span className={`result-badge ${resClass}`}>{resText}</span>
               </div>
             </div>

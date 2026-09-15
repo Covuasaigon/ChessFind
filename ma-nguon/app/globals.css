@@ -788,8 +788,14 @@ svg {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 10px 14px;
   margin-bottom: 22px;
+}
+
+.text-btn-nowrap {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .muted {
@@ -1591,7 +1597,7 @@ svg {
 .mobile-match-cards {
   display: none;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 @media (max-width: 768px) {
@@ -1611,30 +1617,91 @@ svg {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 }
 
 .match-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #F1F5F9;
-  padding-bottom: 6px;
+  gap: 8px;
 }
 
 .match-card-round {
-  font-size: 12px;
-  font-weight: 700;
-  color: #145DA0;
-  background: #EEF5FC;
-  padding: 2px 8px;
-  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #062B4F;
 }
 
-.match-card-board {
+.match-card-color {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.match-card-opponent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #0F172A;
+}
+
+.opponent-label {
+  font-size: 13px;
+  color: #64748B;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.opponent-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #145DA0;
+  text-align: left;
+  cursor: pointer;
+  word-break: break-word;
+  white-space: normal;
+  display: inline;
+}
+
+.opponent-link:hover {
+  text-decoration: underline;
+  color: #0C3C68;
+}
+
+.opponent-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0F172A;
+  word-break: break-word;
+  white-space: normal;
+  display: inline;
+}
+
+.opponent-arrow {
+  display: inline-block;
+  margin-left: 2px;
+  color: #145DA0;
+}
+
+.opponent-elo {
   font-size: 12px;
   color: #64748B;
-  font-weight: 600;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.match-card-result {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .tournament-info-slider-card {
@@ -1931,14 +1998,13 @@ svg {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 14px;
-  border-radius: 8px;
+  padding: 4px 10px;
+  border-radius: 6px;
   font-weight: 800;
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
-  min-width: 90px;
   text-align: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   line-height: 1.2;
 }
 
