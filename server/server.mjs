@@ -133,20 +133,27 @@ function stats(p) {
 function getMedal(rank, group, prizes) {
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
-    const match = prizes.find((p) => {
+    const matching = prizes.filter((p) => {
       const rankMatches = p.rank === rank || p.rankFrom != null && p.rankTo != null && rank >= p.rankFrom && rank <= p.rankTo;
       if (!rankMatches) return false;
-      if (!group || !p.group) return true;
-      const pGroupNorm = normalize(p.group);
+      const ruleGrp = p.group || p.group_name;
+      if (!group || !ruleGrp) return true;
+      const pGroupNorm = normalize(ruleGrp);
       return pGroupNorm === "tat ca" || pGroupNorm === normalize(group);
     });
-    if (match) {
+    if (matching.length > 0) {
+      const specificMatch = group ? matching.find((p) => {
+        const ruleGrp = p.group || p.group_name;
+        return ruleGrp && normalize(ruleGrp) === normalize(group) && normalize(ruleGrp) !== "tat ca";
+      }) : null;
+      const match = specificMatch || matching[0];
       const label = match.prizeName || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
       let medalIcon = "\u{1F3C6}";
-      if (match.medal === "gold" || rank === 1) medalIcon = "\u{1F947}";
-      else if (match.medal === "silver" || rank === 2) medalIcon = "\u{1F948}";
-      else if (match.medal === "bronze" || rank === 3) medalIcon = "\u{1F949}";
-      else if (match.medal === "consolation") medalIcon = "\u{1F396}\uFE0F";
+      const mStr = (match.medal || "").toLowerCase();
+      if (mStr.includes("gold") || mStr === "gold medal" || rank === 1) medalIcon = "\u{1F947}";
+      else if (mStr.includes("silver") || mStr === "silver medal" || rank === 2) medalIcon = "\u{1F948}";
+      else if (mStr.includes("bronze") || mStr === "bronze medal" || rank === 3) medalIcon = "\u{1F949}";
+      else if (mStr.includes("certificate") || mStr.includes("consolation")) medalIcon = "\u{1F4DC}";
       return { medal: medalIcon, label };
     }
   }
@@ -1788,6 +1795,93 @@ function createApi(db2, sourceParam = {}) {
       }
       if (path === "/api/admin/prizes" || path.startsWith("/api/admin/prizes/")) {
         const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, "");
+        if (path === "/api/admin/prizes/bulk" || prizeId === "bulk" || b.action === "prize_bulk_apply") {
+          const targets = Array.isArray(b.targets) ? b.targets : [];
+          const rules = Array.isArray(b.rules) ? b.rules : [];
+          const conflictStrategy = String(b.conflictStrategy || "skip");
+          if (targets.length === 0) {
+            return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t m\u1ED9t gi\u1EA3i \u0111\u1EA5u ho\u1EB7c b\u1EA3ng \u0111\u1EA5u." }, 400, {}, req);
+          }
+          if (rules.length === 0) {
+            return json({ error: "Vui l\xF2ng nh\u1EADp \xEDt nh\u1EA5t m\u1ED9t d\xF2ng quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng." }, 400, {}, req);
+          }
+          for (let i = 0; i < rules.length; i++) {
+            const r = rules[i];
+            const rFrom = Number(r.rank_from ?? r.rankFrom);
+            const rTo = Number(r.rank_to ?? r.rankTo);
+            const pName = String(r.prize_name || r.prizeName || "").trim();
+            if (isNaN(rFrom) || isNaN(rTo) || rFrom < 1 || rTo < 1 || !Number.isInteger(rFrom) || !Number.isInteger(rTo)) {
+              return json({ error: `D\xF2ng ${i + 1}: H\u1EA1ng t\u1EEB v\xE0 H\u1EA1ng \u0111\u1EBFn ph\u1EA3i l\xE0 s\u1ED1 nguy\xEAn d\u01B0\u01A1ng (>= 1).` }, 400, {}, req);
+            }
+            if (rFrom > rTo) {
+              return json({ error: `D\xF2ng ${i + 1}: H\u1EA1ng t\u1EEB (${rFrom}) kh\xF4ng \u0111\u01B0\u1EE3c l\u1EDBn h\u01A1n H\u1EA1ng \u0111\u1EBFn (${rTo}).` }, 400, {}, req);
+            }
+            if (!pName) {
+              return json({ error: `D\xF2ng ${i + 1}: Vui l\xF2ng nh\u1EADp T\xEAn gi\u1EA3i th\u01B0\u1EDFng.` }, 400, {}, req);
+            }
+          }
+          const tList = await list(true);
+          const tourMap = new Map(tList.map((t) => [t.id, t.name]));
+          for (const tgt of targets) {
+            const tId = String(tgt.tournament_id || tgt.tournamentId || "").trim();
+            if (!tId || !tourMap.has(tId)) {
+              return json({ error: `Gi\u1EA3i \u0111\u1EA5u v\u1EDBi m\xE3 '${tId}' kh\xF4ng t\u1ED3n t\u1EA1i.` }, 400, {}, req);
+            }
+            if (!tgt.group_name || !String(tgt.group_name).trim()) {
+              return json({ error: "T\u1EA5t c\u1EA3 m\u1EE5c ch\u1ECDn ph\u1EA3i c\xF3 T\xEAn b\u1EA3ng \u0111\u1EA5u (group_name)." }, 400, {}, req);
+            }
+          }
+          const now2 = (/* @__PURE__ */ new Date()).toISOString();
+          let createdCount = 0;
+          let skippedCount = 0;
+          let overwrittenCount = 0;
+          for (const tgt of targets) {
+            const tId = String(tgt.tournament_id || tgt.tournamentId).trim();
+            const gName = String(tgt.group_name || tgt.groupName).trim();
+            const existingRes = await db2.prepare("SELECT * FROM prizes WHERE tournament_id = ? AND group_name = ?").bind(tId, gName).all();
+            const existingList = existingRes.results || [];
+            for (const r of rules) {
+              const rFrom = Number(r.rank_from ?? r.rankFrom);
+              const rTo = Number(r.rank_to ?? r.rankTo);
+              const medal2 = String(r.medal || "Gold Medal").trim();
+              const prize_name2 = String(r.prize_name || r.prizeName).trim();
+              const description2 = String(r.description || "").trim();
+              const exactMatch = existingList.find(
+                (e) => e.rank_from === rFrom && e.rank_to === rTo && (e.medal || "") === medal2 && e.prize_name === prize_name2
+              );
+              const rangeConflicts = existingList.filter(
+                (e) => rFrom <= e.rank_to && rTo >= e.rank_from
+              );
+              if (exactMatch && conflictStrategy !== "keep_all") {
+                skippedCount++;
+                continue;
+              }
+              if (rangeConflicts.length > 0 && conflictStrategy === "overwrite") {
+                for (const conf of rangeConflicts) {
+                  await db2.prepare("DELETE FROM prizes WHERE id = ?").bind(conf.id).run();
+                  overwrittenCount++;
+                }
+              } else if (rangeConflicts.length > 0 && conflictStrategy === "skip" && !exactMatch) {
+                skippedCount++;
+                continue;
+              }
+              const id2 = crypto.randomUUID();
+              await db2.prepare(`
+                INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(id2, tId, gName, rFrom, rTo, medal2, prize_name2, description2, now2, now2).run();
+              createdCount++;
+            }
+          }
+          await log(true, `\xC1p d\u1EE5ng h\xE0ng lo\u1EA1t c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng: T\u1EA1o m\u1EDBi ${createdCount}, ghi \u0111\xE8 ${overwrittenCount}, b\u1ECF qua ${skippedCount}`);
+          return json({
+            message: `\u0110\xE3 \xE1p d\u1EE5ng th\xE0nh c\xF4ng ${createdCount} quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng cho ${targets.length} m\u1EE5c!`,
+            createdCount,
+            overwrittenCount,
+            skippedCount,
+            appliedTargetsCount: targets.length
+          }, 200, {}, req);
+        }
         if (req.method === "DELETE" || b.action === "prize_delete") {
           const targetId = prizeId || String(b.id || "");
           if (!targetId) return json({ error: "M\xE3 gi\u1EA3i th\u01B0\u1EDFng kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);

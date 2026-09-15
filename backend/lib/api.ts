@@ -865,6 +865,113 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       if (path === '/api/admin/prizes' || path.startsWith('/api/admin/prizes/')) {
         const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, '');
 
+        if (path === '/api/admin/prizes/bulk' || prizeId === 'bulk' || b.action === 'prize_bulk_apply') {
+          const targets = Array.isArray(b.targets) ? b.targets : [];
+          const rules = Array.isArray(b.rules) ? b.rules : [];
+          const conflictStrategy = String(b.conflictStrategy || 'skip');
+
+          if (targets.length === 0) {
+            return json({ error: 'Vui lòng chọn ít nhất một giải đấu hoặc bảng đấu.' }, 400, {}, req);
+          }
+          if (rules.length === 0) {
+            return json({ error: 'Vui lòng nhập ít nhất một dòng quy tắc giải thưởng.' }, 400, {}, req);
+          }
+
+          for (let i = 0; i < rules.length; i++) {
+            const r = rules[i];
+            const rFrom = Number(r.rank_from ?? r.rankFrom);
+            const rTo = Number(r.rank_to ?? r.rankTo);
+            const pName = String(r.prize_name || r.prizeName || '').trim();
+
+            if (isNaN(rFrom) || isNaN(rTo) || rFrom < 1 || rTo < 1 || !Number.isInteger(rFrom) || !Number.isInteger(rTo)) {
+              return json({ error: `Dòng ${i + 1}: Hạng từ và Hạng đến phải là số nguyên dương (>= 1).` }, 400, {}, req);
+            }
+            if (rFrom > rTo) {
+              return json({ error: `Dòng ${i + 1}: Hạng từ (${rFrom}) không được lớn hơn Hạng đến (${rTo}).` }, 400, {}, req);
+            }
+            if (!pName) {
+              return json({ error: `Dòng ${i + 1}: Vui lòng nhập Tên giải thưởng.` }, 400, {}, req);
+            }
+          }
+
+          const tList: Tournament[] = await list(true);
+          const tourMap = new Map<string, string>(tList.map((t: Tournament) => [t.id, t.name]));
+
+          for (const tgt of targets) {
+            const tId = String(tgt.tournament_id || tgt.tournamentId || '').trim();
+            if (!tId || !tourMap.has(tId)) {
+              return json({ error: `Giải đấu với mã '${tId}' không tồn tại.` }, 400, {}, req);
+            }
+            if (!tgt.group_name || !String(tgt.group_name).trim()) {
+              return json({ error: 'Tất cả mục chọn phải có Tên bảng đấu (group_name).' }, 400, {}, req);
+            }
+          }
+
+          const now = new Date().toISOString();
+          let createdCount = 0;
+          let skippedCount = 0;
+          let overwrittenCount = 0;
+
+          for (const tgt of targets) {
+            const tId = String(tgt.tournament_id || tgt.tournamentId).trim();
+            const gName = String(tgt.group_name || tgt.groupName).trim();
+
+            const existingRes = await db.prepare('SELECT * FROM prizes WHERE tournament_id = ? AND group_name = ?').bind(tId, gName).all<any>();
+            const existingList = existingRes.results || [];
+
+            for (const r of rules) {
+              const rFrom = Number(r.rank_from ?? r.rankFrom);
+              const rTo = Number(r.rank_to ?? r.rankTo);
+              const medal = String(r.medal || 'Gold Medal').trim();
+              const prize_name = String(r.prize_name || r.prizeName).trim();
+              const description = String(r.description || '').trim();
+
+              const exactMatch = existingList.find((e: any) =>
+                e.rank_from === rFrom &&
+                e.rank_to === rTo &&
+                (e.medal || '') === medal &&
+                e.prize_name === prize_name
+              );
+
+              const rangeConflicts = existingList.filter((e: any) =>
+                rFrom <= e.rank_to && rTo >= e.rank_from
+              );
+
+              if (exactMatch && conflictStrategy !== 'keep_all') {
+                skippedCount++;
+                continue;
+              }
+
+              if (rangeConflicts.length > 0 && conflictStrategy === 'overwrite') {
+                for (const conf of rangeConflicts) {
+                  await db.prepare('DELETE FROM prizes WHERE id = ?').bind(conf.id).run();
+                  overwrittenCount++;
+                }
+              } else if (rangeConflicts.length > 0 && conflictStrategy === 'skip' && !exactMatch) {
+                skippedCount++;
+                continue;
+              }
+
+              const id = crypto.randomUUID();
+              await db.prepare(`
+                INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(id, tId, gName, rFrom, rTo, medal, prize_name, description, now, now).run();
+              createdCount++;
+            }
+          }
+
+          await log(true, `Áp dụng hàng loạt cơ cấu giải thưởng: Tạo mới ${createdCount}, ghi đè ${overwrittenCount}, bỏ qua ${skippedCount}`);
+
+          return json({
+            message: `Đã áp dụng thành công ${createdCount} quy tắc giải thưởng cho ${targets.length} mục!`,
+            createdCount,
+            overwrittenCount,
+            skippedCount,
+            appliedTargetsCount: targets.length
+          }, 200, {}, req);
+        }
+
         if (req.method === 'DELETE' || b.action === 'prize_delete') {
           const targetId = prizeId || String(b.id || '');
           if (!targetId) return json({ error: 'Mã giải thưởng không hợp lệ.' }, 400, {}, req);

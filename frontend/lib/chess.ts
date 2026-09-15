@@ -86,13 +86,19 @@ export type TournamentInfo = {
 export type PrizeRule = {
   id?: string;
   group?: string;
+  group_name?: string;
   rank?: number;
   rankFrom?: number;
   rankTo?: number;
+  rank_from?: number;
+  rank_to?: number;
   prizeName?: string;
+  prize_name?: string;
   medal?: 'gold' | 'silver' | 'bronze' | 'consolation' | 'none' | 'top' | 'custom' | string;
   gift?: string;
   description?: string;
+  tournamentId?: string;
+  tournament_id?: string;
 };
 
 export type Tournament = {
@@ -266,20 +272,30 @@ export function stats(p: Player) {
 export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule[]): { medal: string; label: string } | null {
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
-    const match = prizes.find(p => {
+    const matching = prizes.filter(p => {
       const rankMatches = p.rank === rank || (p.rankFrom != null && p.rankTo != null && rank >= p.rankFrom && rank <= p.rankTo);
       if (!rankMatches) return false;
-      if (!group || !p.group) return true;
-      const pGroupNorm = normalize(p.group);
+      const ruleGrp = p.group || p.group_name;
+      if (!group || !ruleGrp) return true;
+      const pGroupNorm = normalize(ruleGrp);
       return pGroupNorm === 'tat ca' || pGroupNorm === normalize(group);
     });
-    if (match) {
+
+    if (matching.length > 0) {
+      // Prioritize specific category match over 'tat ca'
+      const specificMatch = group ? matching.find(p => {
+        const ruleGrp = p.group || p.group_name;
+        return ruleGrp && normalize(ruleGrp) === normalize(group) && normalize(ruleGrp) !== 'tat ca';
+      }) : null;
+
+      const match = specificMatch || matching[0];
       const label = match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
       let medalIcon = '🏆';
-      if (match.medal === 'gold' || rank === 1) medalIcon = '🥇';
-      else if (match.medal === 'silver' || rank === 2) medalIcon = '🥈';
-      else if (match.medal === 'bronze' || rank === 3) medalIcon = '🥉';
-      else if (match.medal === 'consolation') medalIcon = '🎖️';
+      const mStr = (match.medal || '').toLowerCase();
+      if (mStr.includes('gold') || mStr === 'gold medal' || rank === 1) medalIcon = '🥇';
+      else if (mStr.includes('silver') || mStr === 'silver medal' || rank === 2) medalIcon = '🥈';
+      else if (mStr.includes('bronze') || mStr === 'bronze medal' || rank === 3) medalIcon = '🥉';
+      else if (mStr.includes('certificate') || mStr.includes('consolation')) medalIcon = '📜';
       return { medal: medalIcon, label };
     }
   }

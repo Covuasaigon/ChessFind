@@ -26,7 +26,11 @@ import {
   Sliders,
   ChevronRight,
   UserCheck,
-  RotateCcw
+  RotateCcw,
+  AlertTriangle,
+  Filter,
+  X,
+  Check
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogCancel, AlertDialogFooter } from '@/components/ui/alert-dialog';
@@ -364,6 +368,269 @@ export default function Admin({ onChanged }: AdminProps) {
     description: ''
   });
 
+  // --- BULK PRIZES OVERHAUL STATE ---
+  const [prizeViewTab, setPrizeViewTab] = useState<'bulk' | 'list'>('bulk');
+  const [selectedTournaments, setSelectedTournaments] = useState<string[]>([]);
+  const [tournamentSearch, setTournamentSearch] = useState('');
+  const [categoryScopeMode, setCategoryScopeMode] = useState<'all' | 'specific'>('all');
+  const [selectedCategoryKeys, setSelectedCategoryKeys] = useState<string[]>([]);
+
+  const [bulkRules, setBulkRules] = useState<Array<{
+    id: string;
+    rank_from: number | string;
+    rank_to: number | string;
+    medal: string;
+    prize_name: string;
+    description: string;
+  }>>([
+    { id: '1', rank_from: 1, rank_to: 1, medal: 'Gold Medal', prize_name: 'Cúp Vô Địch + Huy Chương Vàng', description: 'Tiền thưởng + Quà tặng' },
+    { id: '2', rank_from: 2, rank_to: 2, medal: 'Silver Medal', prize_name: 'Huy Chương Bạc', description: 'Tiền thưởng + Bằng khen' },
+    { id: '3', rank_from: 3, rank_to: 3, medal: 'Bronze Medal', prize_name: 'Huy Chương Đồng', description: 'Tiền thưởng + Bằng khen' }
+  ]);
+
+  const [showBulkConfirmModal, setShowBulkConfirmModal] = useState(false);
+  const [conflictStrategy, setConflictStrategy] = useState<'skip' | 'overwrite' | 'keep_all'>('skip');
+  const [singleEditPrizeModal, setSingleEditPrizeModal] = useState<PrizeRuleItem | null>(null);
+
+  // Filter state for saved rules list
+  const [filterTournamentId, setFilterTournamentId] = useState('all');
+  const [filterGroupName, setFilterGroupName] = useState('');
+  const [filterSearchText, setFilterSearchText] = useState('');
+
+  // Active tournaments list
+  const activeTournaments = React.useMemo(() => state?.tournaments || [], [state?.tournaments]);
+
+  // Helper: Filter active tournaments
+  const filteredTournaments = React.useMemo(() => {
+    if (!tournamentSearch.trim()) return activeTournaments;
+    const norm = normalize(tournamentSearch);
+    return activeTournaments.filter(t => normalize(t.name).includes(norm) || t.id.includes(tournamentSearch.trim()));
+  }, [activeTournaments, tournamentSearch]);
+
+  // Helper: Toggle tournament selection
+  function toggleTournamentSelect(id: string) {
+    if (selectedTournaments.includes(id)) {
+      setSelectedTournaments(prev => prev.filter(x => x !== id));
+      setSelectedCategoryKeys(prev => prev.filter(k => !k.startsWith(`${id}::`)));
+    } else {
+      setSelectedTournaments(prev => [...prev, id]);
+    }
+  }
+
+  // Helper: Get categories list for a tournament
+  function getTournamentCategoryList(tour: Tournament): Array<{ group: string; playerCount: number }> {
+    if (tour.categories && tour.categories.length > 0) {
+      return tour.categories.map(c => ({ group: c.group, playerCount: (c as any).playerCount || (c as any).player_count || (c as any).count || 0 }));
+    }
+    if (tour.group && tour.group.trim()) {
+      return [{ group: tour.group.trim(), playerCount: tour.players?.length || 0 }];
+    }
+    return [{ group: 'Tất cả', playerCount: tour.players?.length || 0 }];
+  }
+
+  // Helper: Toggle category selection
+  function toggleCategorySelect(key: string) {
+    if (selectedCategoryKeys.includes(key)) {
+      setSelectedCategoryKeys(prev => prev.filter(x => x !== key));
+    } else {
+      setSelectedCategoryKeys(prev => [...prev, key]);
+    }
+  }
+
+  // Helper: Resolved targets list (tournaments + categories)
+  const resolvedTargets = React.useMemo(() => {
+    const targets: Array<{ tournament_id: string; tournament_name: string; group_name: string }> = [];
+    selectedTournaments.forEach(tId => {
+      const tour = activeTournaments.find(t => t.id === tId);
+      if (!tour) return;
+      if (categoryScopeMode === 'all') {
+        targets.push({
+          tournament_id: tour.id,
+          tournament_name: tour.name,
+          group_name: 'Tất cả'
+        });
+      } else {
+        const catKeys = selectedCategoryKeys.filter(k => k.startsWith(`${tId}::`));
+        if (catKeys.length === 0) {
+          targets.push({
+            tournament_id: tour.id,
+            tournament_name: tour.name,
+            group_name: 'Tất cả'
+          });
+        } else {
+          catKeys.forEach(k => {
+            const gName = k.split('::')[1];
+            if (gName) {
+              targets.push({
+                tournament_id: tour.id,
+                tournament_name: tour.name,
+                group_name: gName
+              });
+            }
+          });
+        }
+      }
+    });
+    return targets;
+  }, [selectedTournaments, categoryScopeMode, selectedCategoryKeys, activeTournaments]);
+
+  // Helper: Detect existing conflicts
+  const conflictsInfo = React.useMemo(() => {
+    if (!resolvedTargets.length || !bulkRules.length) return { hasConflict: false, targetCount: 0, ruleCount: 0, conflictingRules: [] };
+    const conflictingRules: PrizeRuleItem[] = [];
+    resolvedTargets.forEach(tgt => {
+      const existing = (state?.prizes || []).filter(p => p.tournament_id === tgt.tournament_id && p.group_name === tgt.group_name);
+      bulkRules.forEach(r => {
+        const rFrom = Number(r.rank_from);
+        const rTo = Number(r.rank_to);
+        const conflicts = existing.filter(e => rFrom <= e.rank_to && rTo >= e.rank_from);
+        conflictingRules.push(...conflicts);
+      });
+    });
+    const uniqueConflicting = Array.from(new Set(conflictingRules.map(c => c.id))).map(id => conflictingRules.find(c => c.id === id)!);
+    return {
+      hasConflict: uniqueConflicting.length > 0,
+      targetCount: resolvedTargets.length,
+      ruleCount: bulkRules.length,
+      conflictingRules: uniqueConflicting
+    };
+  }, [resolvedTargets, bulkRules, state?.prizes]);
+
+  function addRuleRow() {
+    const nextId = String(Date.now() + Math.random());
+    const lastRule = bulkRules[bulkRules.length - 1];
+    const nextRank = lastRule ? Number(lastRule.rank_to) + 1 : 1;
+    setBulkRules(prev => [
+      ...prev,
+      {
+        id: nextId,
+        rank_from: nextRank,
+        rank_to: nextRank,
+        medal: 'Certificate',
+        prize_name: `Bằng khen Hạng ${nextRank}`,
+        description: 'Bằng khen danh dự'
+      }
+    ]);
+  }
+
+  function updateRuleRow(id: string, field: string, value: any) {
+    setBulkRules(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }
+
+  function removeRuleRow(id: string) {
+    setBulkRules(prev => prev.filter(r => r.id !== id));
+  }
+
+  function applyPresetStandard13() {
+    setBulkRules([
+      { id: '1', rank_from: 1, rank_to: 1, medal: 'Gold Medal', prize_name: 'Cúp Vô Địch + Huy Chương Vàng', description: 'Tiền thưởng + Quà tặng' },
+      { id: '2', rank_from: 2, rank_to: 2, medal: 'Silver Medal', prize_name: 'Huy Chương Bạc', description: 'Tiền thưởng + Bằng khen' },
+      { id: '3', rank_from: 3, rank_to: 3, medal: 'Bronze Medal', prize_name: 'Huy Chương Đồng', description: 'Tiền thưởng + Bằng khen' }
+    ]);
+  }
+
+  function applyPresetStandard15() {
+    setBulkRules([
+      { id: '1', rank_from: 1, rank_to: 1, medal: 'Gold Medal', prize_name: 'Cúp Vô Địch + Huy Chương Vàng', description: 'Tiền thưởng + Quà tặng' },
+      { id: '2', rank_from: 2, rank_to: 2, medal: 'Silver Medal', prize_name: 'Huy Chương Bạc', description: 'Tiền thưởng + Bằng khen' },
+      { id: '3', rank_from: 3, rank_to: 3, medal: 'Bronze Medal', prize_name: 'Huy Chương Đồng', description: 'Tiền thưởng + Bằng khen' },
+      { id: '4', rank_from: 4, rank_to: 5, medal: 'Certificate', prize_name: 'Giải Khuyến Khích (Bằng khen)', description: 'Bằng khen + Quà lưu niệm' }
+    ]);
+  }
+
+  function openBulkConfirmDialog() {
+    if (!resolvedTargets.length) {
+      toast.error('Vui lòng chọn ít nhất 1 Giải đấu hoặc Bảng đấu.');
+      return;
+    }
+    if (!bulkRules.length) {
+      toast.error('Vui lòng tạo ít nhất 1 dòng quy tắc giải thưởng.');
+      return;
+    }
+    for (let i = 0; i < bulkRules.length; i++) {
+      const r = bulkRules[i];
+      const rFrom = Number(r.rank_from);
+      const rTo = Number(r.rank_to);
+      if (isNaN(rFrom) || isNaN(rTo) || rFrom < 1 || rTo < 1 || !Number.isInteger(rFrom) || !Number.isInteger(rTo)) {
+        toast.error(`Dòng ${i + 1}: Hạng từ và Hạng đến phải là số nguyên dương (>= 1).`);
+        return;
+      }
+      if (rFrom > rTo) {
+        toast.error(`Dòng ${i + 1}: Hạng từ (${rFrom}) không được lớn hơn Hạng đến (${rTo}).`);
+        return;
+      }
+      if (!r.prize_name.trim()) {
+        toast.error(`Dòng ${i + 1}: Vui lòng nhập Tên giải thưởng.`);
+        return;
+      }
+    }
+    setShowBulkConfirmModal(true);
+  }
+
+  async function submitBulkPrizeRules() {
+    setBusy('bulk_prize_save');
+    try {
+      const r = await apiFetch('/api/admin/prizes/bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        },
+        body: JSON.stringify({
+          targets: resolvedTargets.map(t => ({ tournament_id: t.tournament_id, group_name: t.group_name })),
+          rules: bulkRules.map(r => ({
+            rank_from: Number(r.rank_from),
+            rank_to: Number(r.rank_to),
+            medal: r.medal,
+            prize_name: r.prize_name.trim(),
+            description: r.description.trim()
+          })),
+          conflictStrategy
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi áp dụng cơ cấu giải thưởng');
+      toast.success(d.message || 'Đã áp dụng thành công cơ cấu giải thưởng!');
+      setShowBulkConfirmModal(false);
+      await load();
+      onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  const filteredSavedPrizes = React.useMemo(() => {
+    let list = state?.prizes || [];
+    if (filterTournamentId !== 'all') {
+      list = list.filter(p => p.tournament_id === filterTournamentId);
+    }
+    if (filterGroupName.trim()) {
+      const normG = normalize(filterGroupName);
+      list = list.filter(p => normalize(p.group_name).includes(normG));
+    }
+    if (filterSearchText.trim()) {
+      const normS = normalize(filterSearchText);
+      list = list.filter(p => normalize(p.prize_name).includes(normS) || normalize(p.description || '').includes(normS));
+    }
+    return list;
+  }, [state?.prizes, filterTournamentId, filterGroupName, filterSearchText]);
+
+  function openSingleEditModal(pz: PrizeRuleItem) {
+    setPrizeForm({
+      id: pz.id,
+      tournament_id: pz.tournament_id,
+      group_name: pz.group_name,
+      rank_from: pz.rank_from,
+      rank_to: pz.rank_to,
+      medal: pz.medal || 'Gold Medal',
+      prize_name: pz.prize_name,
+      description: pz.description || ''
+    });
+    setSingleEditPrizeModal(pz);
+  }
+
   async function savePrizeRule() {
     if (!prizeForm.tournament_id) {
       toast.error('Vui lòng chọn Giải đấu (tournament required).');
@@ -665,7 +932,6 @@ export default function Admin({ onChanged }: AdminProps) {
     return str.toUpperCase();
   }
 
-  const activeTournaments = state.tournaments || [];
   const tournaments = activeTournaments.filter((t: Tournament) => normalize(t.name + ' ' + t.group).includes(normalize(q)));
   const totalPlayersCount = activeTournaments.reduce((a: number, t: Tournament) => a + (t.players ? t.players.length : 0), 0);
   const publishedCount = activeTournaments.filter((t: Tournament) => t.published).length;
@@ -1516,258 +1782,566 @@ export default function Admin({ onChanged }: AdminProps) {
         </section>
       )}
 
-      {/* 5. TOURNAMENT PRIZE MANAGEMENT MODULE */}
+      {/* 5. TOURNAMENT PRIZE MANAGEMENT MODULE (OVERHAULED) */}
       {(activeTab === 'prizes' || activeTab === 'tournaments') && (
         <section className="admin-card-section" id="admin-prize-management">
-          <div className="admin-card-title-group">
+          <div className="admin-card-title-group" style={{ marginBottom: 20 }}>
             <div>
-              <h2><Sparkles size={22} className="text-amber-500" /> 🏆 Cơ cấu giải thưởng</h2>
-              <p>Quản lý quy tắc trao thưởng, danh hiệu, huy chương, quà tặng cho từng giải đấu & bảng đấu.</p>
+              <h2><Sparkles size={24} className="text-amber-500" /> 🏆 Quản lý Cơ cấu Giải thưởng Hàng loạt</h2>
+              <p>Áp dụng huy chương, danh hiệu, quà tặng và quy tắc trao thưởng cho nhiều giải đấu & bảng đấu cùng lúc.</p>
             </div>
-            {(state?.prizes?.length || 0) > 0 && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <span className="soft-badge" style={{ background: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '6px 14px', borderRadius: 99, fontSize: 13, fontWeight: 700 }}>
-                {state?.prizes?.length} quy tắc giải thưởng
+                {state?.prizes?.length || 0} quy tắc giải thưởng đã lưu
               </span>
-            )}
+            </div>
           </div>
 
-          {/* Form to create / edit prize rules */}
-          <div style={{ background: '#F8FAFC', padding: 24, borderRadius: 16, border: '1px solid #CBD5E1', marginBottom: 24 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Plus size={18} className="text-amber-500" />
-              {prizeForm.id ? 'Hiệu chỉnh quy tắc giải thưởng' : 'Thêm quy tắc cơ cấu giải thưởng mới'}
-            </h3>
+          {/* TAB BUILDER MODES */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, borderBottom: '2px solid #E2E8F0', paddingBottom: 12, overflowX: 'auto' }}>
+            <button
+              type="button"
+              className={prizeViewTab === 'bulk' ? 'saas-btn-gold' : 'outline'}
+              style={{ padding: '8px 18px', borderRadius: 10, fontSize: 14, fontWeight: 700 }}
+              onClick={() => setPrizeViewTab('bulk')}
+            >
+              <Sparkles size={16} />
+              <span>🚀 Thiết lập & Áp dụng Hàng loạt</span>
+            </button>
+            <button
+              type="button"
+              className={prizeViewTab === 'list' ? 'saas-btn-gold' : 'outline'}
+              style={{ padding: '8px 18px', borderRadius: 10, fontSize: 14, fontWeight: 700 }}
+              onClick={() => setPrizeViewTab('list')}
+            >
+              <BarChart3 size={16} />
+              <span>📋 Danh sách Cơ cấu Đã Lưu ({state?.prizes?.length || 0})</span>
+            </button>
+          </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); savePrizeRule(); }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 16 }}>
-                {/* 1. Tournament */}
-                <label className="saas-label">
-                  Giải đấu (*)
-                  <select
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    required
-                    value={prizeForm.tournament_id}
-                    onChange={(e) => {
-                      const selectedTourId = e.target.value;
-                      const tour = activeTournaments.find(t => t.id === selectedTourId);
-                      setPrizeForm({
-                        ...prizeForm,
-                        tournament_id: selectedTourId,
-                        group_name: tour?.categories?.[0]?.group || prizeForm.group_name || 'Tất cả'
-                      });
-                    }}
-                  >
-                    <option value="">-- Chọn giải đấu --</option>
-                    {activeTournaments.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </label>
+          {prizeViewTab === 'bulk' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {/* BLOCK 1: SELECTION OF TOURNAMENTS AND CATEGORIES */}
+              <div style={{ background: '#FFFFFF', padding: 20, borderRadius: 16, border: '1px solid #CBD5E1', boxShadow: '0 2px 8px rgba(6,43,79,0.04)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, color: '#062B4F', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Layers3 size={18} className="text-amber-500" />
+                    Bước 1: Chọn Giải đấu & Bảng đấu Áp dụng
+                  </h3>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#145DA0', background: '#E0F2FE', padding: '4px 12px', borderRadius: 20 }}>
+                    Đã chọn {resolvedTargets.length} mục áp dụng
+                  </span>
+                </div>
 
-                {/* 2. Group/Table */}
-                <label className="saas-label">
-                  Bảng đấu / Nhóm (*)
-                  <input
-                    type="text"
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    required
-                    placeholder="VD: U7 Nam, U9 Nữ, U11 Nam..."
-                    value={prizeForm.group_name}
-                    onChange={(e) => setPrizeForm({ ...prizeForm, group_name: e.target.value })}
-                  />
-                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+                  {/* LEFT: TOURNAMENT MULTI-SELECT */}
+                  <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 12, border: '1px solid #E2E8F0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+                      <label className="saas-label" style={{ margin: 0, fontWeight: 800, color: '#062B4F' }}>
+                        1.1. Giải đấu ({selectedTournaments.length}/{activeTournaments.length})
+                      </label>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="outline"
+                          style={{ padding: '4px 8px', fontSize: 12, borderRadius: 6 }}
+                          onClick={() => {
+                            const filteredIds = filteredTournaments.map(t => t.id);
+                            const merged = Array.from(new Set([...selectedTournaments, ...filteredIds]));
+                            setSelectedTournaments(merged);
+                          }}
+                        >
+                          Chọn tất cả ({filteredTournaments.length})
+                        </button>
+                        <button
+                          type="button"
+                          className="outline"
+                          style={{ padding: '4px 8px', fontSize: 12, borderRadius: 6, color: '#DC2626' }}
+                          onClick={() => {
+                            setSelectedTournaments([]);
+                            setSelectedCategoryKeys([]);
+                          }}
+                        >
+                          Bỏ chọn tất cả
+                        </button>
+                      </div>
+                    </div>
 
-                {/* 3. Rank From */}
-                <label className="saas-label">
-                  Hạng từ (Rank From) (*)
-                  <input
-                    type="number"
-                    min={1}
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    required
-                    value={prizeForm.rank_from}
-                    onChange={(e) => setPrizeForm({ ...prizeForm, rank_from: e.target.value })}
-                  />
-                </label>
+                    <div style={{ position: 'relative', marginBottom: 10 }}>
+                      <Search size={15} style={{ position: 'absolute', left: 10, top: 10, color: '#94A3B8' }} />
+                      <input
+                        type="text"
+                        className="saas-input"
+                        style={{ paddingLeft: 32, fontSize: 13, height: 36 }}
+                        placeholder="Tìm theo tên hoặc mã giải đấu..."
+                        value={tournamentSearch}
+                        onChange={(e) => setTournamentSearch(e.target.value)}
+                      />
+                    </div>
 
-                {/* 4. Rank To */}
-                <label className="saas-label">
-                  Hạng đến (Rank To) (*)
-                  <input
-                    type="number"
-                    min={1}
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    required
-                    value={prizeForm.rank_to}
-                    onChange={(e) => setPrizeForm({ ...prizeForm, rank_to: e.target.value })}
-                  />
-                </label>
+                    <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
+                      {filteredTournaments.map(t => {
+                        const isChecked = selectedTournaments.includes(t.id);
+                        const catCount = t.categories?.length || (t.group ? 1 : 0);
+                        return (
+                          <div
+                            key={t.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              background: isChecked ? '#EFF6FF' : '#FFFFFF',
+                              border: isChecked ? '1px solid #93C5FD' : '1px solid #E2E8F0',
+                              cursor: 'pointer',
+                              userSelect: 'none'
+                            }}
+                            onClick={() => toggleTournamentSelect(t.id)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}}
+                                style={{ width: 16, height: 16, cursor: 'pointer' }}
+                              />
+                              <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: '#062B4F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {t.name}
+                                </span>
+                                <span style={{ fontSize: 11, color: '#64748B' }}>Mã TNR: {t.id}</span>
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 11, color: '#64748B', background: '#F1F5F9', padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap', marginLeft: 6 }}>
+                              {catCount} bảng
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {filteredTournaments.length === 0 && (
+                        <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', margin: 12 }}>Không tìm thấy giải đấu phù hợp.</p>
+                      )}
+                    </div>
 
-                {/* 5. Medal Type */}
-                <label className="saas-label">
-                  Loại huy chương / Danh hiệu
-                  <select
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    value={prizeForm.medal}
-                    onChange={(e) => setPrizeForm({ ...prizeForm, medal: e.target.value })}
-                  >
-                    <option value="Gold Medal">🥇 Gold Medal (Huy chương Vàng)</option>
-                    <option value="Silver Medal">🥈 Silver Medal (Huy chương Bạc)</option>
-                    <option value="Bronze Medal">🥉 Bronze Medal (Huy chương Đồng)</option>
-                    <option value="Certificate">📜 Certificate (Bằng khen)</option>
-                    <option value="Other">🏆 Other (Giải thưởng khác)</option>
-                  </select>
-                </label>
+                    {/* SELECTED TOURNAMENTS TAGS */}
+                    {selectedTournaments.length > 0 && (
+                      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #E2E8F0', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {selectedTournaments.map(tId => {
+                          const t = activeTournaments.find(x => x.id === tId);
+                          if (!t) return null;
+                          return (
+                            <span
+                              key={tId}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#DCEFE6', color: '#065F46', padding: '3px 8px', borderRadius: 14, fontSize: 12, fontWeight: 700 }}
+                            >
+                              {t.name}
+                              <X
+                                size={13}
+                                style={{ cursor: 'pointer' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleTournamentSelect(tId);
+                                }}
+                              />
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
 
-                {/* 6. Prize Name */}
-                <label className="saas-label">
-                  Tên giải thưởng (*)
-                  <input
-                    type="text"
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    required
-                    placeholder="VD: Cúp vô địch + Huy chương vàng"
-                    value={prizeForm.prize_name}
-                    onChange={(e) => setPrizeForm({ ...prizeForm, prize_name: e.target.value })}
-                  />
-                </label>
+                  {/* RIGHT: CATEGORIES SCOPE */}
+                  <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 12, border: '1px solid #E2E8F0' }}>
+                    <label className="saas-label" style={{ marginBottom: 10, fontWeight: 800, color: '#062B4F' }}>
+                      1.2. Phạm vi Bảng đấu
+                    </label>
 
-                {/* 7. Reward Description */}
-                <label className="saas-label" style={{ gridColumn: 'span 2' }}>
-                  Mô tả phần thưởng / Quà tặng
-                  <input
-                    type="text"
-                    className="saas-input"
-                    style={{ paddingLeft: 12 }}
-                    placeholder="VD: 500.000 VNĐ + quà tặng tài trợ..."
-                    value={prizeForm.description}
-                    onChange={(e) => setPrizeForm({ ...prizeForm, description: e.target.value })}
-                  />
-                </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#062B4F' }}>
+                        <input
+                          type="radio"
+                          name="categoryScopeMode"
+                          checked={categoryScopeMode === 'all'}
+                          onChange={() => setCategoryScopeMode('all')}
+                        />
+                        <span>🟢 Mặc định: Tất cả bảng đấu thuộc các giải đã chọn</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#062B4F' }}>
+                        <input
+                          type="radio"
+                          name="categoryScopeMode"
+                          checked={categoryScopeMode === 'specific'}
+                          onChange={() => setCategoryScopeMode('specific')}
+                        />
+                        <span>🔵 Chọn bảng đấu cụ thể (Nhóm theo từng giải)</span>
+                      </label>
+                    </div>
+
+                    {categoryScopeMode === 'specific' && (
+                      <div style={{ background: '#FFFFFF', padding: 12, borderRadius: 10, border: '1px solid #CBD5E1' }}>
+                        {selectedTournaments.length === 0 ? (
+                          <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', margin: 12 }}>
+                            Vui lòng chọn ít nhất 1 Giải đấu bên trái trước khi chọn bảng cụ thể.
+                          </p>
+                        ) : (
+                          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {selectedTournaments.map(tId => {
+                              const tour = activeTournaments.find(x => x.id === tId);
+                              if (!tour) return null;
+                              const catList = getTournamentCategoryList(tour);
+                              return (
+                                <div key={tId} style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: 8 }}>
+                                  <b style={{ fontSize: 13, color: '#062B4F', display: 'block', marginBottom: 6 }}>
+                                    🏆 {tour.name} <span style={{ fontSize: 11, color: '#64748B', fontWeight: 400 }}>(Mã TNR: {tour.id})</span>
+                                  </b>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6 }}>
+                                    {catList.map(cat => {
+                                      const key = `${tour.id}::${cat.group}`;
+                                      const isCatChecked = selectedCategoryKeys.includes(key);
+                                      return (
+                                        <label
+                                          key={key}
+                                          style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 6,
+                                            padding: '4px 8px',
+                                            borderRadius: 6,
+                                            background: isCatChecked ? '#EFF6FF' : '#F8FAFC',
+                                            border: isCatChecked ? '1px solid #93C5FD' : '1px solid #E2E8F0',
+                                            fontSize: 12,
+                                            cursor: 'pointer'
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={isCatChecked}
+                                            onChange={() => toggleCategorySelect(key)}
+                                          />
+                                          <span style={{ fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {cat.group}
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <button type="submit" className="saas-btn-gold" disabled={!!busy}>
-                  {busy === 'prize_save' ? <RefreshCw size={17} className="spin" /> : <Sparkles size={17} />}
-                  <span>{prizeForm.id ? 'Cập Nhật Quy Tắc Giải Thưởng' : 'Lưu Cơ Cấu Giải Thưởng'}</span>
-                </button>
+              {/* BLOCK 2: MULTI-TIER PRIZE RULES BUILDER */}
+              <div style={{ background: '#FFFFFF', padding: 20, borderRadius: 16, border: '1px solid #CBD5E1', boxShadow: '0 2px 8px rgba(6,43,79,0.04)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 800, color: '#062B4F', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Trophy size={18} className="text-amber-500" />
+                      Bước 2: Cấu hình Các Mức Giải thưởng (Nhập nhiều dòng)
+                    </h3>
+                    <p style={{ fontSize: 12, color: '#64748B', margin: '2px 0 0' }}>
+                      Thiết lập các mức trao thưởng. Bạn có thể thêm, chỉnh sửa hoặc dùng bộ mẫu nhanh phía dưới.
+                    </p>
+                  </div>
 
-                {prizeForm.id && (
+                  {/* PRESET BUTTONS */}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="outline"
+                      style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8, fontWeight: 700 }}
+                      onClick={applyPresetStandard13}
+                    >
+                      + Bộ Hạng 1-3 (🥇🥈🥉)
+                    </button>
+                    <button
+                      type="button"
+                      className="outline"
+                      style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8, fontWeight: 700 }}
+                      onClick={applyPresetStandard15}
+                    >
+                      + Bộ Hạng 1-5 (🥇🥈🥉📜)
+                    </button>
+                    <button
+                      type="button"
+                      className="outline"
+                      style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8, fontWeight: 700 }}
+                      onClick={addRuleRow}
+                    >
+                      <Plus size={14} /> Thêm 1 dòng
+                    </button>
+                    <button
+                      type="button"
+                      className="outline danger-btn"
+                      style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
+                      onClick={() => setBulkRules([])}
+                    >
+                      Xóa tất cả
+                    </button>
+                  </div>
+                </div>
+
+                {/* RULES TABLE BUILDER */}
+                <div style={{ overflowX: 'auto', border: '1px solid #E2E8F0', borderRadius: 12 }}>
+                  <table className="saas-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#F8FAFC', textAlign: 'left', borderBottom: '2px solid #E2E8F0' }}>
+                        <th style={{ padding: 10, width: 90, fontSize: 12 }}>Hạng từ (*)</th>
+                        <th style={{ padding: 10, width: 90, fontSize: 12 }}>Hạng đến (*)</th>
+                        <th style={{ padding: 10, width: 170, fontSize: 12 }}>Loại danh hiệu / Huy chương</th>
+                        <th style={{ padding: 10, minWidth: 200, fontSize: 12 }}>Tên giải thưởng (*)</th>
+                        <th style={{ padding: 10, minWidth: 220, fontSize: 12 }}>Mô tả phần thưởng / Quà tặng</th>
+                        <th style={{ padding: 10, width: 50, textAlign: 'center' }}>Xóa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkRules.map((r) => (
+                        <tr key={r.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: 8 }}>
+                            <input
+                              type="number"
+                              min={1}
+                              className="saas-input"
+                              style={{ padding: '4px 8px', fontSize: 13, height: 36, textAlign: 'center' }}
+                              value={r.rank_from}
+                              onChange={(e) => updateRuleRow(r.id, 'rank_from', e.target.value)}
+                            />
+                          </td>
+                          <td style={{ padding: 8 }}>
+                            <input
+                              type="number"
+                              min={1}
+                              className="saas-input"
+                              style={{ padding: '4px 8px', fontSize: 13, height: 36, textAlign: 'center' }}
+                              value={r.rank_to}
+                              onChange={(e) => updateRuleRow(r.id, 'rank_to', e.target.value)}
+                            />
+                          </td>
+                          <td style={{ padding: 8 }}>
+                            <select
+                              className="saas-input"
+                              style={{ padding: '4px 8px', fontSize: 13, height: 36 }}
+                              value={r.medal}
+                              onChange={(e) => updateRuleRow(r.id, 'medal', e.target.value)}
+                            >
+                              <option value="Gold Medal">🥇 Gold Medal (Vàng)</option>
+                              <option value="Silver Medal">🥈 Silver Medal (Bạc)</option>
+                              <option value="Bronze Medal">🥉 Bronze Medal (Đồng)</option>
+                              <option value="Certificate">📜 Certificate (Bằng khen)</option>
+                              <option value="Other">🏆 Other (Khác)</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: 8 }}>
+                            <input
+                              type="text"
+                              className="saas-input"
+                              style={{ padding: '4px 10px', fontSize: 13, height: 36 }}
+                              placeholder="VD: Cúp vô địch + Huy chương Vàng"
+                              value={r.prize_name}
+                              onChange={(e) => updateRuleRow(r.id, 'prize_name', e.target.value)}
+                            />
+                          </td>
+                          <td style={{ padding: 8 }}>
+                            <input
+                              type="text"
+                              className="saas-input"
+                              style={{ padding: '4px 10px', fontSize: 13, height: 36 }}
+                              placeholder="VD: 500.000 VNĐ + Quà tặng tài trợ..."
+                              value={r.description}
+                              onChange={(e) => updateRuleRow(r.id, 'description', e.target.value)}
+                            />
+                          </td>
+                          <td style={{ padding: 8, textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="outline danger-btn"
+                              style={{ padding: 6, borderRadius: 6 }}
+                              onClick={() => removeRuleRow(r.id)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {bulkRules.length === 0 && (
+                        <tr>
+                          <td colSpan={6} style={{ padding: 20, textAlign: 'center', color: '#64748B' }}>
+                            Chưa có dòng quy tắc nào. Nhấn "+ Bộ Hạng 1-3" hoặc "+ Thêm 1 dòng" để thiết lập cơ cấu.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* BOTTOM APPLY ACTION BUTTON */}
+                <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, color: '#475569' }}>
+                    Tổng dự kiến: <b>{resolvedTargets.length} mục</b> × <b>{bulkRules.length} quy tắc</b> = <b>{resolvedTargets.length * bulkRules.length} bản ghi</b>
+                  </span>
+
+                  <button
+                    type="button"
+                    className="saas-btn-gold"
+                    style={{ height: 44, padding: '0 24px', fontSize: 15, fontWeight: 800, borderRadius: 10 }}
+                    disabled={resolvedTargets.length === 0 || bulkRules.length === 0 || !!busy}
+                    onClick={openBulkConfirmDialog}
+                  >
+                    <Sparkles size={18} />
+                    <span>Áp dụng cơ cấu cho {resolvedTargets.length} mục đã chọn</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {prizeViewTab === 'list' && (
+            <div>
+              {/* FILTER TOOLBAR FOR SAVED PRIZE RULES */}
+              <div style={{ background: '#F8FAFC', padding: 16, borderRadius: 14, border: '1px solid #CBD5E1', marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Filter size={16} className="text-amber-500" />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#062B4F' }}>Bộ lọc danh sách:</span>
+                </div>
+
+                {/* Tournament Filter */}
+                <select
+                  className="saas-input"
+                  style={{ paddingLeft: 10, width: 220, fontSize: 13, height: 36 }}
+                  value={filterTournamentId}
+                  onChange={(e) => setFilterTournamentId(e.target.value)}
+                >
+                  <option value="all">-- Tất cả Giải đấu --</option>
+                  {activeTournaments.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+
+                {/* Group Filter */}
+                <input
+                  type="text"
+                  className="saas-input"
+                  style={{ paddingLeft: 10, width: 180, fontSize: 13, height: 36 }}
+                  placeholder="Lọc theo Bảng đấu..."
+                  value={filterGroupName}
+                  onChange={(e) => setFilterGroupName(e.target.value)}
+                />
+
+                {/* Search Text Filter */}
+                <input
+                  type="text"
+                  className="saas-input"
+                  style={{ paddingLeft: 10, width: 200, fontSize: 13, height: 36 }}
+                  placeholder="Tìm theo tên giải thưởng..."
+                  value={filterSearchText}
+                  onChange={(e) => setFilterSearchText(e.target.value)}
+                />
+
+                {(filterTournamentId !== 'all' || filterGroupName || filterSearchText) && (
                   <button
                     type="button"
                     className="outline"
-                    onClick={() => setPrizeForm({
-                      id: '',
-                      tournament_id: activeTournaments[0]?.id || '',
-                      group_name: 'Tất cả',
-                      rank_from: 1,
-                      rank_to: 1,
-                      medal: 'Gold Medal',
-                      prize_name: '',
-                      description: ''
-                    })}
+                    style={{ padding: '6px 12px', fontSize: 12, borderRadius: 8 }}
+                    onClick={() => {
+                      setFilterTournamentId('all');
+                      setFilterGroupName('');
+                      setFilterSearchText('');
+                    }}
                   >
-                    Hủy chỉnh sửa
+                    Xóa lọc
                   </button>
                 )}
+
+                <span style={{ marginLeft: 'auto', fontSize: 13, color: '#64748B', fontWeight: 600 }}>
+                  Hiển thị {filteredSavedPrizes.length} / {state?.prizes?.length || 0} quy tắc
+                </span>
               </div>
-            </form>
-          </div>
 
-          {/* Table displaying existing prize rules */}
-          <div className="saas-table-container">
-            <table className="saas-table">
-              <thead>
-                <tr>
-                  <th>Giải đấu (Tournament)</th>
-                  <th>Bảng đấu (Group)</th>
-                  <th style={{ textAlign: 'center' }}>Khung hạng (Rank Range)</th>
-                  <th style={{ textAlign: 'center' }}>Loại danh hiệu (Medal)</th>
-                  <th>Tên giải thưởng (Prize Name) & Mô tả</th>
-                  <th style={{ textAlign: 'right' }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(state?.prizes || []).map((pz: PrizeRuleItem) => {
-                  const medalLabel = pz.medal === 'Gold Medal' || pz.medal === 'gold' ? '🥇 Gold Medal'
-                    : pz.medal === 'Silver Medal' || pz.medal === 'silver' ? '🥈 Silver Medal'
-                    : pz.medal === 'Bronze Medal' || pz.medal === 'bronze' ? '🥉 Bronze Medal'
-                    : pz.medal === 'Certificate' ? '📜 Certificate' : '🏆 Other';
-
-                  return (
-                    <tr key={pz.id}>
-                      <td>
-                        <b style={{ color: '#062B4F', fontSize: 14, display: 'block' }}>{pz.tournament_name || pz.tournament_id}</b>
-                      </td>
-                      <td>
-                        <span style={{ fontWeight: 600, color: '#334155' }}>{pz.group_name}</span>
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 800, color: '#145DA0' }}>
-                        {pz.rank_from === pz.rank_to ? `Hạng ${pz.rank_from}` : `Hạng ${pz.rank_from} - ${pz.rank_to}`}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span className="soft-badge" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', fontWeight: 700 }}>
-                          {medalLabel}
-                        </span>
-                      </td>
-                      <td>
-                        <b style={{ color: '#062B4F', display: 'block', fontSize: 14 }}>{pz.prize_name}</b>
-                        {pz.description && <span style={{ fontSize: 12, color: '#64748B' }}>{pz.description}</span>}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                          <button
-                            className="outline"
-                            style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
-                            onClick={() => {
-                              setPrizeForm({
-                                id: pz.id,
-                                tournament_id: pz.tournament_id,
-                                group_name: pz.group_name,
-                                rank_from: pz.rank_from,
-                                rank_to: pz.rank_to,
-                                medal: pz.medal || 'Gold Medal',
-                                prize_name: pz.prize_name,
-                                description: pz.description || ''
-                              });
-                              setActiveTab('prizes');
-                              document.getElementById('admin-prize-management')?.scrollIntoView({ behavior: 'smooth' });
-                            }}
-                            title="Chỉnh sửa quy tắc"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            className="outline danger-btn"
-                            style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
-                            disabled={!!busy}
-                            onClick={() => pz.id && deletePrizeRule(pz.id)}
-                            title="Xóa quy tắc"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
+              {/* TABLE OF SAVED PRIZE RULES */}
+              <div className="saas-table-container">
+                <table className="saas-table">
+                  <thead>
+                    <tr>
+                      <th>Giải đấu (Tournament)</th>
+                      <th>Bảng đấu (Group)</th>
+                      <th style={{ textAlign: 'center' }}>Khung hạng (Rank Range)</th>
+                      <th style={{ textAlign: 'center' }}>Loại danh hiệu (Medal)</th>
+                      <th>Tên giải thưởng & Mô tả</th>
+                      <th style={{ textAlign: 'right' }}>Thao tác</th>
                     </tr>
-                  );
-                })}
+                  </thead>
+                  <tbody>
+                    {filteredSavedPrizes.map((pz: PrizeRuleItem) => {
+                      const medalLabel = pz.medal === 'Gold Medal' || pz.medal === 'gold' ? '🥇 Gold Medal'
+                        : pz.medal === 'Silver Medal' || pz.medal === 'silver' ? '🥈 Silver Medal'
+                        : pz.medal === 'Bronze Medal' || pz.medal === 'bronze' ? '🥉 Bronze Medal'
+                        : pz.medal === 'Certificate' ? '📜 Certificate' : '🏆 Other';
 
-                {!state?.prizes?.length && (
-                  <tr>
-                    <td colSpan={6} style={{ padding: 24, textAlign: 'center', color: '#64748B', fontStyle: 'italic' }}>
-                      Chưa có quy tắc cơ cấu giải thưởng nào. Hãy sử dụng biểu mẫu phía trên để thêm cơ cấu giải thưởng.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      return (
+                        <tr key={pz.id}>
+                          <td>
+                            <b style={{ color: '#062B4F', fontSize: 14, display: 'block' }}>{pz.tournament_name || pz.tournament_id}</b>
+                          </td>
+                          <td>
+                            <span className="soft-badge" style={{ background: pz.group_name === 'Tất cả' ? '#E0F2FE' : '#F1F5F9', color: pz.group_name === 'Tất cả' ? '#0369A1' : '#334155', fontWeight: 700 }}>
+                              {pz.group_name}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 800, color: '#145DA0' }}>
+                            {pz.rank_from === pz.rank_to ? `Hạng ${pz.rank_from}` : `Hạng ${pz.rank_from} - ${pz.rank_to}`}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="soft-badge" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', fontWeight: 700 }}>
+                              {medalLabel}
+                            </span>
+                          </td>
+                          <td>
+                            <b style={{ color: '#062B4F', display: 'block', fontSize: 14 }}>{pz.prize_name}</b>
+                            {pz.description && <span style={{ fontSize: 12, color: '#64748B' }}>{pz.description}</span>}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button
+                                className="outline"
+                                style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
+                                onClick={() => openSingleEditModal(pz)}
+                                title="Chỉnh sửa riêng quy tắc này"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                className="outline danger-btn"
+                                style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}
+                                disabled={!!busy}
+                                onClick={() => pz.id && deletePrizeRule(pz.id)}
+                                title="Xóa quy tắc"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {filteredSavedPrizes.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: 24, textAlign: 'center', color: '#64748B', fontStyle: 'italic' }}>
+                          {state?.prizes?.length ? 'Không có quy tắc giải thưởng nào khớp với bộ lọc.' : 'Chưa có quy tắc cơ cấu giải thưởng nào. Nhấn tab "Thiết lập & Áp dụng Hàng loạt" để thêm mới.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -2361,6 +2935,249 @@ export default function Admin({ onChanged }: AdminProps) {
               {busy ? 'Đang xóa…' : 'Xóa Banner'}
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* BULK APPLY CONFIRMATION & CONFLICT MODAL */}
+      <Dialog open={showBulkConfirmModal} onOpenChange={(v) => { if (!v && !busy) setShowBulkConfirmModal(false); }}>
+        <DialogContent showCloseButton={false} style={{ maxWidth: 680 }}>
+          <DialogHeader>
+            <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#062B4F' }}>
+              <Sparkles size={20} className="text-amber-500" />
+              <span>Xác nhận áp dụng cơ cấu giải thưởng</span>
+            </DialogTitle>
+            <DialogDescription>
+              Vui lòng kiểm tra lại danh sách giải/bảng đấu và các mức thưởng trước khi lưu vào cơ sở dữ liệu.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxHeight: '60vh', overflowY: 'auto', paddingRight: 4 }}>
+            {/* TARGETS SUMMARY */}
+            <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #E2E8F0' }}>
+              <b style={{ fontSize: 13, color: '#062B4F', display: 'block', marginBottom: 6 }}>
+                📍 Các mục sẽ áp dụng ({resolvedTargets.length} mục):
+              </b>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 110, overflowY: 'auto' }}>
+                {resolvedTargets.map((t, i) => (
+                  <span key={i} style={{ background: '#E0F2FE', color: '#0369A1', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
+                    {t.tournament_name} ➔ [{t.group_name}]
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* RULES SUMMARY */}
+            <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #E2E8F0' }}>
+              <b style={{ fontSize: 13, color: '#062B4F', display: 'block', marginBottom: 6 }}>
+                🏆 Các mức giải thưởng ({bulkRules.length} dòng):
+              </b>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {bulkRules.map((r, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#334155', display: 'flex', justifyContent: 'space-between' }}>
+                    <span><b>Hạng {r.rank_from === r.rank_to ? r.rank_from : `${r.rank_from}-${r.rank_to}`}:</b> {r.prize_name}</span>
+                    <span style={{ color: '#64748B' }}>{r.medal}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* CONFLICT DETECTION & STRATEGY */}
+            <div style={{ background: conflictsInfo.hasConflict ? '#FEF2F2' : '#F0FDF4', padding: 14, borderRadius: 12, border: conflictsInfo.hasConflict ? '1px solid #FCA5A5' : '1px solid #86EFAC' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                {conflictsInfo.hasConflict ? <AlertTriangle size={18} className="text-red-600" /> : <CheckCircle2 size={18} className="text-green-600" />}
+                <b style={{ fontSize: 13, color: conflictsInfo.hasConflict ? '#991B1B' : '#166534' }}>
+                  {conflictsInfo.hasConflict ? `Phát hiện xung đột với ${conflictsInfo.conflictingRules.length} quy tắc cũ!` : 'Không có xung đột trùng lặp.'}
+                </b>
+              </div>
+
+              {conflictsInfo.hasConflict && (
+                <p style={{ fontSize: 12, color: '#991B1B', margin: '0 0 10px' }}>
+                  Một số giải/bảng đã có quy tắc giải thưởng nằm trong cùng khung hạng. Hãy chọn phương án xử lý:
+                </p>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#062B4F' }}>
+                  <input
+                    type="radio"
+                    name="conflictStrategyModal"
+                    checked={conflictStrategy === 'skip'}
+                    onChange={() => setConflictStrategy('skip')}
+                  />
+                  <span><b>🟢 Mặc định (Khuyên dùng):</b> Giữ nguyên quy tắc cũ & bỏ qua trùng lặp</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#062B4F' }}>
+                  <input
+                    type="radio"
+                    name="conflictStrategyModal"
+                    checked={conflictStrategy === 'overwrite'}
+                    onChange={() => setConflictStrategy('overwrite')}
+                  />
+                  <span><b>🔴 Thay thế / Ghi đè:</b> Xóa các quy tắc cũ bị trùng khoảng hạng và thay bằng quy tắc mới</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#062B4F' }}>
+                  <input
+                    type="radio"
+                    name="conflictStrategyModal"
+                    checked={conflictStrategy === 'keep_all'}
+                    onChange={() => setConflictStrategy('keep_all')}
+                  />
+                  <span><b>🟡 Thêm tất cả:</b> Giữ quy tắc cũ và thêm cả quy tắc mới (một vị trí có thể có nhiều phần thưởng)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="dialog-actions" style={{ marginTop: 20 }}>
+            <button
+              type="button"
+              className="outline"
+              disabled={!!busy}
+              onClick={() => setShowBulkConfirmModal(false)}
+            >
+              Hủy bỏ
+            </button>
+            <button
+              type="button"
+              className="saas-btn-gold"
+              disabled={!!busy}
+              onClick={submitBulkPrizeRules}
+            >
+              {busy === 'bulk_prize_save' ? 'Đang xử lý & lưu...' : '🚀 Xác Nhận Áp Dụng Ngay'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* SINGLE PRIZE RULE EDIT MODAL */}
+      <Dialog open={!!singleEditPrizeModal} onOpenChange={(v) => { if (!v && !busy) setSingleEditPrizeModal(null); }}>
+        <DialogContent showCloseButton={false} style={{ maxWidth: 540 }}>
+          <DialogHeader>
+            <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#062B4F' }}>
+              <Pencil size={18} className="text-amber-500" />
+              <span>Chỉnh sửa riêng quy tắc giải thưởng</span>
+            </DialogTitle>
+            <DialogDescription>
+              Thay đổi thông tin quy tắc giải thưởng này mà không làm ảnh hưởng các giải/bảng khác.
+            </DialogDescription>
+          </DialogHeader>
+
+          {singleEditPrizeModal && (
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              await savePrizeRule();
+              setSingleEditPrizeModal(null);
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <label className="saas-label" style={{ gridColumn: 'span 2' }}>
+                  Giải đấu
+                  <select
+                    className="saas-input"
+                    style={{ paddingLeft: 10 }}
+                    value={prizeForm.tournament_id}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, tournament_id: e.target.value })}
+                  >
+                    {activeTournaments.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="saas-label">
+                  Bảng đấu
+                  <input
+                    type="text"
+                    className="saas-input"
+                    style={{ paddingLeft: 10 }}
+                    value={prizeForm.group_name}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, group_name: e.target.value })}
+                  />
+                </label>
+
+                <label className="saas-label">
+                  Loại huy chương
+                  <select
+                    className="saas-input"
+                    style={{ paddingLeft: 10 }}
+                    value={prizeForm.medal}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, medal: e.target.value })}
+                  >
+                    <option value="Gold Medal">🥇 Gold Medal</option>
+                    <option value="Silver Medal">🥈 Silver Medal</option>
+                    <option value="Bronze Medal">🥉 Bronze Medal</option>
+                    <option value="Certificate">📜 Certificate</option>
+                    <option value="Other">🏆 Other</option>
+                  </select>
+                </label>
+
+                <label className="saas-label">
+                  Hạng từ
+                  <input
+                    type="number"
+                    min={1}
+                    className="saas-input"
+                    style={{ paddingLeft: 10 }}
+                    value={prizeForm.rank_from}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, rank_from: e.target.value })}
+                  />
+                </label>
+
+                <label className="saas-label">
+                  Hạng đến
+                  <input
+                    type="number"
+                    min={1}
+                    className="saas-input"
+                    style={{ paddingLeft: 10 }}
+                    value={prizeForm.rank_to}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, rank_to: e.target.value })}
+                  />
+                </label>
+
+                <label className="saas-label" style={{ gridColumn: 'span 2' }}>
+                  Tên giải thưởng
+                  <input
+                    type="text"
+                    className="saas-input"
+                    style={{ paddingLeft: 10 }}
+                    value={prizeForm.prize_name}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, prize_name: e.target.value })}
+                  />
+                </label>
+
+                <label className="saas-label" style={{ gridColumn: 'span 2' }}>
+                  Mô tả phần thưởng / Quà tặng
+                  <input
+                    type="text"
+                    className="saas-input"
+                    style={{ paddingLeft: 10 }}
+                    value={prizeForm.description}
+                    onChange={(e) => setPrizeForm({ ...prizeForm, description: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              <div className="dialog-actions" style={{ marginTop: 16 }}>
+                <button
+                  type="button"
+                  className="outline"
+                  disabled={!!busy}
+                  onClick={() => setSingleEditPrizeModal(null)}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="saas-btn-gold"
+                  disabled={!!busy}
+                >
+                  {busy ? 'Đang lưu...' : 'Lưu chỉnh sửa'}
+                </button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </>
