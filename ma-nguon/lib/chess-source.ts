@@ -514,7 +514,8 @@ export type CategoryDetectResult = {
   name: string;
   source: string;
   playerCount: number;
-  status: 'Chưa nhập' | 'Đã nhập';
+  status: 'Chưa nhập' | 'Đã nhập' | 'Lỗi tải';
+  error?: string;
 };
 
 export async function fetchSourceWithRetry(url: URL, maxRetries = 3, delayMs = 1000): Promise<string> {
@@ -561,21 +562,32 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
   async function checkTnrId(catId: number): Promise<CategoryDetectResult | null> {
     const catIdStr = String(catId);
     if (seenIds.has(catIdStr)) return null;
-    try {
-      const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
-      let pageHtml: string;
-      try {
-        pageHtml = await fetchSourceWithRetry(u, 2);
-      } catch {
-        return null;
-      }
 
+    const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
+    let pageHtml: string;
+    try {
+      pageHtml = await fetchSourceWithRetry(u, 2, 800);
+    } catch (fetchErr: any) {
+      // If fetching fails for a candidate explicitly found in the links or target range, return error status instead of dropping
+      seenIds.add(catIdStr);
+      return {
+        id: catIdStr,
+        group: `Bảng ${catIdStr}`,
+        name: `Giải đấu ${catIdStr}`,
+        source: u.href,
+        playerCount: 0,
+        status: 'Lỗi tải',
+        error: fetchErr?.message || 'Không thể tải nguồn'
+      };
+    }
+
+    try {
       let pageRows = rowsOf(pageHtml);
       let hi = pageRows.findIndex(r => findCol(r, ['name']) >= 0 && (findCol(r, ['rk', 'rank']) >= 0 || findCol(r, ['sno', 'no']) >= 0));
 
       if (hi < 0) {
         u.searchParams.set('art', '0');
-        pageHtml = await fetchSourceWithRetry(u, 2);
+        pageHtml = await fetchSourceWithRetry(u, 2, 800);
         pageRows = rowsOf(pageHtml);
         hi = pageRows.findIndex(r => findCol(r, ['name']) >= 0 && (findCol(r, ['rk', 'rank']) >= 0 || findCol(r, ['sno', 'no']) >= 0));
       }
@@ -617,36 +629,48 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
         playerCount: pCount,
         status: 'Chưa nhập'
       };
-    } catch {
-      return null;
+    } catch (parseErr: any) {
+      seenIds.add(catIdStr);
+      return {
+        id: catIdStr,
+        group: `Bảng ${catIdStr}`,
+        name: `Giải đấu ${catIdStr}`,
+        source: u.href,
+        playerCount: 0,
+        status: 'Lỗi tải',
+        error: parseErr?.message || 'Lỗi phân tích dữ liệu'
+      };
     }
   }
 
-  // Scan range around targetId (expanded to [-50, +50] to capture distant categories)
-  const promises: Promise<CategoryDetectResult | null>[] = [];
-  for (let offset = -50; offset <= 50; offset++) {
-    promises.push(checkTnrId(targetId + offset));
-  }
+  // Collect candidate TNR IDs (Page HTML links first, then scan range)
+  const candidateIds = new Set<number>();
+  candidateIds.add(targetId);
 
-  const results = await Promise.all(promises);
-  for (const res of results) {
-    if (res) categories.push(res);
-  }
-
-  // Also check links on target HTML page
   const links = html.matchAll(/(?:href=["']|tnr)(\d+)\.aspx/gi);
   for (const m of links) {
     const cId = parseInt(m[1], 10);
-    if (!isNaN(cId) && !seenIds.has(String(cId))) {
-      const res = await checkTnrId(cId);
-      if (res) categories.push(res);
-    }
+    if (!isNaN(cId)) candidateIds.add(cId);
   }
 
-  // Ensure current URL is included if missing
-  if (!categories.some(c => c.id === id)) {
-    const selfRes = await checkTnrId(targetId);
-    if (selfRes) categories.push(selfRes);
+  for (let offset = -50; offset <= 50; offset++) {
+    candidateIds.add(targetId + offset);
+  }
+
+  // Throttled processing in chunks of 5 with 50ms delay
+  const candidateList = Array.from(candidateIds);
+  const CHUNK_SIZE = 5;
+  for (let i = 0; i < candidateList.length; i += CHUNK_SIZE) {
+    const chunk = candidateList.slice(i, i + CHUNK_SIZE);
+    const chunkResults = await Promise.all(chunk.map(cId => checkTnrId(cId)));
+    for (const res of chunkResults) {
+      if (res && !categories.some(c => c.id === res.id)) {
+        categories.push(res);
+      }
+    }
+    if (i + CHUNK_SIZE < candidateList.length) {
+      await new Promise(r => setTimeout(r, 50));
+    }
   }
 
   categories.sort((a, b) => Number(a.id) - Number(b.id));

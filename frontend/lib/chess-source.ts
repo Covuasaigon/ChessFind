@@ -514,8 +514,24 @@ export type CategoryDetectResult = {
   name: string;
   source: string;
   playerCount: number;
-  status: 'Chưa nhập' | 'Đã nhập';
+  status: 'Chưa nhập' | 'Đã nhập' | 'Lỗi tải';
+  error?: string;
 };
+
+export async function fetchSourceWithRetry(url: URL, maxRetries = 3, delayMs = 1000): Promise<string> {
+  let lastErr: any;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchSource(url);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, delayMs * attempt));
+      }
+    }
+  }
+  throw lastErr;
+}
 
 export async function detectCategories(source: string): Promise<{ mainName: string; categories: CategoryDetectResult[] }> {
   const { url, id } = validateSource(source);
@@ -523,18 +539,19 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
   url.searchParams.set('lan', '1');
 
   // Fetch target page
-  const html = await fetchSource(url);
+  const html = await fetchSourceWithRetry(url, 3);
   const rawTitle = textOf(html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1] || `Giải đấu ${id}`)
     .replace(/^Chess-Results Server Chess-results\.com\s*-\s*/i, '').trim();
 
-  // Extract base tournament name
+  // Extract base tournament name cleanly
   let baseName = rawTitle;
   if (rawTitle.includes(' - ')) {
-    const parts = rawTitle.split(' - ');
-    if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(parts[0])) {
-      baseName = parts.slice(1).join(' - ').trim();
+    const parts = rawTitle.split(/\s+[-–]\s+|\s*-\s*/);
+    const mainPart = parts.find(p => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys)/i.test(p.trim()));
+    if (mainPart) {
+      baseName = mainPart.trim();
     } else {
-      baseName = parts[0].trim();
+      baseName = parts[parts.length - 1].trim();
     }
   }
 
@@ -545,15 +562,32 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
   async function checkTnrId(catId: number): Promise<CategoryDetectResult | null> {
     const catIdStr = String(catId);
     if (seenIds.has(catIdStr)) return null;
+
+    const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
+    let pageHtml: string;
     try {
-      const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
-      let pageHtml = await fetchSource(u);
+      pageHtml = await fetchSourceWithRetry(u, 2, 800);
+    } catch (fetchErr: any) {
+      // If fetching fails for a candidate explicitly found in the links or target range, return error status instead of dropping
+      seenIds.add(catIdStr);
+      return {
+        id: catIdStr,
+        group: `Bảng ${catIdStr}`,
+        name: `Giải đấu ${catIdStr}`,
+        source: u.href,
+        playerCount: 0,
+        status: 'Lỗi tải',
+        error: fetchErr?.message || 'Không thể tải nguồn'
+      };
+    }
+
+    try {
       let pageRows = rowsOf(pageHtml);
       let hi = pageRows.findIndex(r => findCol(r, ['name']) >= 0 && (findCol(r, ['rk', 'rank']) >= 0 || findCol(r, ['sno', 'no']) >= 0));
 
       if (hi < 0) {
         u.searchParams.set('art', '0');
-        pageHtml = await fetchSource(u);
+        pageHtml = await fetchSourceWithRetry(u, 2, 800);
         pageRows = rowsOf(pageHtml);
         hi = pageRows.findIndex(r => findCol(r, ['name']) >= 0 && (findCol(r, ['rk', 'rank']) >= 0 || findCol(r, ['sno', 'no']) >= 0));
       }
@@ -561,20 +595,27 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
       const tStr = textOf(pageHtml.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || '').replace(/^Chess-Results Server Chess-results\.com\s*-\s*/i, '').trim();
       if (!tStr || tStr.includes('Tournament-Database') || tStr.includes('Error')) return null;
 
-      // Check title match
-      const isMatch = tStr.includes(baseName) || (baseName.length > 6 && tStr.includes(baseName.slice(0, 15))) || catId === targetId;
+      // Check title match (normalize spaces)
+      const normTitle = tStr.replace(/\s+/g, ' ');
+      const normBase = baseName.replace(/\s+/g, ' ');
+      const isMatch = normTitle.includes(normBase) || (normBase.length > 6 && normTitle.includes(normBase.slice(0, 15))) || catId === targetId;
       if (!isMatch) return null;
 
       seenIds.add(catIdStr);
 
       let catGroup = 'Toàn giải';
       if (tStr.includes(' - ')) {
-        const parts = tStr.split(' - ');
+        const parts = tStr.split(/\s+[-–]\s+|\s*-\s*/);
         for (const p of parts) {
-          if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(p) && !p.includes(baseName)) {
-            catGroup = p.trim();
+          const cleanP = p.trim();
+          if (cleanP && !cleanP.toLowerCase().includes(normBase.toLowerCase()) && /(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys)/i.test(cleanP)) {
+            catGroup = cleanP;
             break;
           }
+        }
+        if (catGroup === 'Toàn giải' && parts.length > 1) {
+          const nonBase = parts.find(p => !p.trim().toLowerCase().includes(normBase.toLowerCase()));
+          if (nonBase) catGroup = nonBase.trim();
         }
       }
 
@@ -588,36 +629,48 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
         playerCount: pCount,
         status: 'Chưa nhập'
       };
-    } catch {
-      return null;
+    } catch (parseErr: any) {
+      seenIds.add(catIdStr);
+      return {
+        id: catIdStr,
+        group: `Bảng ${catIdStr}`,
+        name: `Giải đấu ${catIdStr}`,
+        source: u.href,
+        playerCount: 0,
+        status: 'Lỗi tải',
+        error: parseErr?.message || 'Lỗi phân tích dữ liệu'
+      };
     }
   }
 
-  // Scan range around targetId
-  const promises: Promise<CategoryDetectResult | null>[] = [];
-  for (let offset = -20; offset <= 20; offset++) {
-    promises.push(checkTnrId(targetId + offset));
-  }
+  // Collect candidate TNR IDs (Page HTML links first, then scan range)
+  const candidateIds = new Set<number>();
+  candidateIds.add(targetId);
 
-  const results = await Promise.all(promises);
-  for (const res of results) {
-    if (res) categories.push(res);
-  }
-
-  // Also check links on target HTML page
-  const links = html.matchAll(/href\s*=\s*["']([^"']*tnr(\d+)\.aspx[^"']*)["']/gi);
+  const links = html.matchAll(/(?:href=["']|tnr)(\d+)\.aspx/gi);
   for (const m of links) {
-    const cId = parseInt(m[2], 10);
-    if (!isNaN(cId) && !seenIds.has(String(cId))) {
-      const res = await checkTnrId(cId);
-      if (res) categories.push(res);
-    }
+    const cId = parseInt(m[1], 10);
+    if (!isNaN(cId)) candidateIds.add(cId);
   }
 
-  // Ensure current URL is included if missing
-  if (!categories.some(c => c.id === id)) {
-    const selfRes = await checkTnrId(targetId);
-    if (selfRes) categories.push(selfRes);
+  for (let offset = -50; offset <= 50; offset++) {
+    candidateIds.add(targetId + offset);
+  }
+
+  // Throttled processing in chunks of 5 with 50ms delay
+  const candidateList = Array.from(candidateIds);
+  const CHUNK_SIZE = 5;
+  for (let i = 0; i < candidateList.length; i += CHUNK_SIZE) {
+    const chunk = candidateList.slice(i, i + CHUNK_SIZE);
+    const chunkResults = await Promise.all(chunk.map(cId => checkTnrId(cId)));
+    for (const res of chunkResults) {
+      if (res && !categories.some(c => c.id === res.id)) {
+        categories.push(res);
+      }
+    }
+    if (i + CHUNK_SIZE < candidateList.length) {
+      await new Promise(r => setTimeout(r, 50));
+    }
   }
 
   categories.sort((a, b) => Number(a.id) - Number(b.id));

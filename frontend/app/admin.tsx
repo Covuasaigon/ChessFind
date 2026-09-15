@@ -111,6 +111,7 @@ export interface CategoryItem {
   source: string;
   playerCount?: number;
   status?: string;
+  error?: string;
 }
 
 export interface DetectedInfo {
@@ -185,7 +186,7 @@ export default function Admin({ onChanged }: AdminProps) {
       try {
         const ok = await action('sync', { id });
         if (ok) successCount++;
-      } catch { }
+      } catch {}
     }
     toast.success(`Đã đồng bộ ${successCount}/${selectedTournamentIds.length} giải đấu.`);
     setBusy('');
@@ -534,7 +535,7 @@ export default function Admin({ onChanged }: AdminProps) {
       }
 
       if (d.token) {
-        try { localStorage.setItem('sgc_token', d.token); } catch { }
+        try { localStorage.setItem('sgc_token', d.token); } catch {}
       }
 
       if (type === 'detect') {
@@ -568,7 +569,7 @@ export default function Admin({ onChanged }: AdminProps) {
         }
         if (type === 'login') setPassword('');
         if (type === 'logout') {
-          try { localStorage.removeItem('sgc_token'); } catch { }
+          try { localStorage.removeItem('sgc_token'); } catch {}
           setState({ admin: false });
           setEdit(null);
           setRemove(null);
@@ -974,13 +975,26 @@ export default function Admin({ onChanged }: AdminProps) {
                         {c.playerCount || 0} kỳ thủ
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        <span className="soft-badge" style={{
-                          background: c.status === 'Đã nhập' ? '#DCFCE7' : '#FEF3C7',
-                          color: c.status === 'Đã nhập' ? '#15803D' : '#B45309',
-                          border: `1px solid ${c.status === 'Đã nhập' ? '#86EFAC' : '#FDE68A'}`
-                        }}>
-                          {c.status || 'Chưa nhập'}
-                        </span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span className="soft-badge" style={{
+                            background: c.status === 'Đã nhập' ? '#DCFCE7' : c.status === 'Lỗi tải' ? '#FEE2E2' : '#FEF3C7',
+                            color: c.status === 'Đã nhập' ? '#15803D' : c.status === 'Lỗi tải' ? '#DC2626' : '#B45309',
+                            border: `1px solid ${c.status === 'Đã nhập' ? '#86EFAC' : c.status === 'Lỗi tải' ? '#FCA5A5' : '#FDE68A'}`
+                          }}>
+                            {c.status || 'Chưa nhập'}
+                          </span>
+                          {c.status === 'Lỗi tải' && (
+                            <button
+                              type="button"
+                              className="outline"
+                              style={{ padding: '2px 8px', fontSize: 12, height: 26, borderRadius: 6 }}
+                              onClick={() => action('detect')}
+                              title={c.error || 'Thử lại phân tích'}
+                            >
+                              Thử lại
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1122,6 +1136,7 @@ export default function Admin({ onChanged }: AdminProps) {
                   </th>
                   <th>Tên giải đấu</th>
                   <th>Bảng đấu / Nhóm</th>
+                  <th style={{ textAlign: 'center' }}>Tự động đồng bộ</th>
                   <th style={{ textAlign: 'center' }}>Kỳ thủ</th>
                   <th style={{ textAlign: 'center' }}>Trạng thái</th>
                   <th style={{ textAlign: 'right' }}>Thao tác</th>
@@ -1155,6 +1170,48 @@ export default function Admin({ onChanged }: AdminProps) {
                     <td>
                       <span style={{ fontWeight: 600, color: '#334155' }}>{t.group || 'Toàn giải'}</span>
                       {t.updated && <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>Cập nhật: {new Date(t.updated).toLocaleString('vi-VN')}</div>}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                        <button
+                          className="outline"
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: 12,
+                            borderRadius: 20,
+                            fontWeight: 600,
+                            background: t.autoSync !== false ? '#EFF6FF' : '#F1F5F9',
+                            color: t.autoSync !== false ? '#1D4ED8' : '#64748B',
+                            borderColor: t.autoSync !== false ? '#BFDBFE' : '#CBD5E1',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6
+                          }}
+                          disabled={!!busy}
+                          onClick={() => action('toggle_auto_sync', { id: t.id, auto_sync: t.autoSync === false })}
+                          title={t.autoSync !== false ? 'Bấm để TẮT tự động đồng bộ' : 'Bấm để BẬT tự động đồng bộ (mỗi 5 phút)'}
+                        >
+                          <span style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: t.autoSync !== false ? '#2563EB' : '#94A3B8'
+                          }} />
+                          {t.autoSync !== false ? 'Auto Sync (5m)' : 'Tắt Auto Sync'}
+                        </button>
+                        <div style={{ fontSize: 11, color: '#64748B', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {t.lastSync || t.last_sync ? (
+                            <span>Lần cuối: {new Date(t.lastSync || t.last_sync!).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          ) : (
+                            <span>Chưa đồng bộ</span>
+                          )}
+                          {t.autoSync !== false && (t.nextSync || t.next_sync) && (
+                            <span style={{ color: '#2563EB', fontWeight: 500 }}>
+                              Kế tiếp: {new Date(t.nextSync || t.next_sync!).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 800, color: '#062B4F' }}>
                       {t.players ? t.players.length : 0}
@@ -1640,8 +1697,8 @@ export default function Admin({ onChanged }: AdminProps) {
                 {(state?.prizes || []).map((pz: PrizeRuleItem) => {
                   const medalLabel = pz.medal === 'Gold Medal' || pz.medal === 'gold' ? '🥇 Gold Medal'
                     : pz.medal === 'Silver Medal' || pz.medal === 'silver' ? '🥈 Silver Medal'
-                      : pz.medal === 'Bronze Medal' || pz.medal === 'bronze' ? '🥉 Bronze Medal'
-                        : pz.medal === 'Certificate' ? '📜 Certificate' : '🏆 Other';
+                    : pz.medal === 'Bronze Medal' || pz.medal === 'bronze' ? '🥉 Bronze Medal'
+                    : pz.medal === 'Certificate' ? '📜 Certificate' : '🏆 Other';
 
                   return (
                     <tr key={pz.id}>
@@ -2050,7 +2107,7 @@ export default function Admin({ onChanged }: AdminProps) {
             }}>
               <label className="saas-label">Tiêu đề banner (*)<input className="saas-input" style={{ paddingLeft: 16 }} required maxLength={200} placeholder="Ví dụ: Giải đấu mới đã cập nhật" value={bannerModal.title || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBannerModal({ ...bannerModal, title: e.target.value })} /></label>
               <label className="saas-label">Mô tả ngắn<input className="saas-input" style={{ paddingLeft: 16 }} maxLength={300} placeholder="Mô tả phụ cho banner..." value={bannerModal.description || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBannerModal({ ...bannerModal, description: e.target.value })} /></label>
-
+              
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '8px 0' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#062B4F' }}>Hình ảnh Banner (*)</span>
 

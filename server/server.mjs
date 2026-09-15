@@ -645,19 +645,34 @@ async function importTournament(source, group) {
   const tour = parseRanking(html, url.href, group);
   return await populateRoundsForTournament(tour);
 }
+async function fetchSourceWithRetry(url, maxRetries = 3, delayMs = 1e3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchSource(url);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, delayMs * attempt));
+      }
+    }
+  }
+  throw lastErr;
+}
 async function detectCategories(source) {
   const { url, id } = validateSource(source);
   const targetId = parseInt(id, 10);
   url.searchParams.set("lan", "1");
-  const html = await fetchSource(url);
+  const html = await fetchSourceWithRetry(url, 3);
   const rawTitle = textOf(html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1] || `Gi\u1EA3i \u0111\u1EA5u ${id}`).replace(/^Chess-Results Server Chess-results\.com\s*-\s*/i, "").trim();
   let baseName = rawTitle;
   if (rawTitle.includes(" - ")) {
-    const parts = rawTitle.split(" - ");
-    if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(parts[0])) {
-      baseName = parts.slice(1).join(" - ").trim();
+    const parts = rawTitle.split(/\s+[-–]\s+|\s*-\s*/);
+    const mainPart = parts.find((p) => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys)/i.test(p.trim()));
+    if (mainPart) {
+      baseName = mainPart.trim();
     } else {
-      baseName = parts[0].trim();
+      baseName = parts[parts.length - 1].trim();
     }
   }
   const categories = [];
@@ -665,30 +680,51 @@ async function detectCategories(source) {
   async function checkTnrId(catId) {
     const catIdStr = String(catId);
     if (seenIds.has(catIdStr)) return null;
+    const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
+    let pageHtml;
     try {
-      const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
-      let pageHtml = await fetchSource(u);
+      pageHtml = await fetchSourceWithRetry(u, 2, 800);
+    } catch (fetchErr) {
+      seenIds.add(catIdStr);
+      return {
+        id: catIdStr,
+        group: `B\u1EA3ng ${catIdStr}`,
+        name: `Gi\u1EA3i \u0111\u1EA5u ${catIdStr}`,
+        source: u.href,
+        playerCount: 0,
+        status: "L\u1ED7i t\u1EA3i",
+        error: fetchErr?.message || "Kh\xF4ng th\u1EC3 t\u1EA3i ngu\u1ED3n"
+      };
+    }
+    try {
       let pageRows = rowsOf(pageHtml);
       let hi = pageRows.findIndex((r) => findCol(r, ["name"]) >= 0 && (findCol(r, ["rk", "rank"]) >= 0 || findCol(r, ["sno", "no"]) >= 0));
       if (hi < 0) {
         u.searchParams.set("art", "0");
-        pageHtml = await fetchSource(u);
+        pageHtml = await fetchSourceWithRetry(u, 2, 800);
         pageRows = rowsOf(pageHtml);
         hi = pageRows.findIndex((r) => findCol(r, ["name"]) >= 0 && (findCol(r, ["rk", "rank"]) >= 0 || findCol(r, ["sno", "no"]) >= 0));
       }
       const tStr = textOf(pageHtml.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || "").replace(/^Chess-Results Server Chess-results\.com\s*-\s*/i, "").trim();
       if (!tStr || tStr.includes("Tournament-Database") || tStr.includes("Error")) return null;
-      const isMatch = tStr.includes(baseName) || baseName.length > 6 && tStr.includes(baseName.slice(0, 15)) || catId === targetId;
+      const normTitle = tStr.replace(/\s+/g, " ");
+      const normBase = baseName.replace(/\s+/g, " ");
+      const isMatch = normTitle.includes(normBase) || normBase.length > 6 && normTitle.includes(normBase.slice(0, 15)) || catId === targetId;
       if (!isMatch) return null;
       seenIds.add(catIdStr);
       let catGroup = "To\xE0n gi\u1EA3i";
       if (tStr.includes(" - ")) {
-        const parts = tStr.split(" - ");
+        const parts = tStr.split(/\s+[-–]\s+|\s*-\s*/);
         for (const p of parts) {
-          if (/(?:bảng|u\d+|nam|nữ|trẻ|nhi|open|girls|boys)/i.test(p) && !p.includes(baseName)) {
-            catGroup = p.trim();
+          const cleanP = p.trim();
+          if (cleanP && !cleanP.toLowerCase().includes(normBase.toLowerCase()) && /(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys)/i.test(cleanP)) {
+            catGroup = cleanP;
             break;
           }
+        }
+        if (catGroup === "To\xE0n gi\u1EA3i" && parts.length > 1) {
+          const nonBase = parts.find((p) => !p.trim().toLowerCase().includes(normBase.toLowerCase()));
+          if (nonBase) catGroup = nonBase.trim();
         }
       }
       const pCount = pageRows.slice(hi + 1).filter((r) => r.length >= 3 && /^\d+$/.test(r[0]?.text || r[1]?.text || "")).length;
@@ -700,29 +736,42 @@ async function detectCategories(source) {
         playerCount: pCount,
         status: "Ch\u01B0a nh\u1EADp"
       };
-    } catch {
-      return null;
+    } catch (parseErr) {
+      seenIds.add(catIdStr);
+      return {
+        id: catIdStr,
+        group: `B\u1EA3ng ${catIdStr}`,
+        name: `Gi\u1EA3i \u0111\u1EA5u ${catIdStr}`,
+        source: u.href,
+        playerCount: 0,
+        status: "L\u1ED7i t\u1EA3i",
+        error: parseErr?.message || "L\u1ED7i ph\xE2n t\xEDch d\u1EEF li\u1EC7u"
+      };
     }
   }
-  const promises = [];
-  for (let offset = -20; offset <= 20; offset++) {
-    promises.push(checkTnrId(targetId + offset));
-  }
-  const results = await Promise.all(promises);
-  for (const res of results) {
-    if (res) categories.push(res);
-  }
-  const links = html.matchAll(/href\s*=\s*["']([^"']*tnr(\d+)\.aspx[^"']*)["']/gi);
+  const candidateIds = /* @__PURE__ */ new Set();
+  candidateIds.add(targetId);
+  const links = html.matchAll(/(?:href=["']|tnr)(\d+)\.aspx/gi);
   for (const m of links) {
-    const cId = parseInt(m[2], 10);
-    if (!isNaN(cId) && !seenIds.has(String(cId))) {
-      const res = await checkTnrId(cId);
-      if (res) categories.push(res);
-    }
+    const cId = parseInt(m[1], 10);
+    if (!isNaN(cId)) candidateIds.add(cId);
   }
-  if (!categories.some((c) => c.id === id)) {
-    const selfRes = await checkTnrId(targetId);
-    if (selfRes) categories.push(selfRes);
+  for (let offset = -50; offset <= 50; offset++) {
+    candidateIds.add(targetId + offset);
+  }
+  const candidateList = Array.from(candidateIds);
+  const CHUNK_SIZE = 5;
+  for (let i = 0; i < candidateList.length; i += CHUNK_SIZE) {
+    const chunk = candidateList.slice(i, i + CHUNK_SIZE);
+    const chunkResults = await Promise.all(chunk.map((cId) => checkTnrId(cId)));
+    for (const res of chunkResults) {
+      if (res && !categories.some((c) => c.id === res.id)) {
+        categories.push(res);
+      }
+    }
+    if (i + CHUNK_SIZE < candidateList.length) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
   }
   categories.sort((a, b) => Number(a.id) - Number(b.id));
   return { mainName: baseName, categories };
@@ -1281,45 +1330,7 @@ function createApi(db2, sourceParam = {}) {
       const u = new URL(req.url);
       const path = u.pathname.replace(/\/+$/, "") || "/";
       if (req.method === "GET") {
-        if (path === "/api/tournaments" || path.startsWith("/api/tournaments/")) {
-          const tid = u.searchParams.get("id") || u.searchParams.get("t") || path.replace(/^\/api\/tournaments\/?/, "");
-          if (tid && tid !== "tournaments") {
-            const t = await get(tid, true);
-            if (!t) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404, {}, req);
-            let matchesList = [];
-            try {
-              const r = await db2.prepare("SELECT * FROM matches WHERE category_id = ? OR player_id LIKE ? ORDER BY round ASC, board ASC").bind(tid, `${tid}-%`).all();
-              matchesList = r.results || [];
-            } catch {
-            }
-            const playersWithStats = (t.players || []).map((p) => {
-              const s2 = stats(p);
-              return {
-                ...p,
-                games: s2.played,
-                totalGames: s2.played,
-                whiteGames: s2.whiteGames,
-                blackGames: s2.blackGames,
-                wins: s2.wins,
-                draws: s2.draws,
-                losses: s2.losses,
-                whiteWins: s2.whiteWins,
-                whiteDraws: s2.whiteDraws,
-                whiteLosses: s2.whiteLosses,
-                blackWins: s2.blackWins,
-                blackDraws: s2.blackDraws,
-                blackLosses: s2.blackLosses
-              };
-            });
-            return json({
-              tournament: { ...t, players: playersWithStats },
-              players: playersWithStats,
-              rounds: t.rounds || (matchesList.length ? Math.max(...matchesList.map((m) => m.round || 0)) : null),
-              matches: matchesList
-            }, 200, {}, req);
-          }
-          return json({ tournaments: await list() }, 200, {}, req);
-        }
+        if (path === "/api/tournaments") return json({ tournaments: await list() }, 200, {}, req);
         if (path === "/api/banners") {
           try {
             const r = await db2.prepare("SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC").all();
@@ -1522,7 +1533,6 @@ function createApi(db2, sourceParam = {}) {
             totalPlayers,
             club,
             games: s2.played,
-            totalGames: s2.played,
             whiteGames: s2.whiteGames,
             blackGames: s2.blackGames,
             whiteWins: s2.whiteWins,
@@ -1543,7 +1553,6 @@ function createApi(db2, sourceParam = {}) {
             totalPlayers,
             club,
             games: s2.played,
-            totalGames: s2.played,
             whiteGames: s2.whiteGames,
             blackGames: s2.blackGames,
             whiteWins: s2.whiteWins,
@@ -1831,57 +1840,74 @@ function createApi(db2, sourceParam = {}) {
         const mainTournamentTitle = b.name?.trim() || b.mainName?.trim() || "Gi\u1EA3i \u0111\u1EA5u";
         const masterId = items[0]?.url.match(/\/tnr(\d+)\.aspx/i)?.[1] || "master";
         const allParsedCategories = [];
+        const failedItems = [];
         for (const item of items) {
-          try {
-            const t = await source.tournament(item.url, item.group);
-            t.name = mainTournamentTitle;
-            allParsedCategories.push({ cat: item, tour: t });
-            totalPlayers += t.players.length;
-            successCount++;
+          let t = null;
+          let lastErr = null;
+          for (let attempt = 1; attempt <= 3; attempt++) {
             try {
+              t = await source.tournament(item.url, item.group);
+              break;
+            } catch (err) {
+              lastErr = err;
+              if (attempt < 3) {
+                await new Promise((r) => setTimeout(r, 1e3 * attempt));
+              }
+            }
+          }
+          if (!t) {
+            console.error("Batch import error after retries for", item.url, lastErr);
+            failedItems.push(item.group || item.url);
+            continue;
+          }
+          t.name = mainTournamentTitle;
+          allParsedCategories.push({ cat: item, tour: t });
+          totalPlayers += t.players.length;
+          successCount++;
+          try {
+            await db2.prepare(`
+              INSERT INTO categories (id, tournament_id, name, gender, age_group, source_url, total_players, rounds, updated, payload)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                gender = excluded.gender,
+                age_group = excluded.age_group,
+                total_players = excluded.total_players,
+                rounds = excluded.rounds,
+                updated = excluded.updated,
+                payload = excluded.payload
+            `).bind(t.id, masterId, t.group, t.players[0]?.gender || null, t.players[0]?.ageGroup || null, t.source, t.players.length, t.rounds || null, t.updated, JSON.stringify(t)).run();
+            for (const p of t.players) {
               await db2.prepare(`
-                INSERT INTO categories (id, tournament_id, name, gender, age_group, source_url, total_players, rounds, updated, payload)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO players (id, category_id, tournament_id, snr, name, fide_id, rating, club, country, gender, age_group, updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   name = excluded.name,
+                  fide_id = excluded.fide_id,
+                  rating = excluded.rating,
+                  club = excluded.club,
                   gender = excluded.gender,
                   age_group = excluded.age_group,
-                  total_players = excluded.total_players,
-                  rounds = excluded.rounds,
-                  updated = excluded.updated,
-                  payload = excluded.payload
-              `).bind(t.id, masterId, t.group, t.players[0]?.gender || null, t.players[0]?.ageGroup || null, t.source, t.players.length, t.rounds || null, t.updated, JSON.stringify(t)).run();
-              for (const p of t.players) {
-                await db2.prepare(`
-                  INSERT INTO players (id, category_id, tournament_id, snr, name, fide_id, rating, club, country, gender, age_group, updated)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(id) DO UPDATE SET
-                    name = excluded.name,
-                    fide_id = excluded.fide_id,
-                    rating = excluded.rating,
-                    club = excluded.club,
-                    gender = excluded.gender,
-                    age_group = excluded.age_group,
-                    updated = excluded.updated
-                `).bind(p.id, t.id, masterId, p.snr, p.name, p.fideId || null, p.rating || null, p.club || "", p.country || null, p.gender || null, p.ageGroup || null, t.updated).run();
-                await db2.prepare(`
-                  INSERT INTO rankings (player_id, category_id, rank, points, buchholz, sonneborn_berger, performance, ties_json)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(player_id) DO UPDATE SET
-                    rank = excluded.rank,
-                    points = excluded.points,
-                    buchholz = excluded.buchholz,
-                    sonneborn_berger = excluded.sonneborn_berger,
-                    performance = excluded.performance,
-                    ties_json = excluded.ties_json
-                `).bind(p.id, t.id, p.rank || null, p.points || null, p.buchholz || null, p.sonnebornBerger || null, p.performance || null, JSON.stringify(p.ties)).run();
-              }
-            } catch (dbErr) {
-              console.error("Relational DB save error:", dbErr);
+                  updated = excluded.updated
+              `).bind(p.id, t.id, masterId, p.snr, p.name, p.fideId || null, p.rating || null, p.club || "", p.country || null, p.gender || null, p.ageGroup || null, t.updated).run();
+              await db2.prepare(`
+                INSERT INTO rankings (player_id, category_id, rank, points, buchholz, sonneborn_berger, performance, ties_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(player_id) DO UPDATE SET
+                  rank = excluded.rank,
+                  points = excluded.points,
+                  buchholz = excluded.buchholz,
+                  sonneborn_berger = excluded.sonneborn_berger,
+                  performance = excluded.performance,
+                  ties_json = excluded.ties_json
+              `).bind(p.id, t.id, p.rank || null, p.points || null, p.buchholz || null, p.sonnebornBerger || null, p.performance || null, JSON.stringify(p.ties)).run();
             }
-          } catch (err) {
-            console.error("Batch import error for", item.url, err);
+          } catch (dbErr) {
+            console.error("Relational DB save error:", dbErr);
           }
+        }
+        if (!allParsedCategories.length) {
+          return json({ error: "Kh\xF4ng th\u1EC3 \u0111\u1ED3ng b\u1ED9 b\u1EA3ng \u0111\u1EA5u n\xE0o. Vui l\xF2ng th\u1EED l\u1EA1i sau." }, 502, {}, req);
         }
         const combinedPlayers = [];
         const categoriesMeta = [];
@@ -1934,16 +1960,21 @@ function createApi(db2, sourceParam = {}) {
             await db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,1,?)").bind(tour.id, JSON.stringify(catEntry), tour.updated).run();
           }
         }
-        await log(true, `\u0110\u1ED3ng b\u1ED9 V2 gi\u1EA3i \u0111\u1EA5u: ${mainTournamentTitle} \xB7 ${successCount}/${items.length} b\u1EA3ng \u0111\u1EA5u, t\u1ED5ng ${totalPlayers} k\u1EF3 th\u1EE7`);
+        const isFullySuccess = successCount === items.length;
+        await log(isFullySuccess, `\u0110\u1ED3ng b\u1ED9 V2 gi\u1EA3i \u0111\u1EA5u: ${mainTournamentTitle} \xB7 ${successCount}/${items.length} b\u1EA3ng \u0111\u1EA5u, t\u1ED5ng ${totalPlayers} k\u1EF3 th\u1EE7`);
         await logSync({
           tournament_id: masterId,
           tournament_name: mainTournamentTitle,
           url: items[0]?.url || `https://chess-results.com/tnr${masterId}.aspx?lan=1`,
-          status: "success",
+          status: isFullySuccess ? "success" : "failed",
           players_updated: totalPlayers,
-          message: `\u0110\u1ED3ng b\u1ED9 V2 th\xE0nh c\xF4ng: ${mainTournamentTitle} (${successCount} b\u1EA3ng, ${totalPlayers} k\u1EF3 th\u1EE7)`
+          message: isFullySuccess ? `\u0110\u1ED3ng b\u1ED9 V2 th\xE0nh c\xF4ng: ${mainTournamentTitle} (${successCount} b\u1EA3ng, ${totalPlayers} k\u1EF3 th\u1EE7)` : `\u0110\u1ED3ng b\u1ED9 V2 ch\u01B0a ho\xE0n t\u1EA5t: ${successCount}/${items.length} b\u1EA3ng th\xE0nh c\xF4ng, ${failedItems.length} b\u1EA3ng th\u1EA5t b\u1EA1i (${failedItems.join(", ")})`
         });
-        return json({ message: `\u0110\xE3 \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng ${successCount} b\u1EA3ng \u0111\u1EA5u v\u1EDBi ${totalPlayers} k\u1EF3 th\u1EE7!` }, 200, {}, req);
+        if (isFullySuccess) {
+          return json({ message: `\u0110\xE3 \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng ${successCount} b\u1EA3ng \u0111\u1EA5u v\u1EDBi t\u1ED5ng c\u1ED9ng ${totalPlayers} k\u1EF3 th\u1EE7!` }, 200, {}, req);
+        } else {
+          return json({ message: `\u0110\xE3 \u0111\u1ED3ng b\u1ED9 ${successCount}/${items.length} b\u1EA3ng \u0111\u1EA5u (${totalPlayers} k\u1EF3 th\u1EE7). C\u1EA3nh b\xE1o: c\xF3 ${failedItems.length} b\u1EA3ng ch\u01B0a t\u1EA3i \u0111\u01B0\u1EE3c (${failedItems.join(", ")}).` }, 200, {}, req);
+        }
       }
       if (action === "banner_create") {
         const id = crypto.randomUUID();
@@ -2073,31 +2104,11 @@ function createApi(db2, sourceParam = {}) {
         }
         t.published = old.published;
         const statements = [];
-        const nowSyncIso = (/* @__PURE__ */ new Date()).toISOString();
-        const syncIntervalVal = old.syncInterval ?? old.sync_interval ?? 5;
-        const autoSyncVal = old.autoSync ?? old.auto_sync ?? true;
-        const nextSyncIso = autoSyncVal ? new Date(Date.now() + syncIntervalVal * 60 * 1e3).toISOString() : null;
-        t.autoSync = autoSyncVal;
-        t.auto_sync = autoSyncVal;
-        t.syncInterval = syncIntervalVal;
-        t.sync_interval = syncIntervalVal;
-        t.lastSync = nowSyncIso;
-        t.last_sync = nowSyncIso;
-        t.nextSync = nextSyncIso;
-        t.next_sync = nextSyncIso;
         if (t.id !== old.id) {
-          try {
-            statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,auto_sync,sync_interval,last_sync,next_sync,updated) VALUES (?,?,?,?,?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.updated));
-          } catch {
-            statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
-          }
+          statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
           statements.push(db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(old.id));
         } else {
-          try {
-            statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.id));
-          } catch {
-            statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
-          }
+          statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
         }
         if (t.updated !== old.updated || t.id !== old.id || action === "force_sync") statements.push(db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id));
         await db2.batch(statements);
@@ -2111,29 +2122,6 @@ function createApi(db2, sourceParam = {}) {
           message: `\u0110\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results (${action}): ${t.name} (${t.players.length} k\u1EF3 th\u1EE7)`
         });
         return json({ message: action === "edit" ? "\u0110\xE3 l\u01B0u ch\u1EC9nh s\u1EEDa." : action === "force_sync" ? "\u0110\xE3 \xE9p \u0111\u1ED3ng b\u1ED9 l\u1EA1i v\xE0 l\xE0m s\u1EA1ch cache d\u1EEF li\u1EC7u th\xE0nh c\xF4ng." : "\u0110\xE3 c\u1EADp nh\u1EADt k\u1EBFt qu\u1EA3 m\u1EDBi nh\u1EA5t." }, 200, {}, req);
-      }
-      if (action === "toggle_auto_sync" || action === "tournament_update_auto_sync") {
-        const id = String(b.id || "");
-        if (!id) return json({ error: "M\xE3 gi\u1EA3i \u0111\u1EA5u kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
-        const tour = await get(id, true);
-        if (!tour) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404, {}, req);
-        const newAutoSync = b.auto_sync !== void 0 ? !!b.auto_sync : b.autoSync !== void 0 ? !!b.autoSync : !(tour.autoSync ?? true);
-        const newInterval = Number(b.sync_interval || b.syncInterval || tour.syncInterval || 5);
-        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-        const nextSyncIso = newAutoSync ? new Date(Date.now() + newInterval * 60 * 1e3).toISOString() : null;
-        tour.autoSync = newAutoSync;
-        tour.auto_sync = newAutoSync;
-        tour.syncInterval = newInterval;
-        tour.sync_interval = newInterval;
-        tour.nextSync = nextSyncIso;
-        tour.next_sync = nextSyncIso;
-        try {
-          await db2.prepare("UPDATE tournaments SET payload = ?, auto_sync = ?, sync_interval = ?, next_sync = ? WHERE id = ?").bind(JSON.stringify(tour), newAutoSync ? 1 : 0, newInterval, nextSyncIso, id).run();
-        } catch {
-          await db2.prepare("UPDATE tournaments SET payload = ? WHERE id = ?").bind(JSON.stringify(tour), id).run();
-        }
-        await log(true, `${newAutoSync ? "B\u1EADt" : "T\u1EAFt"} t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 cho gi\u1EA3i: ${tour.name}`);
-        return json({ message: `\u0110\xE3 ${newAutoSync ? "b\u1EADt" : "t\u1EAFt"} t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 cho gi\u1EA3i \u0111\u1EA5u.`, tournament: tour }, 200, {}, req);
       }
       if (action === "tournament_update_info") {
         const id = String(b.id || "");
@@ -2155,7 +2143,7 @@ function createApi(db2, sourceParam = {}) {
       return json({ error: "Thao t\xE1c kh\xF4ng \u0111\u01B0\u1EE3c h\u1ED7 tr\u1EE3." }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info", "toggle_auto_sync", "tournament_update_auto_sync"].includes(action)) {
+      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info"].includes(action)) {
         try {
           await log(false, m);
           await logSync({
@@ -2175,131 +2163,43 @@ function createApi(db2, sourceParam = {}) {
 }
 
 // database.ts
-import pg from "pg";
-import dns from "node:dns";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync as readFileSync2, readdirSync, mkdirSync as mkdirSync2, existsSync as existsSync2 } from "node:fs";
 import { dirname, resolve as resolve2 } from "node:path";
-try {
-  dns.setDefaultResultOrder("ipv4first");
-} catch {
-}
-function openDatabase(fileOrUrl, migrations) {
-  const isPostgres = fileOrUrl.startsWith("postgres://") || fileOrUrl.startsWith("postgresql://");
-  if (isPostgres) {
-    let convertSqlForPg = function(sql2) {
-      let paramIndex = 1;
-      let converted = sql2.replace(/\?/g, () => `$${paramIndex++}`);
-      if (/INSERT\s+OR\s+IGNORE\s+INTO/i.test(converted)) {
-        converted = converted.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, "INSERT INTO");
-        if (!/ON\s+CONFLICT/i.test(converted)) {
-          converted += " ON CONFLICT DO NOTHING";
-        }
-      }
-      return converted;
-    };
-    const useSsl = process.env.NODE_ENV === "production" || fileOrUrl.includes("render.com") || fileOrUrl.includes("supabase") || fileOrUrl.includes("neon") || fileOrUrl.includes("railway") || process.env.PGSSLMODE === "require" || process.env.PGSSLMODE === "no-verify";
-    const pool = new pg.Pool({
-      connectionString: fileOrUrl,
-      ssl: useSsl ? { rejectUnauthorized: false } : false
-    });
-    const initPgSchema = async () => {
-      try {
-        let ddl = "";
-        const possibleSchemaPaths = [
-          resolve2(migrations, "pg_schema.sql"),
-          resolve2(process.cwd(), "backend", "migrations", "pg_schema.sql"),
-          resolve2(process.cwd(), "migrations", "pg_schema.sql")
-        ];
-        for (const p of possibleSchemaPaths) {
-          if (existsSync2(p)) {
-            ddl = readFileSync2(p, "utf8");
-            break;
-          }
-        }
-        if (ddl) {
-          await pool.query(ddl);
-        }
-      } catch (err) {
-        console.error("Error initializing PostgreSQL schema:", err);
-      }
-    };
-    initPgSchema();
-    class PgQuery {
-      text;
-      args = [];
-      constructor(text) {
-        this.text = text;
-      }
-      bind(...args) {
-        const q = new PgQuery(this.text);
-        q.args = args;
-        return q;
-      }
-      async executePg(client) {
-        const target = client || pool;
-        const pgSql = convertSqlForPg(this.text);
-        const res = await target.query(pgSql, this.args);
-        return res;
-      }
-      async first() {
-        const res = await this.executePg();
-        return res.rows[0] || null;
-      }
-      async all() {
-        const res = await this.executePg();
-        return { results: res.rows };
-      }
-      async run() {
-        const res = await this.executePg();
-        return { meta: { changes: res.rowCount || 0 } };
-      }
-      execute() {
-        return this.run();
-      }
-    }
-    return {
-      prepare: (s) => new PgQuery(s),
-      async batch(ss) {
-        const client = await pool.connect();
-        try {
-          await client.query("BEGIN");
-          const results = [];
-          for (const s of ss) {
-            const pgQ = s;
-            results.push(await pgQ.executePg(client));
-          }
-          await client.query("COMMIT");
-          return results;
-        } catch (e) {
-          await client.query("ROLLBACK");
-          throw e;
-        } finally {
-          client.release();
-        }
-      },
-      close: () => {
-        pool.end();
-      }
-    };
-  }
-  mkdirSync2(dirname(fileOrUrl), { recursive: true });
-  const sql = new DatabaseSync(fileOrUrl);
-  sql.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;");
+function openDatabase(file, migrations) {
+  mkdirSync2(dirname(file), { recursive: true });
+  const sql = new DatabaseSync(file);
+  sql.exec("PRAGMA busy_timeout=30000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;");
   sql.exec("CREATE TABLE IF NOT EXISTS sgc_migrations (name TEXT PRIMARY KEY, applied TEXT NOT NULL)");
   if (existsSync2(migrations)) {
     for (const name of readdirSync(migrations).filter((n) => n.endsWith(".sql")).sort()) {
-      if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
-        sql.exec("BEGIN IMMEDIATE");
-        try {
-          if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
-            sql.exec(readFileSync2(resolve2(migrations, name), "utf8"));
-            sql.prepare("INSERT OR IGNORE INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
+      let isApplied = false;
+      try {
+        isApplied = !!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name);
+      } catch {
+      }
+      if (!isApplied) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            sql.exec("BEGIN IMMEDIATE");
+            try {
+              if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
+                sql.exec(readFileSync2(resolve2(migrations, name), "utf8"));
+                sql.prepare("INSERT OR IGNORE INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
+              }
+              sql.exec("COMMIT");
+            } catch (e) {
+              sql.exec("ROLLBACK");
+              throw e;
+            }
+            break;
+          } catch (err) {
+            if (attempt === 4 || !/locked|busy/i.test(err?.message || "")) throw err;
+            const delay = Math.floor(Math.random() * 200) + 100;
+            const start = Date.now();
+            while (Date.now() - start < delay) {
+            }
           }
-          sql.exec("COMMIT");
-        } catch (e) {
-          sql.exec("ROLLBACK");
-          throw e;
         }
       }
     }
@@ -2346,136 +2246,12 @@ function openDatabase(fileOrUrl, migrations) {
   };
 }
 
-// jobs/sync-scheduler.ts
-import cron from "node-cron";
-var isSyncRunning = false;
-function startSyncScheduler(db2, sourceOverride) {
-  console.log("[Sync Scheduler] Initializing automatic 5-minute Chess-Results sync scheduler...");
-  cron.schedule("*/5 * * * *", async () => {
-    if (isSyncRunning) {
-      console.log("[Sync Scheduler] Previous sync cycle still running, skipping...");
-      return;
-    }
-    isSyncRunning = true;
-    try {
-      await runAutoSyncCycle(db2, sourceOverride);
-    } catch (err) {
-      console.error("[Sync Scheduler] Error in auto sync cycle:", err);
-    } finally {
-      isSyncRunning = false;
-    }
-  });
-  setTimeout(() => {
-    runAutoSyncCycle(db2, sourceOverride).catch((e) => console.error("[Sync Scheduler] Initial check error:", e));
-  }, 1e4);
-}
-async function runAutoSyncCycle(db2, sourceOverride) {
-  try {
-    let rows = [];
-    try {
-      const res = await db2.prepare("SELECT payload, published, auto_sync, sync_interval, last_sync, next_sync FROM tournaments").all();
-      rows = res.results || [];
-    } catch {
-      const res = await db2.prepare("SELECT payload, published FROM tournaments").all();
-      rows = res.results || [];
-    }
-    const now = Date.now();
-    const nowIso = new Date(now).toISOString();
-    for (const r of rows) {
-      let t;
-      try {
-        t = JSON.parse(r.payload);
-      } catch {
-        continue;
-      }
-      const published = r.published !== void 0 && r.published !== null ? !!r.published : !!t.published;
-      if (!published) continue;
-      const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
-      if (!autoSync) continue;
-      const interval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
-      const lastSyncStr = r.last_sync || t.lastSync || t.last_sync || null;
-      const lastSyncTime = lastSyncStr ? new Date(lastSyncStr).getTime() : 0;
-      const intervalMs = interval * 60 * 1e3;
-      if (lastSyncTime > 0 && now - lastSyncTime < intervalMs - 3e4) {
-        continue;
-      }
-      console.log(`[Sync Scheduler] Auto syncing tournament "${t.name}" (${t.id})...`);
-      try {
-        const fetcher = sourceOverride?.tournament ? sourceOverride.tournament : importTournament;
-        const updatedTour = await fetcher(t.source, t.group);
-        updatedTour.name = t.name;
-        updatedTour.published = true;
-        updatedTour.info = t.info;
-        updatedTour.prizes = t.prizes;
-        const nextSyncIso = new Date(now + intervalMs).toISOString();
-        updatedTour.autoSync = true;
-        updatedTour.auto_sync = true;
-        updatedTour.syncInterval = interval;
-        updatedTour.sync_interval = interval;
-        updatedTour.lastSync = nowIso;
-        updatedTour.last_sync = nowIso;
-        updatedTour.nextSync = nextSyncIso;
-        updatedTour.next_sync = nextSyncIso;
-        const payloadStr = JSON.stringify(updatedTour);
-        try {
-          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = 1, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, interval, nowIso, nextSyncIso, t.id).run();
-        } catch {
-          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, t.id).run();
-        }
-        try {
-          const logId = crypto.randomUUID();
-          await db2.prepare(`
-            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).bind(
-            logId,
-            t.id,
-            t.name,
-            t.source,
-            nowIso,
-            "success",
-            updatedTour.players ? updatedTour.players.length : 0,
-            `T\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results: ${t.name} (${updatedTour.players ? updatedTour.players.length : 0} k\u1EF3 th\u1EE7)`
-          ).run();
-        } catch (logErr) {
-          console.error("[Sync Scheduler] Failed to write sync log:", logErr);
-        }
-        console.log(`[Sync Scheduler] Auto synced "${t.name}" successfully (${updatedTour.players?.length || 0} players).`);
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[Sync Scheduler] Error auto syncing "${t.name}":`, errMsg);
-        try {
-          const logId = crypto.randomUUID();
-          await db2.prepare(`
-            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).bind(
-            logId,
-            t.id,
-            t.name,
-            t.source,
-            nowIso,
-            "failed",
-            0,
-            `L\u1ED7i t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9: ${errMsg}`
-          ).run();
-        } catch {
-        }
-      }
-    }
-  } catch (err) {
-    console.error("[Sync Scheduler] Error in runAutoSyncCycle:", err);
-  }
-}
-
 // server.ts
 var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
 var host = process.env.HOST || "0.0.0.0";
 var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
-var dbUrl = process.env.DATABASE_URL || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
-var db = openDatabase(dbUrl, resolve3(root, "migrations"));
-startSyncScheduler(db);
+var db = openDatabase(resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite"), resolve3(root, "migrations"));
 var api = createApi(db);
 var web = resolve3(root, "web");
 var types = {

@@ -111,6 +111,7 @@ export interface CategoryItem {
   source: string;
   playerCount?: number;
   status?: string;
+  error?: string;
 }
 
 export interface DetectedInfo {
@@ -974,13 +975,26 @@ export default function Admin({ onChanged }: AdminProps) {
                         {c.playerCount || 0} kỳ thủ
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        <span className="soft-badge" style={{
-                          background: c.status === 'Đã nhập' ? '#DCFCE7' : '#FEF3C7',
-                          color: c.status === 'Đã nhập' ? '#15803D' : '#B45309',
-                          border: `1px solid ${c.status === 'Đã nhập' ? '#86EFAC' : '#FDE68A'}`
-                        }}>
-                          {c.status || 'Chưa nhập'}
-                        </span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span className="soft-badge" style={{
+                            background: c.status === 'Đã nhập' ? '#DCFCE7' : c.status === 'Lỗi tải' ? '#FEE2E2' : '#FEF3C7',
+                            color: c.status === 'Đã nhập' ? '#15803D' : c.status === 'Lỗi tải' ? '#DC2626' : '#B45309',
+                            border: `1px solid ${c.status === 'Đã nhập' ? '#86EFAC' : c.status === 'Lỗi tải' ? '#FCA5A5' : '#FDE68A'}`
+                          }}>
+                            {c.status || 'Chưa nhập'}
+                          </span>
+                          {c.status === 'Lỗi tải' && (
+                            <button
+                              type="button"
+                              className="outline"
+                              style={{ padding: '2px 8px', fontSize: 12, height: 26, borderRadius: 6 }}
+                              onClick={() => action('detect')}
+                              title={c.error || 'Thử lại phân tích'}
+                            >
+                              Thử lại
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
