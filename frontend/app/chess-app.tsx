@@ -39,12 +39,14 @@ function Avatar({ p, large = false }: { p: Player; large?: boolean }) {
 }
 
 function PlayerCard({ t, p, onClick }: { t: Tournament; p: Player; onClick: () => void }) {
+  const division = (p as any).categoryName || t.group || 'Chưa rõ';
+  const ageLabel = p.ageGroup && p.ageGroup !== division ? ` · Nhóm tuổi: ${p.ageGroup}` : '';
   return (
     <button className="player-card" onClick={onClick}>
       <Avatar p={p} />
       <span className="player-info">
         <strong>{p.name}</strong>
-        <span>Bảng: {p.ageGroup || t.group || 'Chưa rõ'} · SBD {p.snr}</span>
+        <span>Bảng: {division}{ageLabel} · SBD {p.snr}</span>
         <small>{p.club || 'Chưa có thông tin đơn vị'}</small>
         <span className="tournament-link">{t.name}{t.demo ? ' · Minh họa' : ''}</span>
       </span>
@@ -108,20 +110,24 @@ export default function ChessApp() {
   useEffect(() => {
     if (!current || !player || player.detailsLoaded || current.demo) return;
     let dead = false;
+    const reqTourId = current.id;
+    const reqPlayerId = player.id;
     setDetailLoading(true);
     setDetailError('');
-    apiFetch(`/api/player?t=${encodeURIComponent(current.id)}&p=${encodeURIComponent(player.id)}`).then(async r => {
+    apiFetch(`/api/player?t=${encodeURIComponent(reqTourId)}&p=${encodeURIComponent(reqPlayerId)}`).then(async r => {
       const d = await r.json() as any;
       if (!r.ok) throw Error(d.error);
       return d;
     }).then(d => {
-      if (!dead) setTourneys(ts => ts.map(t => t.id === current.id ? { ...t, players: t.players.map(p => p.id === player.id ? { ...p, ...d.player, detailsLoaded: true } : p) } : t))
+      if (!dead && selected?.t === reqTourId && selected?.p === reqPlayerId) {
+        setTourneys(ts => ts.map(t => t.id === reqTourId ? { ...t, players: t.players.map(p => p.id === reqPlayerId ? { ...p, ...d.player, detailsLoaded: true } : p) } : t));
+      }
     }).catch(e => {
       if (!dead) setDetailError(e.message);
     }).finally(() => {
       if (!dead) setDetailLoading(false);
     });
-    return () => { dead = true }
+    return () => { dead = true };
   }, [selected?.t, selected?.p, tourneys.length]);
 
   function bookmark(t: Tournament, p: Player) {
@@ -240,7 +246,7 @@ export default function ChessApp() {
           <div className="profile-main">
             <Avatar p={player} large />
             <div className="profile-name">
-              <span className="eyebrow">Bảng đấu: {player.ageGroup || current.group}</span>
+              <span className="eyebrow">Bảng đấu: {(player as any).categoryName || current.group}{player.ageGroup && player.ageGroup !== ((player as any).categoryName || current.group) ? ` · Nhóm tuổi: ${player.ageGroup}` : ''}</span>
               <h1>{player.name}</h1>
               <p>{player.club || formatClubName(player.federation || '')}{player.federation && player.federation !== player.club ? ` (LĐ: ${player.federation})` : ''} · SBD {player.snr} {player.fideId ? `· FIDE ID: ${player.fideId}` : ''}</p>
             </div>
@@ -264,7 +270,8 @@ export default function ChessApp() {
           const next = getNextMatch(player);
           const currentRank = player.rank ?? (current?.players ? (current.players.findIndex(x => x.id === player.id) + 1) : null);
           const totalCount = player.totalPlayers || (current?.players ? current.players.length : 0);
-          const medal = getMedal(currentRank, player.ageGroup || current.group, current.prizes);
+          const currentDivision = (player as any).categoryName || current.group;
+          const medal = getMedal(currentRank, currentDivision || player.ageGroup, current.prizes);
 
           let isNextWhite = false;
           let isNextBlack = false;
@@ -291,7 +298,7 @@ export default function ChessApp() {
                     <div>
                       <h2>Hồ sơ kỳ thủ · {player.name}</h2>
                       <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 600 }}>
-                        SBD: <b>{player.snr}</b> · Bảng: <b>{player.ageGroup || current.group}</b> · Dự kiến: <b>{medal ? medal.label : 'Chưa có giải thưởng'}</b>
+                        SBD: <b>{player.snr}</b> · Bảng: <b>{currentDivision}</b>{player.ageGroup && player.ageGroup !== currentDivision ? <> · Nhóm tuổi: <b>{player.ageGroup}</b></> : null} · Dự kiến: <b>{medal ? medal.label : 'Chưa có giải thưởng'}</b>
                       </span>
                     </div>
                   </div>
@@ -419,7 +426,7 @@ export default function ChessApp() {
                       Hạng {currentRank ? currentRank : '—'} / {totalCount} kỳ thủ
                     </strong>
                     <small style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 2 }}>
-                      bảng {player.ageGroup || current.group}
+                      bảng {currentDivision}{player.ageGroup && player.ageGroup !== currentDivision ? ` (Nhóm tuổi: ${player.ageGroup})` : ''}
                     </small>
                   </div>
 

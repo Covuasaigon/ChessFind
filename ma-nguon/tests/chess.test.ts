@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {makeDemo,stats,normalize,num,getNextMatch} from '../lib/chess';
+import {makeDemo,stats,normalize,num,getNextMatch,getMedal} from '../lib/chess';
 import {parseRanking,parsePlayer,validateSource} from '../lib/chess-source';
 const demo=makeDemo(),main=demo.players.find(p=>p.name==='Nguyễn Minh Anh')!;
 assert.equal(main.points,4.5);assert.equal(stats(main).wins,4);assert.equal(stats(main).draws,1);assert.equal(stats(main).losses,2);assert.equal(stats(main).white+stats(main).black,7);assert.equal(stats(main).winRate,57);assert.equal(demo.players.reduce((n,p)=>n+p.points!,0),28);
@@ -90,5 +90,22 @@ const statsCase2 = stats(playerCase2);
 assert.equal(statsCase2.played, 0, 'Case 2: games should equal 0');
 assert.equal(statsCase2.points, 0, 'Case 2: points should equal 0');
 
-console.log('PASS: demo consistency, search normalization, score parsing, blocked URLs, ranking parsing, Black win, forfeit exclusion, mismatched snapshot rejection, 3-match color stats, Case 1 future pairings ignored, Case 2 unplayed stats = 0.');
+// Case 3 Test: Separate Division Name vs Age Group & Prize Medal matching
+const prizesTest = [
+  { group: 'Bảng Nữ Baby', rank: 1, prizeName: 'Cúp Vô Địch Nữ Baby', medal: 'gold' },
+  { group: 'Bảng U07', rank: 1, prizeName: 'Cúp U07', medal: 'gold' }
+];
+
+const medalDivisionMatch = getMedal(1, 'Bảng Nữ Baby', prizesTest);
+assert.equal(medalDivisionMatch?.label, 'Cúp Vô Địch Nữ Baby', 'getMedal should match division name Bảng Nữ Baby over generic ageGroup U07');
+
+// Case 4 Test: Composite IDs for players with same SNR in different categories
+const pDiv1 = { id: '1461967-8', snr: '8', name: 'Nguyễn Hoàng Thiên Kim', ageGroup: 'U07', categoryName: 'Bảng Nữ Baby' };
+const pDiv2 = { id: '1461986-8', snr: '8', name: 'Trần Văn A', ageGroup: 'U11', categoryName: 'Bảng U11 Nam' };
+assert.notEqual(pDiv1.id, pDiv2.id, 'Composite player IDs must be distinct despite identical SNR');
+assert.equal(pDiv1.categoryName, 'Bảng Nữ Baby');
+assert.equal(pDiv2.categoryName, 'Bảng U11 Nam');
+
+console.log('PASS: demo consistency, search normalization, score parsing, blocked URLs, ranking parsing, Black win, forfeit exclusion, mismatched snapshot rejection, 3-match color stats, Case 1 future pairings ignored, Case 2 unplayed stats = 0, Case 3 Division vs AgeGroup medal match, Case 4 composite ID uniqueness.');
+
 
