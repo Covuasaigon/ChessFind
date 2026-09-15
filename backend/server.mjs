@@ -134,26 +134,36 @@ function getMedal(rank, group, prizes) {
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
     const matching = prizes.filter((p) => {
-      const rf = p.rankFrom ?? p.rank_from;
-      const rt = p.rankTo ?? p.rank_to;
-      const rNum = p.rank != null ? Number(p.rank) : null;
+      const rf = p.rankFrom ?? p.rank_from ?? p.rank;
+      const rt = p.rankTo ?? p.rank_to ?? p.rank ?? rf;
+      const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
       const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
       const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
-      const rankMatches = rNum !== null && rNum === rank || rfNum !== null && rtNum !== null && rank >= rfNum && rank <= rtNum;
+      let rankMatches = false;
+      if (rfNum !== null && rtNum !== null) {
+        rankMatches = rank >= rfNum && rank <= rtNum;
+      } else if (rfNum !== null) {
+        rankMatches = rank === rfNum;
+      } else if (rNum !== null) {
+        rankMatches = rank === rNum;
+      }
       if (!rankMatches) return false;
       const ruleGrp = p.group || p.group_name;
       if (!group || !ruleGrp) return true;
-      const pGroupNorm = normalize(ruleGrp);
-      const userGrpNorm = normalize(group);
-      return pGroupNorm === "tat ca" || pGroupNorm === userGrpNorm || userGrpNorm.includes(pGroupNorm) || pGroupNorm.includes(userGrpNorm);
+      const rNorm = normalize(ruleGrp);
+      const uNorm = normalize(group);
+      if (rNorm === "tat ca" || rNorm.includes("tat ca") || rNorm === "all" || rNorm === "") return true;
+      if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
+      const rTokens = rNorm.split(/\s+/).filter(Boolean);
+      const uTokens = uNorm.split(/\s+/).filter(Boolean);
+      return rTokens.some((t) => t.length >= 2 && uTokens.includes(t));
     });
     if (matching.length > 0) {
       const specificMatch = group ? matching.find((p) => {
         const ruleGrp = p.group || p.group_name;
         if (!ruleGrp) return false;
         const norm = normalize(ruleGrp);
-        const userGrpNorm = normalize(group);
-        return norm !== "tat ca" && (norm === userGrpNorm || userGrpNorm.includes(norm) || norm.includes(userGrpNorm));
+        return !norm.includes("tat ca") && norm !== "all";
       }) : null;
       const match = specificMatch || matching[0];
       const label = match.prizeName || match.prize_name || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
@@ -169,7 +179,7 @@ function getMedal(rank, group, prizes) {
       } else if (mStr.includes("certificate") || mStr.includes("consolation") || mStr.includes("khuyen khich") || mStr.includes("top") || pNameLower.includes("khuyen khich") || pNameLower.includes("khuy\u1EBFn kh\xEDch")) {
         medalIcon = "\u{1F396}";
       }
-      return { medal: medalIcon, label };
+      return { medal: medalIcon, label, matchedRule: match };
     }
     return null;
   }
@@ -1365,9 +1375,12 @@ function createApi(db2, sourceParam = {}) {
     if (!t) return null;
     try {
       const masterId = id.split("-")[0];
-      const prizesRes = await db2.prepare(
-        "SELECT * FROM prizes WHERE tournament_id = ? OR tournament_id = ? OR tournament_id LIKE ? ORDER BY rank_from ASC"
-      ).bind(id, masterId, masterId + "-%").all();
+      let prizesRes = await db2.prepare(
+        "SELECT * FROM prizes WHERE tournament_id = ? OR tournament_id = ? OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC"
+      ).bind(id, masterId, masterId + "-%", id + "-%").all();
+      if (!prizesRes.results || prizesRes.results.length === 0) {
+        prizesRes = await db2.prepare("SELECT * FROM prizes ORDER BY rank_from ASC").all();
+      }
       const dbPrizes = (prizesRes.results || []).map((row) => ({
         id: row.id,
         tournamentId: row.tournament_id,
@@ -1635,17 +1648,27 @@ function createApi(db2, sourceParam = {}) {
           const nextMatch = getNextMatch(playerObj);
           const userCategory = playerObj.categoryName || p.categoryId || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || t.group || p.ageGroup || void 0;
           const medalPrediction = getMedal(rank, userCategory, t.prizes);
-          console.log(`[PRIZE DEBUG]
-Tournament:
-${id}
-Category:
-${userCategory || "none"}
-Player rank:
+          let matchedRuleRange = "none";
+          if (medalPrediction && medalPrediction.matchedRule) {
+            const mR = medalPrediction.matchedRule;
+            const rF = mR.rank_from ?? mR.rankFrom ?? mR.rank ?? "?";
+            const rT = mR.rank_to ?? mR.rankTo ?? mR.rank ?? rF;
+            matchedRuleRange = `${rF}-${rT}`;
+          }
+          console.log(`[PRIZE MATCH]
+
+player:
+${playerObj.name}
+
+rank:
 ${rank}
-Loaded prize rules:
-${JSON.stringify(t.prizes || [])}
-Matched prize:
-${medalPrediction ? medalPrediction.label : "Ch\u01B0a \u0111\u1EA1t gi\u1EA3i"}`);
+
+matched rule:
+${matchedRuleRange}
+
+prize:
+${medalPrediction ? medalPrediction.label : "Ch\u01B0a \u0111\u1EA1t gi\u1EA3i"}
+`);
           const fullPlayer = {
             ...playerObj,
             medalPrediction,

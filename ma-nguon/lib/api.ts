@@ -373,9 +373,13 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
     try {
       const masterId = id.split('-')[0];
-      const prizesRes = await db.prepare(
-        'SELECT * FROM prizes WHERE tournament_id = ? OR tournament_id = ? OR tournament_id LIKE ? ORDER BY rank_from ASC'
-      ).bind(id, masterId, masterId + '-%').all<any>();
+      let prizesRes = await db.prepare(
+        'SELECT * FROM prizes WHERE tournament_id = ? OR tournament_id = ? OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC'
+      ).bind(id, masterId, masterId + '-%', id + '-%').all<any>();
+
+      if (!prizesRes.results || prizesRes.results.length === 0) {
+        prizesRes = await db.prepare('SELECT * FROM prizes ORDER BY rank_from ASC').all<any>();
+      }
 
       const dbPrizes = (prizesRes.results || []).map((row: any) => ({
         id: row.id,
@@ -660,7 +664,16 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const nextMatch = getNextMatch(playerObj);
           const userCategory = (playerObj as any).categoryName || p.categoryId || (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) || t.group || p.ageGroup || undefined;
           const medalPrediction = getMedal(rank, userCategory, t.prizes);
-          console.log(`[PRIZE DEBUG]\nTournament:\n${id}\nCategory:\n${userCategory || 'none'}\nPlayer rank:\n${rank}\nLoaded prize rules:\n${JSON.stringify(t.prizes || [])}\nMatched prize:\n${medalPrediction ? medalPrediction.label : 'Chưa đạt giải'}`);
+
+          let matchedRuleRange = 'none';
+          if (medalPrediction && (medalPrediction as any).matchedRule) {
+            const mR = (medalPrediction as any).matchedRule;
+            const rF = mR.rank_from ?? mR.rankFrom ?? mR.rank ?? '?';
+            const rT = mR.rank_to ?? mR.rankTo ?? mR.rank ?? rF;
+            matchedRuleRange = `${rF}-${rT}`;
+          }
+
+          console.log(`[PRIZE MATCH]\n\nplayer:\n${playerObj.name}\n\nrank:\n${rank}\n\nmatched rule:\n${matchedRuleRange}\n\nprize:\n${medalPrediction ? medalPrediction.label : 'Chưa đạt giải'}\n`);
 
           const fullPlayer = {
             ...playerObj,

@@ -269,24 +269,38 @@ export function stats(p: Player) {
   };
 }
 
-export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule[]): { medal: string; label: string } | null {
+export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule[]): { medal: string; label: string; matchedRule?: PrizeRule } | null {
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
     const matching = prizes.filter(p => {
-      const rf = p.rankFrom ?? p.rank_from;
-      const rt = p.rankTo ?? p.rank_to;
-      const rNum = p.rank != null ? Number(p.rank) : null;
+      const rf = p.rankFrom ?? p.rank_from ?? p.rank;
+      const rt = p.rankTo ?? p.rank_to ?? p.rank ?? rf;
+      const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
       const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
       const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
 
-      const rankMatches = (rNum !== null && rNum === rank) || (rfNum !== null && rtNum !== null && rank >= rfNum && rank <= rtNum);
+      let rankMatches = false;
+      if (rfNum !== null && rtNum !== null) {
+        rankMatches = rank >= rfNum && rank <= rtNum;
+      } else if (rfNum !== null) {
+        rankMatches = rank === rfNum;
+      } else if (rNum !== null) {
+        rankMatches = rank === rNum;
+      }
+
       if (!rankMatches) return false;
 
       const ruleGrp = p.group || p.group_name;
       if (!group || !ruleGrp) return true;
-      const pGroupNorm = normalize(ruleGrp);
-      const userGrpNorm = normalize(group);
-      return pGroupNorm === 'tat ca' || pGroupNorm === userGrpNorm || userGrpNorm.includes(pGroupNorm) || pGroupNorm.includes(userGrpNorm);
+      const rNorm = normalize(ruleGrp);
+      const uNorm = normalize(group);
+
+      if (rNorm === 'tat ca' || rNorm.includes('tat ca') || rNorm === 'all' || rNorm === '') return true;
+      if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
+
+      const rTokens = rNorm.split(/\s+/).filter(Boolean);
+      const uTokens = uNorm.split(/\s+/).filter(Boolean);
+      return rTokens.some(t => t.length >= 2 && uTokens.includes(t));
     });
 
     if (matching.length > 0) {
@@ -295,8 +309,7 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
         const ruleGrp = p.group || p.group_name;
         if (!ruleGrp) return false;
         const norm = normalize(ruleGrp);
-        const userGrpNorm = normalize(group);
-        return norm !== 'tat ca' && (norm === userGrpNorm || userGrpNorm.includes(norm) || norm.includes(userGrpNorm));
+        return !norm.includes('tat ca') && norm !== 'all';
       }) : null;
 
       const match = specificMatch || matching[0];
@@ -315,7 +328,7 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
         medalIcon = '🎖';
       }
 
-      return { medal: medalIcon, label };
+      return { medal: medalIcon, label, matchedRule: match };
     }
 
     // If prizes array exists but rank doesn't match any configured rule, player is outside prize structure
