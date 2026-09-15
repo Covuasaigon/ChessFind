@@ -560,7 +560,7 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
   let baseName = rawTitle;
   if (rawTitle.includes(' - ')) {
     const parts = rawTitle.split(/\s+[-–]\s+|\s*-\s*/);
-    const mainPart = parts.find(p => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys|group|cat|category)/i.test(p.trim()));
+    const mainPart = parts.find(p => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys|group|cat|category|junior|senior)/i.test(p.trim()));
     if (mainPart) {
       baseName = mainPart.trim();
     } else {
@@ -570,13 +570,15 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
 
   const categories: CategoryDetectResult[] = [];
   const seenIds = new Set<string>();
+  const targetHost = url.hostname;
+  const targetLan = url.searchParams.get('lan') || '1';
 
   // Helper to scan a specific TNR ID
   async function checkTnrId(catId: number): Promise<{ result: CategoryDetectResult | null; extraLinks: number[] }> {
     const catIdStr = String(catId);
     if (seenIds.has(catIdStr)) return { result: null, extraLinks: [] };
 
-    const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
+    const u = new URL(`https://${targetHost}/tnr${catId}.aspx?lan=${targetLan}&art=1&zeilen=99999`);
     let pageHtml: string;
     try {
       pageHtml = await fetchSourceWithRetry(u, 2, 600);
@@ -617,9 +619,9 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
         .map(m => parseInt(m[1], 10))
         .filter(n => !isNaN(n));
 
-      // Check title match (normalize spaces)
-      const normTitle = tStr.replace(/\s+/g, ' ');
-      const normBase = baseName.replace(/\s+/g, ' ');
+      // Check title match using normalize() to eliminate diacritics/casing mismatches
+      const normTitle = normalize(tStr).replace(/\s+/g, ' ');
+      const normBase = normalize(baseName).replace(/\s+/g, ' ');
       const isMatch = normTitle.includes(normBase) || (normBase.length > 6 && normTitle.includes(normBase.slice(0, 15))) || catId === targetId;
       if (!isMatch) {
         return { result: null, extraLinks: [] };
@@ -632,13 +634,13 @@ export async function detectCategories(source: string): Promise<{ mainName: stri
         const parts = tStr.split(/\s+[-–]\s+|\s*-\s*/);
         for (const p of parts) {
           const cleanP = p.trim();
-          if (cleanP && !cleanP.toLowerCase().includes(normBase.toLowerCase()) && /(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys)/i.test(cleanP)) {
+          if (cleanP && !normalize(cleanP).includes(normBase) && /(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys|junior|senior)/i.test(cleanP)) {
             catGroup = cleanP;
             break;
           }
         }
         if (catGroup === 'Toàn giải' && parts.length > 1) {
-          const nonBase = parts.find(p => !p.trim().toLowerCase().includes(normBase.toLowerCase()));
+          const nonBase = parts.find(p => !normalize(p.trim()).includes(normBase));
           if (nonBase) catGroup = nonBase.trim();
         }
       }

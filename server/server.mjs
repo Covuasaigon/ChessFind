@@ -679,7 +679,7 @@ async function detectCategories(source) {
   let baseName = rawTitle;
   if (rawTitle.includes(" - ")) {
     const parts = rawTitle.split(/\s+[-–]\s+|\s*-\s*/);
-    const mainPart = parts.find((p) => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys|group|cat|category)/i.test(p.trim()));
+    const mainPart = parts.find((p) => !/^(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys|group|cat|category|junior|senior)/i.test(p.trim()));
     if (mainPart) {
       baseName = mainPart.trim();
     } else {
@@ -688,10 +688,12 @@ async function detectCategories(source) {
   }
   const categories = [];
   const seenIds = /* @__PURE__ */ new Set();
+  const targetHost = url.hostname;
+  const targetLan = url.searchParams.get("lan") || "1";
   async function checkTnrId(catId) {
     const catIdStr = String(catId);
     if (seenIds.has(catIdStr)) return { result: null, extraLinks: [] };
-    const u = new URL(`https://chess-results.com/tnr${catId}.aspx?lan=1&art=1&zeilen=99999`);
+    const u = new URL(`https://${targetHost}/tnr${catId}.aspx?lan=${targetLan}&art=1&zeilen=99999`);
     let pageHtml;
     try {
       pageHtml = await fetchSourceWithRetry(u, 2, 600);
@@ -724,8 +726,8 @@ async function detectCategories(source) {
         return { result: null, extraLinks: [] };
       }
       const foundLinks = [...pageHtml.matchAll(/(?:href=["']|tnr)(\d+)\.aspx/gi)].map((m) => parseInt(m[1], 10)).filter((n) => !isNaN(n));
-      const normTitle = tStr.replace(/\s+/g, " ");
-      const normBase = baseName.replace(/\s+/g, " ");
+      const normTitle = normalize(tStr).replace(/\s+/g, " ");
+      const normBase = normalize(baseName).replace(/\s+/g, " ");
       const isMatch = normTitle.includes(normBase) || normBase.length > 6 && normTitle.includes(normBase.slice(0, 15)) || catId === targetId;
       if (!isMatch) {
         return { result: null, extraLinks: [] };
@@ -736,13 +738,13 @@ async function detectCategories(source) {
         const parts = tStr.split(/\s+[-–]\s+|\s*-\s*/);
         for (const p of parts) {
           const cleanP = p.trim();
-          if (cleanP && !cleanP.toLowerCase().includes(normBase.toLowerCase()) && /(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys)/i.test(cleanP)) {
+          if (cleanP && !normalize(cleanP).includes(normBase) && /(?:bảng|u\d+|nam|nữ|trẻ|nhi|baby|open|girls|boys|junior|senior)/i.test(cleanP)) {
             catGroup = cleanP;
             break;
           }
         }
         if (catGroup === "To\xE0n gi\u1EA3i" && parts.length > 1) {
-          const nonBase = parts.find((p) => !p.trim().toLowerCase().includes(normBase.toLowerCase()));
+          const nonBase = parts.find((p) => !normalize(p.trim()).includes(normBase));
           if (nonBase) catGroup = nonBase.trim();
         }
       }
