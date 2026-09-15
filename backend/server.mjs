@@ -136,7 +136,10 @@ function getMedal(rank, group, prizes) {
     const matching = prizes.filter((p) => {
       const rf = p.rankFrom ?? p.rank_from;
       const rt = p.rankTo ?? p.rank_to;
-      const rankMatches = p.rank === rank || rf != null && rt != null && rank >= rf && rank <= rt;
+      const rNum = p.rank != null ? Number(p.rank) : null;
+      const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
+      const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
+      const rankMatches = rNum !== null && rNum === rank || rfNum !== null && rtNum !== null && rank >= rfNum && rank <= rtNum;
       if (!rankMatches) return false;
       const ruleGrp = p.group || p.group_name;
       if (!group || !ruleGrp) return true;
@@ -156,12 +159,19 @@ function getMedal(rank, group, prizes) {
       const label = match.prizeName || match.prize_name || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
       let medalIcon = "\u{1F3C6}";
       const mStr = (match.medal || "").toLowerCase();
-      if (mStr.includes("gold") || mStr === "gold medal" || rank === 1) medalIcon = "\u{1F947}";
-      else if (mStr.includes("silver") || mStr === "silver medal" || rank === 2) medalIcon = "\u{1F948}";
-      else if (mStr.includes("bronze") || mStr === "bronze medal" || rank === 3) medalIcon = "\u{1F949}";
-      else if (mStr.includes("certificate") || mStr.includes("consolation")) medalIcon = "\u{1F4DC}";
+      const pNameLower = label.toLowerCase();
+      if (mStr.includes("gold") || mStr.includes("vang") || pNameLower.includes("gold") || pNameLower.includes("v\xE0ng") || pNameLower.includes("vang") || rank === 1 && !pNameLower.includes("khuyen khich")) {
+        medalIcon = "\u{1F947}";
+      } else if (mStr.includes("silver") || mStr.includes("bac") || pNameLower.includes("silver") || pNameLower.includes("b\u1EA1c") || pNameLower.includes("bac") || rank === 2 && !pNameLower.includes("khuyen khich")) {
+        medalIcon = "\u{1F948}";
+      } else if (mStr.includes("bronze") || mStr.includes("dong") || pNameLower.includes("bronze") || pNameLower.includes("\u0111\u1ED3ng") || pNameLower.includes("dong") || rank === 3 && !pNameLower.includes("khuyen khich")) {
+        medalIcon = "\u{1F949}";
+      } else if (mStr.includes("certificate") || mStr.includes("consolation") || mStr.includes("khuyen khich") || mStr.includes("top") || pNameLower.includes("khuyen khich") || pNameLower.includes("khuy\u1EBFn kh\xEDch")) {
+        medalIcon = "\u{1F396}";
+      }
       return { medal: medalIcon, label };
     }
+    return null;
   }
   if (rank === 1) return { medal: "\u{1F947}", label: "Huy ch\u01B0\u01A1ng V\xE0ng" };
   if (rank === 2) return { medal: "\u{1F948}", label: "Huy ch\u01B0\u01A1ng B\u1EA1c" };
@@ -1625,10 +1635,21 @@ function createApi(db2, sourceParam = {}) {
           const nextMatch = getNextMatch(playerObj);
           const userCategory = playerObj.categoryName || p.categoryId || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || t.group || p.ageGroup || void 0;
           const medalPrediction = getMedal(rank, userCategory, t.prizes);
-          console.log(`[PRIZE LOAD] requested tournament: ${id} pid: ${pid} category: ${userCategory || "none"} returned prizes:`, JSON.stringify(t.prizes || []));
+          console.log(`[PRIZE DEBUG]
+Tournament:
+${id}
+Category:
+${userCategory || "none"}
+Player rank:
+${rank}
+Loaded prize rules:
+${JSON.stringify(t.prizes || [])}
+Matched prize:
+${medalPrediction ? medalPrediction.label : "Ch\u01B0a \u0111\u1EA1t gi\u1EA3i"}`);
           const fullPlayer = {
             ...playerObj,
-            categoryName: t.group || playerObj.categoryName || null,
+            medalPrediction,
+            categoryName: userCategory || t.group || playerObj.categoryName || null,
             hs1: p.hs1 ?? playerObj.hs1 ?? null,
             hs2: p.hs2 ?? playerObj.hs2 ?? null,
             hs3: p.hs3 ?? playerObj.hs3 ?? null,
@@ -1651,8 +1672,7 @@ function createApi(db2, sourceParam = {}) {
             wins: s2.wins,
             draws: s2.draws,
             losses: s2.losses,
-            nextMatch,
-            medalPrediction
+            nextMatch
           };
           return json({
             player: fullPlayer,

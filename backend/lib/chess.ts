@@ -275,8 +275,13 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
     const matching = prizes.filter(p => {
       const rf = p.rankFrom ?? p.rank_from;
       const rt = p.rankTo ?? p.rank_to;
-      const rankMatches = p.rank === rank || (rf != null && rt != null && rank >= rf && rank <= rt);
+      const rNum = p.rank != null ? Number(p.rank) : null;
+      const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
+      const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
+
+      const rankMatches = (rNum !== null && rNum === rank) || (rfNum !== null && rtNum !== null && rank >= rfNum && rank <= rtNum);
       if (!rankMatches) return false;
+
       const ruleGrp = p.group || p.group_name;
       if (!group || !ruleGrp) return true;
       const pGroupNorm = normalize(ruleGrp);
@@ -298,13 +303,26 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
       const label = match.prizeName || match.prize_name || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
       let medalIcon = '🏆';
       const mStr = (match.medal || '').toLowerCase();
-      if (mStr.includes('gold') || mStr === 'gold medal' || rank === 1) medalIcon = '🥇';
-      else if (mStr.includes('silver') || mStr === 'silver medal' || rank === 2) medalIcon = '🥈';
-      else if (mStr.includes('bronze') || mStr === 'bronze medal' || rank === 3) medalIcon = '🥉';
-      else if (mStr.includes('certificate') || mStr.includes('consolation')) medalIcon = '📜';
+      const pNameLower = label.toLowerCase();
+
+      if (mStr.includes('gold') || mStr.includes('vang') || pNameLower.includes('gold') || pNameLower.includes('vàng') || pNameLower.includes('vang') || (rank === 1 && !pNameLower.includes('khuyen khich'))) {
+        medalIcon = '🥇';
+      } else if (mStr.includes('silver') || mStr.includes('bac') || pNameLower.includes('silver') || pNameLower.includes('bạc') || pNameLower.includes('bac') || (rank === 2 && !pNameLower.includes('khuyen khich'))) {
+        medalIcon = '🥈';
+      } else if (mStr.includes('bronze') || mStr.includes('dong') || pNameLower.includes('bronze') || pNameLower.includes('đồng') || pNameLower.includes('dong') || (rank === 3 && !pNameLower.includes('khuyen khich'))) {
+        medalIcon = '🥉';
+      } else if (mStr.includes('certificate') || mStr.includes('consolation') || mStr.includes('khuyen khich') || mStr.includes('top') || pNameLower.includes('khuyen khich') || pNameLower.includes('khuyến khích')) {
+        medalIcon = '🎖';
+      }
+
       return { medal: medalIcon, label };
     }
+
+    // If prizes array exists but rank doesn't match any configured rule, player is outside prize structure
+    return null;
   }
+
+  // Fallback for unconfigured tournaments
   if (rank === 1) return { medal: '🥇', label: 'Huy chương Vàng' };
   if (rank === 2) return { medal: '🥈', label: 'Huy chương Bạc' };
   if (rank === 3) return { medal: '🥉', label: 'Huy chương Đồng' };

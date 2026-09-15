@@ -660,11 +660,12 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const nextMatch = getNextMatch(playerObj);
           const userCategory = (playerObj as any).categoryName || p.categoryId || (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) || t.group || p.ageGroup || undefined;
           const medalPrediction = getMedal(rank, userCategory, t.prizes);
-          console.log(`[PRIZE LOAD] requested tournament: ${id} pid: ${pid} category: ${userCategory || 'none'} returned prizes:`, JSON.stringify(t.prizes || []));
+          console.log(`[PRIZE DEBUG]\nTournament:\n${id}\nCategory:\n${userCategory || 'none'}\nPlayer rank:\n${rank}\nLoaded prize rules:\n${JSON.stringify(t.prizes || [])}\nMatched prize:\n${medalPrediction ? medalPrediction.label : 'Chưa đạt giải'}`);
 
           const fullPlayer = {
             ...playerObj,
-            categoryName: t.group || (playerObj as any).categoryName || null,
+            medalPrediction,
+            categoryName: userCategory || t.group || (playerObj as any).categoryName || null,
             hs1: p.hs1 ?? playerObj.hs1 ?? null,
             hs2: p.hs2 ?? playerObj.hs2 ?? null,
             hs3: p.hs3 ?? playerObj.hs3 ?? null,
@@ -687,8 +688,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             wins: s.wins,
             draws: s.draws,
             losses: s.losses,
-            nextMatch,
-            medalPrediction
+            nextMatch
           };
 
           return json({
