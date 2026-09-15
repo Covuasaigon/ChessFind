@@ -2512,6 +2512,128 @@ function openDatabase(connectionStringOrFile, migrations) {
   };
 }
 
+// jobs/sync-scheduler.ts
+import cron from "node-cron";
+var isSyncRunning = false;
+function startSyncScheduler(db2, sourceOverride) {
+  console.log("[Sync Scheduler] Initializing automatic 5-minute Chess-Results sync scheduler...");
+  cron.schedule("*/5 * * * *", async () => {
+    if (isSyncRunning) {
+      console.log("[Sync Scheduler] Previous sync cycle still running, skipping...");
+      return;
+    }
+    isSyncRunning = true;
+    try {
+      await runAutoSyncCycle(db2, sourceOverride);
+    } catch (err) {
+      console.error("[Sync Scheduler] Error in auto sync cycle:", err);
+    } finally {
+      isSyncRunning = false;
+    }
+  });
+  setTimeout(() => {
+    runAutoSyncCycle(db2, sourceOverride).catch((e) => console.error("[Sync Scheduler] Initial check error:", e));
+  }, 1e4);
+}
+async function runAutoSyncCycle(db2, sourceOverride) {
+  try {
+    let rows = [];
+    try {
+      const res = await db2.prepare("SELECT payload, published, auto_sync, sync_interval, last_sync, next_sync FROM tournaments").all();
+      rows = res.results || [];
+    } catch {
+      const res = await db2.prepare("SELECT payload, published FROM tournaments").all();
+      rows = res.results || [];
+    }
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+    for (const r of rows) {
+      let t;
+      try {
+        t = JSON.parse(r.payload);
+      } catch {
+        continue;
+      }
+      const published = r.published !== void 0 && r.published !== null ? !!r.published : !!t.published;
+      if (!published) continue;
+      const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
+      if (!autoSync) continue;
+      const interval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
+      const lastSyncStr = r.last_sync || t.lastSync || t.last_sync || null;
+      const lastSyncTime = lastSyncStr ? new Date(lastSyncStr).getTime() : 0;
+      const intervalMs = interval * 60 * 1e3;
+      if (lastSyncTime > 0 && now - lastSyncTime < intervalMs - 3e4) {
+        continue;
+      }
+      console.log(`[Sync Scheduler] Auto syncing tournament "${t.name}" (${t.id})...`);
+      try {
+        const fetcher = sourceOverride?.tournament ? sourceOverride.tournament : importTournament;
+        const updatedTour = await fetcher(t.source, t.group);
+        updatedTour.name = t.name;
+        updatedTour.published = true;
+        updatedTour.info = t.info;
+        updatedTour.prizes = t.prizes;
+        const nextSyncIso = new Date(now + intervalMs).toISOString();
+        updatedTour.autoSync = true;
+        updatedTour.auto_sync = true;
+        updatedTour.syncInterval = interval;
+        updatedTour.sync_interval = interval;
+        updatedTour.lastSync = nowIso;
+        updatedTour.last_sync = nowIso;
+        updatedTour.nextSync = nextSyncIso;
+        updatedTour.next_sync = nextSyncIso;
+        const payloadStr = JSON.stringify(updatedTour);
+        try {
+          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = 1, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, interval, nowIso, nextSyncIso, t.id).run();
+        } catch {
+          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, t.id).run();
+        }
+        try {
+          const logId = crypto.randomUUID();
+          await db2.prepare(`
+            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            logId,
+            t.id,
+            t.name,
+            t.source,
+            nowIso,
+            "success",
+            updatedTour.players ? updatedTour.players.length : 0,
+            `T\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results: ${t.name} (${updatedTour.players ? updatedTour.players.length : 0} k\u1EF3 th\u1EE7)`
+          ).run();
+        } catch (logErr) {
+          console.error("[Sync Scheduler] Failed to write sync log:", logErr);
+        }
+        console.log(`[Sync Scheduler] Auto synced "${t.name}" successfully (${updatedTour.players?.length || 0} players).`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[Sync Scheduler] Error auto syncing "${t.name}":`, errMsg);
+        try {
+          const logId = crypto.randomUUID();
+          await db2.prepare(`
+            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            logId,
+            t.id,
+            t.name,
+            t.source,
+            nowIso,
+            "failed",
+            0,
+            `L\u1ED7i t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9: ${errMsg}`
+          ).run();
+        } catch {
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Sync Scheduler] Error in runAutoSyncCycle:", err);
+  }
+}
+
 // server.ts
 var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
@@ -2520,6 +2642,7 @@ var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN
 var dbUrl = process.env.DATABASE_URL;
 var dbPath = dbUrl || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
 var db = openDatabase(dbPath, resolve3(root, "migrations"));
+startSyncScheduler(db);
 var api = createApi(db);
 var web = resolve3(root, "web");
 var types = {

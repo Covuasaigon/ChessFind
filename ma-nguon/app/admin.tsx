@@ -45,6 +45,34 @@ export interface AdminLog {
   created: string;
 }
 
+export function formatVietnamTime(date: string | Date | number | null | undefined): string {
+  if (!date) return '';
+  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(d);
+}
+
+export function formatVietnamDateTime(date: string | Date | number | null | undefined): string {
+  if (!date) return '';
+  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(d);
+}
+
 export interface BannerItem {
   id: string;
   title: string;
@@ -1467,13 +1495,13 @@ export default function Admin({ onChanged }: AdminProps) {
                         </button>
                         <div style={{ fontSize: 11, color: '#64748B', display: 'flex', flexDirection: 'column', gap: 1 }}>
                           {t.lastSync || t.last_sync ? (
-                            <span>Lần cuối: {new Date(t.lastSync || t.last_sync!).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>Lần cuối: {formatVietnamTime(t.lastSync || t.last_sync)}</span>
                           ) : (
                             <span>Chưa đồng bộ</span>
                           )}
                           {t.autoSync !== false && (t.nextSync || t.next_sync) && (
                             <span style={{ color: '#2563EB', fontWeight: 500 }}>
-                              Kế tiếp: {new Date(t.nextSync || t.next_sync!).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                              Kế tiếp: {formatVietnamTime(t.nextSync || t.next_sync)}
                             </span>
                           )}
                         </div>
@@ -2446,7 +2474,7 @@ export default function Admin({ onChanged }: AdminProps) {
                 {(state.syncLogs || []).map((item) => (
                   <tr key={item.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
                     <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
-                      {new Date(item.created_at).toLocaleString('vi-VN')}
+                      {formatVietnamDateTime(item.created_at)}
                     </td>
                     <td style={{ padding: 12, fontSize: 13, fontWeight: 700, color: '#062B4F' }}>
                       {item.tournament_name || item.tournament_id || 'Giải đấu'}
@@ -2496,7 +2524,7 @@ export default function Admin({ onChanged }: AdminProps) {
                   </span>
                   <span style={{ fontSize: 14, fontWeight: 600, color: '#062B4F' }}>{l.message}</span>
                 </div>
-                <span style={{ fontSize: 12, color: '#94A3B8', whiteSpace: 'nowrap' }}>{new Date(l.created).toLocaleString('vi-VN')}</span>
+                <span style={{ fontSize: 12, color: '#94A3B8', whiteSpace: 'nowrap' }}>{formatVietnamDateTime(l.created)}</span>
               </div>
             ))}
           </div>
