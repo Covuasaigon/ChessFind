@@ -368,7 +368,39 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
     } catch {
       r = await db.prepare(admin ? 'SELECT payload,published FROM tournaments WHERE id = ?' : 'SELECT payload,published FROM tournaments WHERE id = ? AND published = 1').bind(id).first<any>();
     }
-    return formatTourObj(r);
+    const t = formatTourObj(r);
+    if (!t) return null;
+
+    try {
+      const masterId = id.split('-')[0];
+      const prizesRes = await db.prepare(
+        'SELECT * FROM prizes WHERE tournament_id = ? OR tournament_id = ? OR tournament_id LIKE ? ORDER BY rank_from ASC'
+      ).bind(id, masterId, masterId + '-%').all<any>();
+
+      const dbPrizes = (prizesRes.results || []).map((row: any) => ({
+        id: row.id,
+        tournamentId: row.tournament_id,
+        tournament_id: row.tournament_id,
+        group: row.group_name,
+        group_name: row.group_name,
+        rankFrom: Number(row.rank_from),
+        rank_from: Number(row.rank_from),
+        rankTo: Number(row.rank_to),
+        rank_to: Number(row.rank_to),
+        medal: row.medal,
+        prizeName: row.prize_name,
+        prize_name: row.prize_name,
+        description: row.description || ''
+      }));
+
+      if (dbPrizes.length > 0) {
+        t.prizes = dbPrizes;
+      }
+    } catch (err) {
+      console.error('[PRIZE LOAD DB ERROR]', err);
+    }
+
+    return t;
   };
 
   const list = async (admin = false): Promise<Tournament[]> => {
@@ -626,7 +658,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
           console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || 'none'} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
-          const medalPrediction = getMedal(rank, t.group || p.ageGroup || undefined, t.prizes);
+          const userCategory = (playerObj as any).categoryName || p.categoryId || (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) || t.group || p.ageGroup || undefined;
+          const medalPrediction = getMedal(rank, userCategory, t.prizes);
+          console.log(`[PRIZE LOAD] requested tournament: ${id} pid: ${pid} category: ${userCategory || 'none'} returned prizes:`, JSON.stringify(t.prizes || []));
 
           const fullPlayer = {
             ...playerObj,
@@ -904,6 +938,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const rules = Array.isArray(b.rules) ? b.rules : [];
           const conflictStrategy = String(b.conflictStrategy || 'skip');
 
+          console.log('[PRIZE SAVE] bulk applied targets:', targets.length, 'rules:', JSON.stringify(rules));
+
           if (targets.length === 0) {
             return json({ error: 'Vui lòng chọn ít nhất một giải đấu hoặc bảng đấu.' }, 400, {}, req);
           }
@@ -1022,6 +1058,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         const prize_name = String(b.prize_name || b.prizeName || '').trim();
         const description = String(b.description || '').trim();
         const now = new Date().toISOString();
+
+        console.log('[PRIZE SAVE] tournamentId:', tournament_id, 'groupName:', group_name, 'payload:', JSON.stringify({ rank_from, rank_to, medal, prize_name, description }));
 
         if (!tournament_id) return json({ error: 'Vui lòng chọn Giải đấu (tournament required).' }, 400, {}, req);
         if (!group_name) return json({ error: 'Vui lòng nhập Bảng/Nhóm đấu (group required).' }, 400, {}, req);
@@ -1442,6 +1480,8 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         const info = typeof b.info === 'object' && b.info ? b.info : {};
         const prizes = Array.isArray(b.prizes) ? b.prizes : [];
 
+        console.log(`[PRIZE SAVE] tournament_update_info tournamentId: ${id} prizes:`, JSON.stringify(prizes));
+
         const updatedTour = {
           ...oldTour,
           info,
@@ -1451,6 +1491,29 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
         await db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?')
           .bind(JSON.stringify(updatedTour), updatedTour.updated, id).run();
+
+        // Sync prizes array to prizes table in DB
+        try {
+          await db.prepare('DELETE FROM prizes WHERE tournament_id = ?').bind(id).run();
+          const now = new Date().toISOString();
+          for (const p of prizes) {
+            const prizeId = p.id || crypto.randomUUID();
+            const gName = p.group_name || p.group || 'Tất cả';
+            const rFrom = Number(p.rank_from ?? p.rankFrom ?? 1);
+            const rTo = Number(p.rank_to ?? p.rankTo ?? 1);
+            const medalStr = p.medal || 'Gold Medal';
+            const pName = p.prize_name || p.prizeName || '';
+            const desc = p.description || '';
+            if (pName) {
+              await db.prepare(`
+                INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(prizeId, id, gName, rFrom, rTo, medalStr, pName, desc, now, now).run();
+            }
+          }
+        } catch (pErr) {
+          console.error('[PRIZE SAVE DB SYNC ERROR]', pErr);
+        }
 
         await log(true, `Cập nhật thông tin & cơ cấu giải thưởng giải: ${oldTour.name}`);
         return json({ message: 'Đã cập nhật thông tin & cơ cấu giải thưởng thành công!' }, 200, {}, req);

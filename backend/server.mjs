@@ -134,20 +134,26 @@ function getMedal(rank, group, prizes) {
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
     const matching = prizes.filter((p) => {
-      const rankMatches = p.rank === rank || p.rankFrom != null && p.rankTo != null && rank >= p.rankFrom && rank <= p.rankTo;
+      const rf = p.rankFrom ?? p.rank_from;
+      const rt = p.rankTo ?? p.rank_to;
+      const rankMatches = p.rank === rank || rf != null && rt != null && rank >= rf && rank <= rt;
       if (!rankMatches) return false;
       const ruleGrp = p.group || p.group_name;
       if (!group || !ruleGrp) return true;
       const pGroupNorm = normalize(ruleGrp);
-      return pGroupNorm === "tat ca" || pGroupNorm === normalize(group);
+      const userGrpNorm = normalize(group);
+      return pGroupNorm === "tat ca" || pGroupNorm === userGrpNorm || userGrpNorm.includes(pGroupNorm) || pGroupNorm.includes(userGrpNorm);
     });
     if (matching.length > 0) {
       const specificMatch = group ? matching.find((p) => {
         const ruleGrp = p.group || p.group_name;
-        return ruleGrp && normalize(ruleGrp) === normalize(group) && normalize(ruleGrp) !== "tat ca";
+        if (!ruleGrp) return false;
+        const norm = normalize(ruleGrp);
+        const userGrpNorm = normalize(group);
+        return norm !== "tat ca" && (norm === userGrpNorm || userGrpNorm.includes(norm) || norm.includes(userGrpNorm));
       }) : null;
       const match = specificMatch || matching[0];
-      const label = match.prizeName || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
+      const label = match.prizeName || match.prize_name || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
       let medalIcon = "\u{1F3C6}";
       const mStr = (match.medal || "").toLowerCase();
       if (mStr.includes("gold") || mStr === "gold medal" || rank === 1) medalIcon = "\u{1F947}";
@@ -1345,7 +1351,35 @@ function createApi(db2, sourceParam = {}) {
     } catch {
       r = await db2.prepare(admin ? "SELECT payload,published FROM tournaments WHERE id = ?" : "SELECT payload,published FROM tournaments WHERE id = ? AND published = 1").bind(id).first();
     }
-    return formatTourObj(r);
+    const t = formatTourObj(r);
+    if (!t) return null;
+    try {
+      const masterId = id.split("-")[0];
+      const prizesRes = await db2.prepare(
+        "SELECT * FROM prizes WHERE tournament_id = ? OR tournament_id = ? OR tournament_id LIKE ? ORDER BY rank_from ASC"
+      ).bind(id, masterId, masterId + "-%").all();
+      const dbPrizes = (prizesRes.results || []).map((row) => ({
+        id: row.id,
+        tournamentId: row.tournament_id,
+        tournament_id: row.tournament_id,
+        group: row.group_name,
+        group_name: row.group_name,
+        rankFrom: Number(row.rank_from),
+        rank_from: Number(row.rank_from),
+        rankTo: Number(row.rank_to),
+        rank_to: Number(row.rank_to),
+        medal: row.medal,
+        prizeName: row.prize_name,
+        prize_name: row.prize_name,
+        description: row.description || ""
+      }));
+      if (dbPrizes.length > 0) {
+        t.prizes = dbPrizes;
+      }
+    } catch (err) {
+      console.error("[PRIZE LOAD DB ERROR]", err);
+    }
+    return t;
   };
   const list = async (admin = false) => {
     let res = { results: [] };
@@ -1589,7 +1623,9 @@ function createApi(db2, sourceParam = {}) {
           const playedRoundsCount = playerObj.rounds ? playerObj.rounds.filter((r) => r.status === "played" || r.result != null || r.score != null || r.opponent != null).length : 0;
           console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || "none"} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
-          const medalPrediction = getMedal(rank, t.group || p.ageGroup || void 0, t.prizes);
+          const userCategory = playerObj.categoryName || p.categoryId || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || t.group || p.ageGroup || void 0;
+          const medalPrediction = getMedal(rank, userCategory, t.prizes);
+          console.log(`[PRIZE LOAD] requested tournament: ${id} pid: ${pid} category: ${userCategory || "none"} returned prizes:`, JSON.stringify(t.prizes || []));
           const fullPlayer = {
             ...playerObj,
             categoryName: t.group || playerObj.categoryName || null,
@@ -1828,6 +1864,7 @@ function createApi(db2, sourceParam = {}) {
           const targets = Array.isArray(b.targets) ? b.targets : [];
           const rules = Array.isArray(b.rules) ? b.rules : [];
           const conflictStrategy = String(b.conflictStrategy || "skip");
+          console.log("[PRIZE SAVE] bulk applied targets:", targets.length, "rules:", JSON.stringify(rules));
           if (targets.length === 0) {
             return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t m\u1ED9t gi\u1EA3i \u0111\u1EA5u ho\u1EB7c b\u1EA3ng \u0111\u1EA5u." }, 400, {}, req);
           }
@@ -1926,6 +1963,7 @@ function createApi(db2, sourceParam = {}) {
         const prize_name = String(b.prize_name || b.prizeName || "").trim();
         const description = String(b.description || "").trim();
         const now = (/* @__PURE__ */ new Date()).toISOString();
+        console.log("[PRIZE SAVE] tournamentId:", tournament_id, "groupName:", group_name, "payload:", JSON.stringify({ rank_from, rank_to, medal, prize_name, description }));
         if (!tournament_id) return json({ error: "Vui l\xF2ng ch\u1ECDn Gi\u1EA3i \u0111\u1EA5u (tournament required)." }, 400, {}, req);
         if (!group_name) return json({ error: "Vui l\xF2ng nh\u1EADp B\u1EA3ng/Nh\xF3m \u0111\u1EA5u (group required)." }, 400, {}, req);
         if (!prize_name) return json({ error: "Vui l\xF2ng nh\u1EADp T\xEAn gi\u1EA3i th\u01B0\u1EDFng." }, 400, {}, req);
@@ -2289,6 +2327,7 @@ function createApi(db2, sourceParam = {}) {
         if (!oldTour) return json({ error: "Gi\u1EA3i \u0111\u1EA5u kh\xF4ng t\u1ED3n t\u1EA1i." }, 404, {}, req);
         const info = typeof b.info === "object" && b.info ? b.info : {};
         const prizes = Array.isArray(b.prizes) ? b.prizes : [];
+        console.log(`[PRIZE SAVE] tournament_update_info tournamentId: ${id} prizes:`, JSON.stringify(prizes));
         const updatedTour = {
           ...oldTour,
           info,
@@ -2296,6 +2335,27 @@ function createApi(db2, sourceParam = {}) {
           updated: (/* @__PURE__ */ new Date()).toISOString()
         };
         await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(updatedTour), updatedTour.updated, id).run();
+        try {
+          await db2.prepare("DELETE FROM prizes WHERE tournament_id = ?").bind(id).run();
+          const now = (/* @__PURE__ */ new Date()).toISOString();
+          for (const p of prizes) {
+            const prizeId = p.id || crypto.randomUUID();
+            const gName = p.group_name || p.group || "T\u1EA5t c\u1EA3";
+            const rFrom = Number(p.rank_from ?? p.rankFrom ?? 1);
+            const rTo = Number(p.rank_to ?? p.rankTo ?? 1);
+            const medalStr = p.medal || "Gold Medal";
+            const pName = p.prize_name || p.prizeName || "";
+            const desc = p.description || "";
+            if (pName) {
+              await db2.prepare(`
+                INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(prizeId, id, gName, rFrom, rTo, medalStr, pName, desc, now, now).run();
+            }
+          }
+        } catch (pErr) {
+          console.error("[PRIZE SAVE DB SYNC ERROR]", pErr);
+        }
         await log(true, `C\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng gi\u1EA3i: ${oldTour.name}`);
         return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng!" }, 200, {}, req);
       }

@@ -273,23 +273,29 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
     const matching = prizes.filter(p => {
-      const rankMatches = p.rank === rank || (p.rankFrom != null && p.rankTo != null && rank >= p.rankFrom && rank <= p.rankTo);
+      const rf = p.rankFrom ?? p.rank_from;
+      const rt = p.rankTo ?? p.rank_to;
+      const rankMatches = p.rank === rank || (rf != null && rt != null && rank >= rf && rank <= rt);
       if (!rankMatches) return false;
       const ruleGrp = p.group || p.group_name;
       if (!group || !ruleGrp) return true;
       const pGroupNorm = normalize(ruleGrp);
-      return pGroupNorm === 'tat ca' || pGroupNorm === normalize(group);
+      const userGrpNorm = normalize(group);
+      return pGroupNorm === 'tat ca' || pGroupNorm === userGrpNorm || userGrpNorm.includes(pGroupNorm) || pGroupNorm.includes(userGrpNorm);
     });
 
     if (matching.length > 0) {
       // Prioritize specific category match over 'tat ca'
       const specificMatch = group ? matching.find(p => {
         const ruleGrp = p.group || p.group_name;
-        return ruleGrp && normalize(ruleGrp) === normalize(group) && normalize(ruleGrp) !== 'tat ca';
+        if (!ruleGrp) return false;
+        const norm = normalize(ruleGrp);
+        const userGrpNorm = normalize(group);
+        return norm !== 'tat ca' && (norm === userGrpNorm || userGrpNorm.includes(norm) || norm.includes(userGrpNorm));
       }) : null;
 
       const match = specificMatch || matching[0];
-      const label = match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
+      const label = match.prizeName || match.prize_name || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
       let medalIcon = '🏆';
       const mStr = (match.medal || '').toLowerCase();
       if (mStr.includes('gold') || mStr === 'gold medal' || rank === 1) medalIcon = '🥇';
