@@ -1613,7 +1613,7 @@ svg {
   background: #FFFFFF;
   border-radius: 12px;
   border: 1px solid #E2E8F0;
-  padding: 12px 14px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1639,21 +1639,20 @@ svg {
   color: #475569;
 }
 
-.match-card-opponent {
+.match-card-row2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.opponent-col {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 6px;
-  font-size: 14px;
-  line-height: 1.4;
-  color: #0F172A;
-}
-
-.opponent-label {
-  font-size: 13px;
-  color: #64748B;
-  font-weight: 500;
-  flex-shrink: 0;
+  gap: 2px 6px;
+  line-height: 1.35;
 }
 
 .opponent-link {
@@ -1698,10 +1697,11 @@ svg {
   white-space: nowrap;
 }
 
-.match-card-result {
+.result-col {
+  flex-shrink: 0;
   display: flex;
-  justify-content: flex-end;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .tournament-info-slider-card {

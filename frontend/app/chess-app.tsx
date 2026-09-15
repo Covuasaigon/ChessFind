@@ -765,30 +765,31 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
           const { resClass, resText, isWhite, isBlack } = getMatchBadge(r);
 
           return (
-            <div className="mobile-match-card" key={r.round}>
-              <div className="match-card-header">
-                <span className="match-card-round">
+            <div className="mobile-match-card" key={r.round} style={{ padding: '10px 12px', gap: 8 }}>
+              <div className="match-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="match-card-round" style={{ fontSize: 13, fontWeight: 800, color: '#062B4F' }}>
                   Vòng {r.round} · {getBoardText(r)}
                 </span>
-                <span className="match-card-color">
+                <span className="match-card-color" style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>
                   {isWhite ? '⚪ Trắng' : isBlack ? '⚫ Đen' : '—'}
                 </span>
               </div>
 
-              <div className="match-card-opponent">
-                <span className="opponent-label">Đối thủ:</span>
-                {r.opponentId ? (
-                  <button className="opponent-link" onClick={() => onOpponent(r.opponentId!)}>
-                    {r.opponent} <span className="opponent-arrow">➔</span>
-                  </button>
-                ) : (
-                  <strong className="opponent-name">{r.opponent || 'Chưa có đối thủ'}</strong>
-                )}
-                {r.rating && <small className="opponent-elo">Elo {r.rating}</small>}
-              </div>
+              <div className="match-card-row2" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center', gap: '4px 10px' }}>
+                <div className="opponent-col" style={{ minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '2px 6px', lineHeight: 1.35 }}>
+                  {r.opponentId ? (
+                    <button className="opponent-link" style={{ fontSize: 14, fontWeight: 700, color: '#145DA0', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', wordBreak: 'break-word', whiteSpace: 'normal' }} onClick={() => onOpponent(r.opponentId!)}>
+                      {r.opponent} <span className="opponent-arrow">➔</span>
+                    </button>
+                  ) : (
+                    <strong className="opponent-name" style={{ fontSize: 14, fontWeight: 700, color: '#0F172A', wordBreak: 'break-word', whiteSpace: 'normal' }}>{r.opponent || 'Chưa có đối thủ'}</strong>
+                  )}
+                  {r.rating && <small className="opponent-elo" style={{ fontSize: 12, color: '#64748B', fontWeight: 500, whiteSpace: 'nowrap' }}>Elo {r.rating}</small>}
+                </div>
 
-              <div className="match-card-result">
-                <span className={`result-badge ${resClass}`}>{resText}</span>
+                <div className="result-col" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <span className={`result-badge ${resClass}`}>{resText}</span>
+                </div>
               </div>
             </div>
           );
