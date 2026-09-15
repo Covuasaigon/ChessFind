@@ -3456,13 +3456,13 @@ label .input-wrap {
   .tournament-info-slider-card {
     height: auto;
     min-height: 220px;
-    max-height: 70vh;
-    padding: 6px 0;
+    max-height: 75vh;
+    padding: 0;
   }
 
   .tournament-info-slider-img {
-    max-height: 70vh;
-    width: auto;
+    max-height: 75vh;
+    width: 100%;
     height: auto;
     object-fit: contain !important;
   }

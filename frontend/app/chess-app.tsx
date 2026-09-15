@@ -164,7 +164,11 @@ export default function ChessApp() {
         <>
           <HeroSection q={q} setQ={setQ} onSearch={e => { e.preventDefault(); go('search'); }} />
 
-          <section className="section">
+          <DynamicBanner banners={banners} onNavigate={v => go(v as View)} />
+
+          <TournamentInfoSlider />
+
+          <section className="section" style={{ marginTop: 24, marginBottom: 32 }}>
             <div className="section-heading">
               <div><span className="eyebrow muted">CÙNG CON THEO DÕI</span><h2>Các giải đấu mới nhất</h2></div>
               <button className="text-btn" onClick={() => go('tournaments')}>Xem tất cả <ArrowUpRight size={17} /></button>
@@ -174,10 +178,6 @@ export default function ChessApp() {
             </div>
             {!tourneys.length && !loading && <p className="subtle below">Chưa có giải đấu được công bố. Quản trị viên có thể dán link Chess-Results trong mục Quản trị.</p>}
           </section>
-
-          <DynamicBanner banners={banners} onNavigate={v => go(v as View)} />
-
-          <TournamentInfoSlider />
         </>
       )}
 
@@ -1309,24 +1309,32 @@ function TournamentInfoSlider() {
           </div>
 
           <div
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveImage({ url: currentSlide.image_url, title: currentSlide.title });
+            }}
             style={{
               position: 'absolute',
               bottom: 12,
               right: 12,
-              background: 'rgba(6, 43, 79, 0.85)',
-              backdropFilter: 'blur(4px)',
+              background: 'rgba(6, 43, 79, 0.92)',
+              backdropFilter: 'blur(6px)',
               color: '#FFFFFF',
-              padding: '6px 12px',
+              padding: '8px 14px',
               borderRadius: 20,
-              fontSize: 12,
-              fontWeight: 600,
+              fontSize: 13,
+              fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              zIndex: 3
+              zIndex: 10,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              pointerEvents: 'auto'
             }}
           >
-            <Search size={14} /> Phóng to xem chi tiết
+            <Search size={15} /> Phóng to xem chi tiết
           </div>
 
           {/* Navigation Arrows Overlay */}

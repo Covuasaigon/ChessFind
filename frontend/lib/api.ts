@@ -593,7 +593,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
           const s = stats(playerObj);
           const nextMatch = getNextMatch(playerObj);
-          const medalPrediction = getMedal(rank, t.group || p.ageGroup, t.prizes);
+          const medalPrediction = getMedal(rank, t.group || p.ageGroup || undefined, t.prizes);
 
           const fullPlayer = {
             ...playerObj,
