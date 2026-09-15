@@ -967,62 +967,83 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
         const allParsedCategories: { cat: any; tour: Tournament }[] = [];
 
-        for (const item of items) {
-          try {
-            const t = await source.tournament(item.url, item.group);
-            t.name = mainTournamentTitle;
-            allParsedCategories.push({ cat: item, tour: t });
-            totalPlayers += t.players.length;
-            successCount++;
+        const failedItems: string[] = [];
 
-            // Insert into relational tables categories, players, rankings
+        for (const item of items) {
+          let t: Tournament | null = null;
+          let lastErr: any = null;
+
+          for (let attempt = 1; attempt <= 3; attempt++) {
             try {
+              t = await source.tournament(item.url, item.group);
+              break;
+            } catch (err) {
+              lastErr = err;
+              if (attempt < 3) {
+                await new Promise(r => setTimeout(r, 1000 * attempt));
+              }
+            }
+          }
+
+          if (!t) {
+            console.error('Batch import error after retries for', item.url, lastErr);
+            failedItems.push(item.group || item.url);
+            continue;
+          }
+
+          t.name = mainTournamentTitle;
+          allParsedCategories.push({ cat: item, tour: t });
+          totalPlayers += t.players.length;
+          successCount++;
+
+          // Insert into relational tables categories, players, rankings
+          try {
+            await db.prepare(`
+              INSERT INTO categories (id, tournament_id, name, gender, age_group, source_url, total_players, rounds, updated, payload)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                gender = excluded.gender,
+                age_group = excluded.age_group,
+                total_players = excluded.total_players,
+                rounds = excluded.rounds,
+                updated = excluded.updated,
+                payload = excluded.payload
+            `).bind(t.id, masterId, t.group, t.players[0]?.gender || null, t.players[0]?.ageGroup || null, t.source, t.players.length, t.rounds || null, t.updated, JSON.stringify(t)).run();
+
+            for (const p of t.players) {
               await db.prepare(`
-                INSERT INTO categories (id, tournament_id, name, gender, age_group, source_url, total_players, rounds, updated, payload)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO players (id, category_id, tournament_id, snr, name, fide_id, rating, club, country, gender, age_group, updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   name = excluded.name,
+                  fide_id = excluded.fide_id,
+                  rating = excluded.rating,
+                  club = excluded.club,
                   gender = excluded.gender,
                   age_group = excluded.age_group,
-                  total_players = excluded.total_players,
-                  rounds = excluded.rounds,
-                  updated = excluded.updated,
-                  payload = excluded.payload
-              `).bind(t.id, masterId, t.group, t.players[0]?.gender || null, t.players[0]?.ageGroup || null, t.source, t.players.length, t.rounds || null, t.updated, JSON.stringify(t)).run();
+                  updated = excluded.updated
+              `).bind(p.id, t.id, masterId, p.snr, p.name, p.fideId || null, p.rating || null, p.club || '', p.country || null, p.gender || null, p.ageGroup || null, t.updated).run();
 
-              for (const p of t.players) {
-                await db.prepare(`
-                  INSERT INTO players (id, category_id, tournament_id, snr, name, fide_id, rating, club, country, gender, age_group, updated)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(id) DO UPDATE SET
-                    name = excluded.name,
-                    fide_id = excluded.fide_id,
-                    rating = excluded.rating,
-                    club = excluded.club,
-                    gender = excluded.gender,
-                    age_group = excluded.age_group,
-                    updated = excluded.updated
-                `).bind(p.id, t.id, masterId, p.snr, p.name, p.fideId || null, p.rating || null, p.club || '', p.country || null, p.gender || null, p.ageGroup || null, t.updated).run();
-
-                await db.prepare(`
-                  INSERT INTO rankings (player_id, category_id, rank, points, buchholz, sonneborn_berger, performance, ties_json)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(player_id) DO UPDATE SET
-                    rank = excluded.rank,
-                    points = excluded.points,
-                    buchholz = excluded.buchholz,
-                    sonneborn_berger = excluded.sonneborn_berger,
-                    performance = excluded.performance,
-                    ties_json = excluded.ties_json
-                `).bind(p.id, t.id, p.rank || null, p.points || null, p.buchholz || null, p.sonnebornBerger || null, p.performance || null, JSON.stringify(p.ties)).run();
-              }
-            } catch (dbErr) {
-              console.error('Relational DB save error:', dbErr);
+              await db.prepare(`
+                INSERT INTO rankings (player_id, category_id, rank, points, buchholz, sonneborn_berger, performance, ties_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(player_id) DO UPDATE SET
+                  rank = excluded.rank,
+                  points = excluded.points,
+                  buchholz = excluded.buchholz,
+                  sonneborn_berger = excluded.sonneborn_berger,
+                  performance = excluded.performance,
+                  ties_json = excluded.ties_json
+              `).bind(p.id, t.id, p.rank || null, p.points || null, p.buchholz || null, p.sonnebornBerger || null, p.performance || null, JSON.stringify(p.ties)).run();
             }
-
-          } catch (err) {
-            console.error('Batch import error for', item.url, err);
+          } catch (dbErr) {
+            console.error('Relational DB save error:', dbErr);
           }
+        }
+
+        if (!allParsedCategories.length) {
+          return json({ error: 'Không thể đồng bộ bảng đấu nào. Vui lòng thử lại sau.' }, 502, {}, req);
         }
 
         // Build composite master tournament payload combining all parsed categories
@@ -1085,16 +1106,24 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           }
         }
 
-        await log(true, `Đồng bộ V2 giải đấu: ${mainTournamentTitle} · ${successCount}/${items.length} bảng đấu, tổng ${totalPlayers} kỳ thủ`);
+        const isFullySuccess = successCount === items.length;
+        await log(isFullySuccess, `Đồng bộ V2 giải đấu: ${mainTournamentTitle} · ${successCount}/${items.length} bảng đấu, tổng ${totalPlayers} kỳ thủ`);
         await logSync({
           tournament_id: masterId,
           tournament_name: mainTournamentTitle,
           url: items[0]?.url || `https://chess-results.com/tnr${masterId}.aspx?lan=1`,
-          status: 'success',
+          status: isFullySuccess ? 'success' : 'failed',
           players_updated: totalPlayers,
-          message: `Đồng bộ V2 thành công: ${mainTournamentTitle} (${successCount} bảng, ${totalPlayers} kỳ thủ)`
+          message: isFullySuccess
+            ? `Đồng bộ V2 thành công: ${mainTournamentTitle} (${successCount} bảng, ${totalPlayers} kỳ thủ)`
+            : `Đồng bộ V2 chưa hoàn tất: ${successCount}/${items.length} bảng thành công, ${failedItems.length} bảng thất bại (${failedItems.join(', ')})`
         });
-        return json({ message: `Đã đồng bộ thành công ${successCount} bảng đấu với ${totalPlayers} kỳ thủ!` }, 200, {}, req);
+
+        if (isFullySuccess) {
+          return json({ message: `Đã đồng bộ thành công ${successCount} bảng đấu với tổng cộng ${totalPlayers} kỳ thủ!` }, 200, {}, req);
+        } else {
+          return json({ message: `Đã đồng bộ ${successCount}/${items.length} bảng đấu (${totalPlayers} kỳ thủ). Cảnh báo: có ${failedItems.length} bảng chưa tải được (${failedItems.join(', ')}).` }, 200, {}, req);
+        }
       }
 
       if (action === 'banner_create') {
