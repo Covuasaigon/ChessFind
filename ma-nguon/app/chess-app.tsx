@@ -237,14 +237,16 @@ export default function ChessApp() {
         {current.demo && <div className="notice demo-notice"><Info size={17} /> Dữ liệu minh họa để trải nghiệm ứng dụng.</div>}
 
         <div className="profile-heading">
-          <Avatar p={player} large />
-          <div className="profile-name">
-            <span className="eyebrow">Bảng đấu: {player.ageGroup || current.group}</span>
-            <h1>{player.name}</h1>
-            <p>{player.club || formatClubName(player.federation || '')}{player.federation && player.federation !== player.club ? ` (LĐ: ${player.federation})` : ''} <span className="desktop-only">· SBD {player.snr}</span> {player.fideId ? `· FIDE ID: ${player.fideId}` : ''}</p>
+          <div className="profile-main">
+            <Avatar p={player} large />
+            <div className="profile-name">
+              <span className="eyebrow">Bảng đấu: {player.ageGroup || current.group}</span>
+              <h1>{player.name}</h1>
+              <p>{player.club || formatClubName(player.federation || '')}{player.federation && player.federation !== player.club ? ` (LĐ: ${player.federation})` : ''} · SBD {player.snr} {player.fideId ? `· FIDE ID: ${player.fideId}` : ''}</p>
+            </div>
           </div>
           <button className={'save-btn ' + (saved.includes(current.id + ':' + player.id) ? 'saved' : '')} onClick={() => bookmark(current, player)} aria-label="Lưu kỳ thủ">
-            <Bookmark size={21} fill={saved.includes(current.id + ':' + player.id) ? 'currentColor' : 'none'} />
+            <Bookmark size={20} fill={saved.includes(current.id + ':' + player.id) ? 'currentColor' : 'none'} />
             <span>{saved.includes(current.id + ':' + player.id) ? 'Đã lưu' : 'Lưu kỳ thủ'}</span>
           </button>
         </div>
