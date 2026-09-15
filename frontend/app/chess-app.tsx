@@ -298,7 +298,7 @@ export default function ChessApp() {
                     <div>
                       <h2>Hồ sơ kỳ thủ · {player.name}</h2>
                       <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 600 }}>
-                        SBD: <b>{player.snr}</b> · Bảng: <b>{currentDivision}</b>{player.ageGroup && player.ageGroup !== currentDivision ? <> · Nhóm tuổi: <b>{player.ageGroup}</b></> : null} · Dự kiến: <b>{medal ? medal.label : 'Chưa có giải thưởng'}</b>
+                        SBD: <b>{player.snr}</b> · Bảng: <b>{currentDivision}</b>{player.ageGroup && player.ageGroup !== currentDivision ? <> · Nhóm tuổi: <b>{player.ageGroup}</b></> : null} · Dự kiến: <b>{medal ? medal.label : 'Chưa đạt giải'}</b>
                       </span>
                     </div>
                   </div>
@@ -332,7 +332,7 @@ export default function ChessApp() {
                   </div>
                   <div className="dash-stat">
                     <span className="dash-stat-label">🥇 Dự đoán giải thưởng</span>
-                    <span className="dash-stat-val">{medal ? `${medal.medal} ${medal.label}` : 'Chưa đạt huy chương'}</span>
+                    <span className="dash-stat-val">{medal ? `${medal.medal} ${medal.label}` : 'Chưa đạt giải'}</span>
                     <span className="dash-stat-sub">theo cơ cấu giải</span>
                   </div>
                 </div>
@@ -436,7 +436,7 @@ export default function ChessApp() {
                     </span>
                     <strong style={{ fontSize: 17, fontWeight: 800, color: medal ? '#B45309' : '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span>{medal ? medal.medal : '🎖️'}</span>
-                      <span>{medal ? medal.label : 'Chưa đạt huy chương'}</span>
+                      <span>{medal ? medal.label : 'Chưa đạt giải'}</span>
                     </strong>
                     <small style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 2 }}>
                       theo cơ cấu giải thưởng ban tổ chức
