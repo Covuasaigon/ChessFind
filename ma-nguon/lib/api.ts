@@ -924,8 +924,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         if (!await lock('source-detect', 2)) return json({ error: 'Vui lòng chờ vài giây giữa các lần kiểm tra.' }, 429, {}, req);
         const info = await source.detect(String(b.url || ''));
 
-        // Mark categories status based on database existence
+        // Mark categories status based on database existence (preserve 'Lỗi tải')
         for (const cat of info.categories) {
+          if (cat.status === 'Lỗi tải') continue;
           try {
             const existingCat = await db.prepare('SELECT id FROM categories WHERE id = ?').bind(cat.id).first();
             cat.status = existingCat ? 'Đã nhập' : 'Chưa nhập';

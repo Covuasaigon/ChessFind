@@ -1,8 +1,9 @@
 import { formatClubName, stats, getNextMatch, getMedal, type Tournament, type Player } from './chess';
 import { importTournament, importPlayer, validateSource, detectCategories, type CategoryDetectResult } from './chess-source';
 import { DEFAULT_ADMIN } from './default-admin';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 
 export interface Database { prepare(sql: string): Statement; batch(statements: Statement[]): Promise<any[]> }
 export interface Statement { bind(...args: any[]): Statement; first<T = any>(): Promise<T | null>; all<T = any>(): Promise<{ results: T[] }>; run(): Promise<{ meta: { changes: number } }> }
@@ -76,10 +77,12 @@ async function ensureSlidesTableSchema(db: Database) {
       await db.prepare('CREATE INDEX IF NOT EXISTS idx_tournament_slides_tournament ON tournament_slides (tournament_id);').run();
       await db.prepare('PRAGMA foreign_keys=ON;').run();
     }
+    await migrateLocalImagesToPermanent(db);
   } catch (e) {
     console.error('Error healing tournament_slides schema:', e);
   }
 }
+
 async function passwordOK(password: string, c: typeof DEFAULT_ADMIN) { const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']); const actual = hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(c.salt), iterations: c.iterations }, key, 256)); let diff = actual.length ^ c.hash.length; for (let i = 0; i < actual.length; i++)diff |= actual.charCodeAt(i) ^ (c.hash.charCodeAt(i) || 0); return diff === 0 }
 
 async function uploadToSupabaseStorage(fileBuffer: Uint8Array, filename: string, mimeType: string): Promise<string | null> {
@@ -139,11 +142,198 @@ async function uploadToSupabaseStorage(fileBuffer: Uint8Array, filename: string,
   return null;
 }
 
+async function uploadToCloudinary(fileBuffer: Uint8Array, filename: string, mimeType: string): Promise<string | null> {
+  try {
+    let cloudName = process.env.CLOUDINARY_CLOUD_NAME || '';
+    let apiKey = process.env.CLOUDINARY_API_KEY || '';
+    let apiSecret = process.env.CLOUDINARY_API_SECRET || '';
+    let uploadPreset = process.env.CLOUDINARY_UPLOAD_PRESET || '';
+
+    const cloudinaryUrl = process.env.CLOUDINARY_URL;
+    if (cloudinaryUrl) {
+      try {
+        const u = new URL(cloudinaryUrl);
+        if (u.protocol === 'cloudinary:') {
+          apiKey = decodeURIComponent(u.username);
+          apiSecret = decodeURIComponent(u.password);
+          cloudName = u.hostname;
+        }
+      } catch {}
+    }
+
+    if (!cloudName) {
+      return null;
+    }
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+    const formData = new FormData();
+    const blob = new Blob([Buffer.from(fileBuffer)], { type: mimeType });
+    formData.append('file', blob, filename);
+    formData.append('folder', 'covuasaigon');
+
+    if (apiKey && apiSecret) {
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      formData.append('api_key', apiKey);
+      formData.append('timestamp', timestamp);
+
+      const toSign = `folder=covuasaigon&timestamp=${timestamp}${apiSecret}`;
+      const signature = createHash('sha1').update(toSign).digest('hex');
+      formData.append('signature', signature);
+    } else if (uploadPreset) {
+      formData.append('upload_preset', uploadPreset);
+    } else {
+      return null;
+    }
+
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('Cloudinary upload error:', res.status, errText);
+      return null;
+    }
+
+    const data = await res.json() as any;
+    if (data && data.secure_url) {
+      return data.secure_url;
+    }
+  } catch (err) {
+    console.error('Cloudinary upload exception:', err);
+  }
+  return null;
+}
+
+async function migrateLocalImagesToPermanent(db: Database) {
+  try {
+    const slides = await db.prepare("SELECT id, image_url FROM tournament_slides WHERE image_url LIKE '/uploads/%' OR image_url LIKE 'http%://%/uploads/%'").all<{ id: string; image_url: string }>();
+    if (slides && slides.results && slides.results.length > 0) {
+      for (const row of slides.results) {
+        const localPath = row.image_url.replace(/^https?:\/\/[^\/]+/, '');
+        const relPath = localPath.replace(/^\//, '');
+        const possibleFiles = [
+          resolve(process.cwd(), relPath),
+          resolve(process.cwd(), 'public', relPath),
+          resolve(process.cwd(), 'web', relPath),
+          resolve(process.cwd(), '../public', relPath),
+          resolve(process.cwd(), '../web', relPath)
+        ];
+        let fileBuffer: Uint8Array | null = null;
+        for (const f of possibleFiles) {
+          try {
+            if (existsSync(f)) {
+              fileBuffer = readFileSync(f);
+              break;
+            }
+          } catch {}
+        }
+        if (fileBuffer && fileBuffer.length > 0) {
+          const mimeType = relPath.endsWith('.png') ? 'image/png' : relPath.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+          const filename = `migrated_${row.id}.${relPath.split('.').pop() || 'png'}`;
+          let newUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = `data:${mimeType};base64,${Buffer.from(fileBuffer).toString('base64')}`;
+
+          if (newUrl) {
+            await db.prepare('UPDATE tournament_slides SET image_url = ? WHERE id = ?').bind(newUrl, row.id).run();
+          }
+        }
+      }
+    }
+
+    const banners = await db.prepare("SELECT id, image_url FROM home_banners WHERE image_url LIKE '/uploads/%' OR image_url LIKE 'http%://%/uploads/%'").all<{ id: string; image_url: string }>();
+    if (banners && banners.results && banners.results.length > 0) {
+      for (const row of banners.results) {
+        const localPath = row.image_url.replace(/^https?:\/\/[^\/]+/, '');
+        const relPath = localPath.replace(/^\//, '');
+        const possibleFiles = [
+          resolve(process.cwd(), relPath),
+          resolve(process.cwd(), 'public', relPath),
+          resolve(process.cwd(), 'web', relPath),
+          resolve(process.cwd(), '../public', relPath),
+          resolve(process.cwd(), '../web', relPath)
+        ];
+        let fileBuffer: Uint8Array | null = null;
+        for (const f of possibleFiles) {
+          try {
+            if (existsSync(f)) {
+              fileBuffer = readFileSync(f);
+              break;
+            }
+          } catch {}
+        }
+        if (fileBuffer && fileBuffer.length > 0) {
+          const mimeType = relPath.endsWith('.png') ? 'image/png' : relPath.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+          const filename = `migrated_banner_${row.id}.${relPath.split('.').pop() || 'png'}`;
+          let newUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+          if (!newUrl) newUrl = `data:${mimeType};base64,${Buffer.from(fileBuffer).toString('base64')}`;
+
+          if (newUrl) {
+            await db.prepare('UPDATE home_banners SET image_url = ? WHERE id = ?').bind(newUrl, row.id).run();
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error migrating local images:', e);
+  }
+}
+
+async function ensureSyncLogsTableSchema(db: Database) {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS sync_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        tournament_id TEXT,
+        tournament_name TEXT,
+        url TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        status TEXT NOT NULL,
+        players_updated INTEGER DEFAULT 0 NOT NULL,
+        message TEXT NOT NULL
+      )
+    `).run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_sync_logs_created ON sync_logs (created_at);').run();
+  } catch (e) {
+    console.error('Error ensuring sync_logs table schema:', e);
+  }
+}
+
 export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   const source = {
     tournament: sourceParam.tournament ?? importTournament,
     player: sourceParam.player ?? importPlayer,
     detect: sourceParam.detect ?? detectCategories,
+  };
+
+  const logSync = async (item: {
+    tournament_id?: string;
+    tournament_name?: string;
+    url: string;
+    status: 'success' | 'failed';
+    players_updated: number;
+    message: string;
+  }) => {
+    try {
+      await ensureSyncLogsTableSchema(db);
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      await db.prepare(`
+        INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, item.tournament_id || null, item.tournament_name || null, item.url, now, item.status, item.players_updated, item.message.slice(0, 1000)).run();
+
+      await db.prepare(`
+        DELETE FROM sync_logs WHERE id NOT IN (
+          SELECT id FROM sync_logs ORDER BY created_at DESC LIMIT 200
+        )
+      `).run();
+    } catch (e) {
+      console.error('logSync error:', e);
+    }
   };
 
   const log = async (ok: boolean, m: string) => { await db.batch([db.prepare('INSERT INTO logs (id, created, ok, message) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), new Date().toISOString(), ok ? 1 : 0, m.slice(0, 500)), db.prepare('DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY created DESC LIMIT 100)')]) };
@@ -204,7 +394,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   const cookie = (req: Request, value: string, max = 28800) => `sgc_session=${value}; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=${max}`;
 
   return async function handle(req: Request, ip = 'unknown'): Promise<Response> {
-    let action = ''; let authorized = false; try {
+    let action = ''; let authorized = false; let b: any = {}; try {
       const u = new URL(req.url); const path = u.pathname.replace(/\/+$/, '') || '/';
       if (req.method === 'GET') {
         if (path === '/api/tournaments') return json({ tournaments: await list() }, 200, {}, req);
@@ -222,6 +412,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           let bannersList: any[] = [];
           let prizesList: any[] = [];
           let slidesList: any[] = [];
+          let syncLogsList: any[] = [];
           try {
             bannersList = (await db.prepare('SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC').all()).results;
           } catch {}
@@ -243,7 +434,12 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
               tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
             }));
           } catch {}
-          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
+          try {
+            await ensureSyncLogsTableSchema(db);
+            const r = await db.prepare('SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50').all<any>();
+            syncLogsList = r.results || [];
+          } catch {}
+          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
         }
         if (path === '/api/slides' || path === '/api/slides/home' || path === '/api/home/slides') {
           await ensureSlidesTableSchema(db);
@@ -546,28 +742,16 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         const mimeType = isPng ? 'image/png' : isJpg ? 'image/jpeg' : 'image/webp';
         const filename = `${path.includes('slides') ? 'slide_' : ''}${crypto.randomUUID()}.${safeExt}`;
 
-        let publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+        let publicUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
+
+        if (!publicUrl) {
+          publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
+        }
 
         if (!publicUrl) {
           const base64Str = Buffer.from(fileBuffer).toString('base64');
           publicUrl = `data:${mimeType};base64,${base64Str}`;
         }
-
-        try {
-          const targetDirs = [
-            resolve(process.cwd(), '../web/uploads/slides'),
-            resolve(process.cwd(), 'web/uploads/slides'),
-            resolve(process.cwd(), 'public/uploads/slides'),
-            resolve(process.cwd(), '../public/uploads/slides'),
-            resolve(process.cwd(), 'release/web/uploads/slides')
-          ];
-          for (const dir of targetDirs) {
-            try {
-              mkdirSync(dir, { recursive: true });
-              writeFileSync(resolve(dir, filename), fileBuffer);
-            } catch {}
-          }
-        } catch {}
 
         await log(true, `Upload image thành công: ${publicUrl.startsWith('data:') ? 'Embedded Data URL' : publicUrl}`);
         return json({ url: publicUrl, message: 'Upload ảnh thành công!' }, 200, {}, req);
@@ -576,7 +760,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       if (Number(req.headers.get('content-length') || 0) > 6000000) return json({ error: 'Dữ liệu gửi lên quá lớn.' }, 413, {}, req);
       const raw = await req.text();
       if (raw.length > 6000000) return json({ error: 'Dữ liệu gửi lên quá lớn.' }, 413, {}, req);
-      let b: any = {};
+      b = {};
       if (raw && raw.trim()) {
         try { b = JSON.parse(raw) } catch { return json({ error: 'Dữ liệu không hợp lệ.' }, 400, {}, req) }
       }
@@ -606,6 +790,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       const s = await session(req);
       if (!s) return json({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' }, 401, {}, req);
       if (req.headers.get('x-csrf-token') !== s.csrf) return json({ error: 'Phiên xác thực không hợp lệ. Hãy tải lại trang.' }, 403, {}, req);
+      authorized = true;
 
       if (path === '/api/tournaments/bulk') {
         const ids: string[] = Array.isArray(b.ids) ? b.ids.map((x: any) => String(x).trim()).filter(Boolean) : [];
@@ -628,7 +813,6 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         await log(true, `Đã xóa hàng loạt ${ids.length} giải đấu.`);
         return json({ message: `Đã xóa thành công ${ids.length} giải đấu.` }, 200, {}, req);
       }
-      authorized = true;
 
       if (path === '/api/admin/slides' || path.startsWith('/api/admin/slides/')) {
         await ensureSlidesTableSchema(db);
@@ -740,8 +924,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         if (!await lock('source-detect', 2)) return json({ error: 'Vui lòng chờ vài giây giữa các lần kiểm tra.' }, 429, {}, req);
         const info = await source.detect(String(b.url || ''));
 
-        // Mark categories status based on database existence
+        // Mark categories status based on database existence (preserve 'Lỗi tải')
         for (const cat of info.categories) {
+          if (cat.status === 'Lỗi tải') continue;
           try {
             const existingCat = await db.prepare('SELECT id FROM categories WHERE id = ?').bind(cat.id).first();
             cat.status = existingCat ? 'Đã nhập' : 'Chưa nhập';
@@ -783,62 +968,83 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
         const allParsedCategories: { cat: any; tour: Tournament }[] = [];
 
-        for (const item of items) {
-          try {
-            const t = await source.tournament(item.url, item.group);
-            t.name = mainTournamentTitle;
-            allParsedCategories.push({ cat: item, tour: t });
-            totalPlayers += t.players.length;
-            successCount++;
+        const failedItems: string[] = [];
 
-            // Insert into relational tables categories, players, rankings
+        for (const item of items) {
+          let t: Tournament | null = null;
+          let lastErr: any = null;
+
+          for (let attempt = 1; attempt <= 3; attempt++) {
             try {
+              t = await source.tournament(item.url, item.group);
+              break;
+            } catch (err) {
+              lastErr = err;
+              if (attempt < 3) {
+                await new Promise(r => setTimeout(r, 1000 * attempt));
+              }
+            }
+          }
+
+          if (!t) {
+            console.error('Batch import error after retries for', item.url, lastErr);
+            failedItems.push(item.group || item.url);
+            continue;
+          }
+
+          t.name = mainTournamentTitle;
+          allParsedCategories.push({ cat: item, tour: t });
+          totalPlayers += t.players.length;
+          successCount++;
+
+          // Insert into relational tables categories, players, rankings
+          try {
+            await db.prepare(`
+              INSERT INTO categories (id, tournament_id, name, gender, age_group, source_url, total_players, rounds, updated, payload)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                gender = excluded.gender,
+                age_group = excluded.age_group,
+                total_players = excluded.total_players,
+                rounds = excluded.rounds,
+                updated = excluded.updated,
+                payload = excluded.payload
+            `).bind(t.id, masterId, t.group, t.players[0]?.gender || null, t.players[0]?.ageGroup || null, t.source, t.players.length, t.rounds || null, t.updated, JSON.stringify(t)).run();
+
+            for (const p of t.players) {
               await db.prepare(`
-                INSERT INTO categories (id, tournament_id, name, gender, age_group, source_url, total_players, rounds, updated, payload)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO players (id, category_id, tournament_id, snr, name, fide_id, rating, club, country, gender, age_group, updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   name = excluded.name,
+                  fide_id = excluded.fide_id,
+                  rating = excluded.rating,
+                  club = excluded.club,
                   gender = excluded.gender,
                   age_group = excluded.age_group,
-                  total_players = excluded.total_players,
-                  rounds = excluded.rounds,
-                  updated = excluded.updated,
-                  payload = excluded.payload
-              `).bind(t.id, masterId, t.group, t.players[0]?.gender || null, t.players[0]?.ageGroup || null, t.source, t.players.length, t.rounds || null, t.updated, JSON.stringify(t)).run();
+                  updated = excluded.updated
+              `).bind(p.id, t.id, masterId, p.snr, p.name, p.fideId || null, p.rating || null, p.club || '', p.country || null, p.gender || null, p.ageGroup || null, t.updated).run();
 
-              for (const p of t.players) {
-                await db.prepare(`
-                  INSERT INTO players (id, category_id, tournament_id, snr, name, fide_id, rating, club, country, gender, age_group, updated)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(id) DO UPDATE SET
-                    name = excluded.name,
-                    fide_id = excluded.fide_id,
-                    rating = excluded.rating,
-                    club = excluded.club,
-                    gender = excluded.gender,
-                    age_group = excluded.age_group,
-                    updated = excluded.updated
-                `).bind(p.id, t.id, masterId, p.snr, p.name, p.fideId || null, p.rating || null, p.club || '', p.country || null, p.gender || null, p.ageGroup || null, t.updated).run();
-
-                await db.prepare(`
-                  INSERT INTO rankings (player_id, category_id, rank, points, buchholz, sonneborn_berger, performance, ties_json)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(player_id) DO UPDATE SET
-                    rank = excluded.rank,
-                    points = excluded.points,
-                    buchholz = excluded.buchholz,
-                    sonneborn_berger = excluded.sonneborn_berger,
-                    performance = excluded.performance,
-                    ties_json = excluded.ties_json
-                `).bind(p.id, t.id, p.rank || null, p.points || null, p.buchholz || null, p.sonnebornBerger || null, p.performance || null, JSON.stringify(p.ties)).run();
-              }
-            } catch (dbErr) {
-              console.error('Relational DB save error:', dbErr);
+              await db.prepare(`
+                INSERT INTO rankings (player_id, category_id, rank, points, buchholz, sonneborn_berger, performance, ties_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(player_id) DO UPDATE SET
+                  rank = excluded.rank,
+                  points = excluded.points,
+                  buchholz = excluded.buchholz,
+                  sonneborn_berger = excluded.sonneborn_berger,
+                  performance = excluded.performance,
+                  ties_json = excluded.ties_json
+              `).bind(p.id, t.id, p.rank || null, p.points || null, p.buchholz || null, p.sonnebornBerger || null, p.performance || null, JSON.stringify(p.ties)).run();
             }
-
-          } catch (err) {
-            console.error('Batch import error for', item.url, err);
+          } catch (dbErr) {
+            console.error('Relational DB save error:', dbErr);
           }
+        }
+
+        if (!allParsedCategories.length) {
+          return json({ error: 'Không thể đồng bộ bảng đấu nào. Vui lòng thử lại sau.' }, 502, {}, req);
         }
 
         // Build composite master tournament payload combining all parsed categories
@@ -901,8 +1107,24 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           }
         }
 
-        await log(true, `Đồng bộ V2 giải đấu: ${mainTournamentTitle} · ${successCount}/${items.length} bảng đấu, tổng ${totalPlayers} kỳ thủ`);
-        return json({ message: `Đã đồng bộ thành công ${successCount} bảng đấu với ${totalPlayers} kỳ thủ!` }, 200, {}, req);
+        const isFullySuccess = successCount === items.length;
+        await log(isFullySuccess, `Đồng bộ V2 giải đấu: ${mainTournamentTitle} · ${successCount}/${items.length} bảng đấu, tổng ${totalPlayers} kỳ thủ`);
+        await logSync({
+          tournament_id: masterId,
+          tournament_name: mainTournamentTitle,
+          url: items[0]?.url || `https://chess-results.com/tnr${masterId}.aspx?lan=1`,
+          status: isFullySuccess ? 'success' : 'failed',
+          players_updated: totalPlayers,
+          message: isFullySuccess
+            ? `Đồng bộ V2 thành công: ${mainTournamentTitle} (${successCount} bảng, ${totalPlayers} kỳ thủ)`
+            : `Đồng bộ V2 chưa hoàn tất: ${successCount}/${items.length} bảng thành công, ${failedItems.length} bảng thất bại (${failedItems.join(', ')})`
+        });
+
+        if (isFullySuccess) {
+          return json({ message: `Đã đồng bộ thành công ${successCount} bảng đấu với tổng cộng ${totalPlayers} kỳ thủ!` }, 200, {}, req);
+        } else {
+          return json({ message: `Đã đồng bộ ${successCount}/${items.length} bảng đấu (${totalPlayers} kỳ thủ). Cảnh báo: có ${failedItems.length} bảng chưa tải được (${failedItems.join(', ')}).` }, 200, {}, req);
+        }
       }
 
       if (action === 'banner_create') {
@@ -1058,6 +1280,14 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         if (t.updated !== old.updated || t.id !== old.id || action === 'force_sync') statements.push(db.prepare('DELETE FROM details WHERE tid = ?').bind(old.id));
         await db.batch(statements);
         await log(true, `${action === 'edit' ? 'Sửa' : action === 'force_sync' ? 'Ép đồng bộ' : 'Đồng bộ'} giải: ${t.name}`);
+        await logSync({
+          tournament_id: t.id,
+          tournament_name: t.name,
+          url: t.source,
+          status: 'success',
+          players_updated: t.players.length,
+          message: `Đồng bộ thành công từ Chess-Results (${action}): ${t.name} (${t.players.length} kỳ thủ)`
+        });
         return json({ message: action === 'edit' ? 'Đã lưu chỉnh sửa.' : action === 'force_sync' ? 'Đã ép đồng bộ lại và làm sạch cache dữ liệu thành công.' : 'Đã cập nhật kết quả mới nhất.' }, 200, {}, req);
       }
 
@@ -1088,7 +1318,19 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       return json({ error: 'Thao tác không được hỗ trợ.' }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info'].includes(action)) try { await log(false, m) } catch { }
+      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info'].includes(action)) {
+        try {
+          await log(false, m);
+          await logSync({
+            tournament_id: b.id || undefined,
+            tournament_name: b.name || undefined,
+            url: b.url || b.source || '',
+            status: 'failed',
+            players_updated: 0,
+            message: `Lỗi đồng bộ Chess-Results: ${m}`
+          });
+        } catch { }
+      }
       return json({ error: m }, 502, {}, req);
     }
   };

@@ -82,6 +82,7 @@ async function ensureSlidesTableSchema(db: Database) {
     console.error('Error healing tournament_slides schema:', e);
   }
 }
+
 async function passwordOK(password: string, c: typeof DEFAULT_ADMIN) { const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']); const actual = hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unhex(c.salt), iterations: c.iterations }, key, 256)); let diff = actual.length ^ c.hash.length; for (let i = 0; i < actual.length; i++)diff |= actual.charCodeAt(i) ^ (c.hash.charCodeAt(i) || 0); return diff === 0 }
 
 async function uploadToSupabaseStorage(fileBuffer: Uint8Array, filename: string, mimeType: string): Promise<string | null> {
@@ -396,47 +397,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
     let action = ''; let authorized = false; let b: any = {}; try {
       const u = new URL(req.url); const path = u.pathname.replace(/\/+$/, '') || '/';
       if (req.method === 'GET') {
-        if (path === '/api/tournaments' || path.startsWith('/api/tournaments/')) {
-          const tid = u.searchParams.get('id') || u.searchParams.get('t') || path.replace(/^\/api\/tournaments\/?/, '');
-          if (tid && tid !== 'tournaments') {
-            const t = await get(tid, true);
-            if (!t) return json({ error: 'Giải đấu không tồn tại.' }, 404, {}, req);
-
-            let matchesList: any[] = [];
-            try {
-              const r = await db.prepare('SELECT * FROM matches WHERE category_id = ? OR player_id LIKE ? ORDER BY round ASC, board ASC').bind(tid, `${tid}-%`).all<any>();
-              matchesList = r.results || [];
-            } catch {}
-
-            const playersWithStats = (t.players || []).map(p => {
-              const s = stats(p);
-              return {
-                ...p,
-                games: s.played,
-                totalGames: s.played,
-                whiteGames: s.whiteGames,
-                blackGames: s.blackGames,
-                wins: s.wins,
-                draws: s.draws,
-                losses: s.losses,
-                whiteWins: s.whiteWins,
-                whiteDraws: s.whiteDraws,
-                whiteLosses: s.whiteLosses,
-                blackWins: s.blackWins,
-                blackDraws: s.blackDraws,
-                blackLosses: s.blackLosses
-              };
-            });
-
-            return json({
-              tournament: { ...t, players: playersWithStats },
-              players: playersWithStats,
-              rounds: t.rounds || (matchesList.length ? Math.max(...matchesList.map(m => m.round || 0)) : null),
-              matches: matchesList
-            }, 200, {}, req);
-          }
-          return json({ tournaments: await list() }, 200, {}, req);
-        }
+        if (path === '/api/tournaments') return json({ tournaments: await list() }, 200, {}, req);
         if (path === '/api/banners') {
           try {
             const r = await db.prepare('SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC').all();
@@ -647,7 +608,6 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             totalPlayers,
             club,
             games: s.played,
-            totalGames: s.played,
             whiteGames: s.whiteGames,
             blackGames: s.blackGames,
             whiteWins: s.whiteWins,
@@ -669,7 +629,6 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             totalPlayers,
             club,
             games: s.played,
-            totalGames: s.played,
             whiteGames: s.whiteGames,
             blackGames: s.blackGames,
             whiteWins: s.whiteWins,
@@ -965,8 +924,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         if (!await lock('source-detect', 2)) return json({ error: 'Vui lòng chờ vài giây giữa các lần kiểm tra.' }, 429, {}, req);
         const info = await source.detect(String(b.url || ''));
 
-        // Mark categories status based on database existence
+        // Mark categories status based on database existence (preserve 'Lỗi tải')
         for (const cat of info.categories) {
+          if (cat.status === 'Lỗi tải') continue;
           try {
             const existingCat = await db.prepare('SELECT id FROM categories WHERE id = ?').bind(cat.id).first();
             cat.status = existingCat ? 'Đã nhập' : 'Chưa nhập';
@@ -1311,33 +1271,11 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           t.name = old.name;
         }
         t.published = old.published; const statements = [];
-        const nowSyncIso = new Date().toISOString();
-        const syncIntervalVal = old.syncInterval ?? old.sync_interval ?? 5;
-        const autoSyncVal = old.autoSync ?? old.auto_sync ?? true;
-        const nextSyncIso = autoSyncVal ? new Date(Date.now() + syncIntervalVal * 60 * 1000).toISOString() : null;
-
-        t.autoSync = autoSyncVal;
-        t.auto_sync = autoSyncVal;
-        t.syncInterval = syncIntervalVal;
-        t.sync_interval = syncIntervalVal;
-        t.lastSync = nowSyncIso;
-        t.last_sync = nowSyncIso;
-        t.nextSync = nextSyncIso;
-        t.next_sync = nextSyncIso;
-
         if (t.id !== old.id) {
-          try {
-            statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,auto_sync,sync_interval,last_sync,next_sync,updated) VALUES (?,?,?,?,?,?,?,?)').bind(t.id, JSON.stringify(t), old.published ? 1 : 0, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.updated));
-          } catch {
-            statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)').bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
-          }
+          statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)').bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
           statements.push(db.prepare('DELETE FROM tournaments WHERE id = ?').bind(old.id));
         } else {
-          try {
-            statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, autoSyncVal ? 1 : 0, syncIntervalVal, nowSyncIso, nextSyncIso, t.id));
-          } catch {
-            statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, t.id));
-          }
+          statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, t.id));
         }
         if (t.updated !== old.updated || t.id !== old.id || action === 'force_sync') statements.push(db.prepare('DELETE FROM details WHERE tid = ?').bind(old.id));
         await db.batch(statements);
@@ -1351,35 +1289,6 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           message: `Đồng bộ thành công từ Chess-Results (${action}): ${t.name} (${t.players.length} kỳ thủ)`
         });
         return json({ message: action === 'edit' ? 'Đã lưu chỉnh sửa.' : action === 'force_sync' ? 'Đã ép đồng bộ lại và làm sạch cache dữ liệu thành công.' : 'Đã cập nhật kết quả mới nhất.' }, 200, {}, req);
-      }
-
-      if (action === 'toggle_auto_sync' || action === 'tournament_update_auto_sync') {
-        const id = String(b.id || '');
-        if (!id) return json({ error: 'Mã giải đấu không hợp lệ.' }, 400, {}, req);
-        const tour = await get(id, true);
-        if (!tour) return json({ error: 'Giải đấu không tồn tại.' }, 404, {}, req);
-
-        const newAutoSync = b.auto_sync !== undefined ? !!b.auto_sync : (b.autoSync !== undefined ? !!b.autoSync : !(tour.autoSync ?? true));
-        const newInterval = Number(b.sync_interval || b.syncInterval || tour.syncInterval || 5);
-        const nowIso = new Date().toISOString();
-        const nextSyncIso = newAutoSync ? new Date(Date.now() + newInterval * 60 * 1000).toISOString() : null;
-
-        tour.autoSync = newAutoSync;
-        tour.auto_sync = newAutoSync;
-        tour.syncInterval = newInterval;
-        tour.sync_interval = newInterval;
-        tour.nextSync = nextSyncIso;
-        tour.next_sync = nextSyncIso;
-
-        try {
-          await db.prepare('UPDATE tournaments SET payload = ?, auto_sync = ?, sync_interval = ?, next_sync = ? WHERE id = ?')
-            .bind(JSON.stringify(tour), newAutoSync ? 1 : 0, newInterval, nextSyncIso, id).run();
-        } catch {
-          await db.prepare('UPDATE tournaments SET payload = ? WHERE id = ?').bind(JSON.stringify(tour), id).run();
-        }
-
-        await log(true, `${newAutoSync ? 'Bật' : 'Tắt'} tự động đồng bộ cho giải: ${tour.name}`);
-        return json({ message: `Đã ${newAutoSync ? 'bật' : 'tắt'} tự động đồng bộ cho giải đấu.`, tournament: tour }, 200, {}, req);
       }
 
       if (action === 'tournament_update_info') {
@@ -1409,7 +1318,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       return json({ error: 'Thao tác không được hỗ trợ.' }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info', 'toggle_auto_sync', 'tournament_update_auto_sync'].includes(action)) {
+      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info'].includes(action)) {
         try {
           await log(false, m);
           await logSync({

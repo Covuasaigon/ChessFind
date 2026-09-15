@@ -1841,6 +1841,7 @@ function createApi(db2, sourceParam = {}) {
         if (!await lock("source-detect", 2)) return json({ error: "Vui l\xF2ng ch\u1EDD v\xE0i gi\xE2y gi\u1EEFa c\xE1c l\u1EA7n ki\u1EC3m tra." }, 429, {}, req);
         const info = await source.detect(String(b.url || ""));
         for (const cat of info.categories) {
+          if (cat.status === "L\u1ED7i t\u1EA3i") continue;
           try {
             const existingCat = await db2.prepare("SELECT id FROM categories WHERE id = ?").bind(cat.id).first();
             cat.status = existingCat ? "\u0110\xE3 nh\u1EADp" : "Ch\u01B0a nh\u1EADp";
