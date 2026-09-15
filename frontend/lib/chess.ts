@@ -11,6 +11,7 @@ export type Round = {
   playerWhite?: string;
   playerBlack?: string;
   result?: string;
+  resultOutcome?: 'WIN' | 'DRAW' | 'LOSS' | 'BYE' | 'PENDING' | string;
 };
 
 export type Player = {
@@ -41,6 +42,7 @@ export type Player = {
   tieBreakArray?: (number | null)[];
   rounds: Round[];
   detailsLoaded: boolean;
+  warning?: string | null;
   games?: number;
   totalGames?: number;
   whiteGames?: number;

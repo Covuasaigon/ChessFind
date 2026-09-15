@@ -1,4 +1,4 @@
-import { openDatabase } from '../database';
+import { openDatabase } from '../portable/database';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { Database } from './api';
@@ -8,12 +8,8 @@ let dbInstance: (Database & { close(): void }) | null = null;
 export function getDb(): Database {
   if (!dbInstance) {
     const root = process.cwd();
-    const rawUrl = process.env.DATABASE_URL;
-    const isPg = rawUrl && (rawUrl.startsWith('postgres://') || rawUrl.startsWith('postgresql://'));
-    const dbPath = isPg
-      ? rawUrl
-      : rawUrl
-      ? resolve(root, rawUrl)
+    const dbPath = process.env.DATABASE_URL
+      ? resolve(root, process.env.DATABASE_URL)
       : resolve(root, process.env.DATA_DIR || 'data', 'chess.sqlite');
 
     let migrationsPath = resolve(root, 'migrations');

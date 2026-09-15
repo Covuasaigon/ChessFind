@@ -2542,6 +2542,7 @@ label .input-wrap {
     margin-left: 0 !important;
     font-size: 12px !important;
   }
+
   .score-top { padding: 18px 16px; }
   .score-top strong { font-size: 32px; }
   .import-panel form { display: flex; flex-direction: column; }
