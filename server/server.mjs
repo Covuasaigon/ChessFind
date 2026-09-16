@@ -1,7 +1,7 @@
 // server.ts
 import { createServer } from "node:http";
-import { fileURLToPath } from "node:url";
-import { resolve as resolve3, dirname as dirname2, extname, sep } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { resolve as resolve4, dirname as dirname3, extname, sep } from "node:path";
 import { readFile, stat } from "node:fs/promises";
 
 // lib/chess.ts
@@ -1372,7 +1372,7 @@ function createApi(db2, sourceParam = {}) {
       console.error("logSync error:", e);
     }
   };
-  const log = async (ok, m) => {
+  const log2 = async (ok, m) => {
     await db2.batch([db2.prepare("INSERT INTO logs (id, created, ok, message) VALUES (?, ?, ?, ?)").bind(crypto.randomUUID(), (/* @__PURE__ */ new Date()).toISOString(), ok ? 1 : 0, m.slice(0, 500)), db2.prepare("DELETE FROM logs WHERE id NOT IN (SELECT id FROM logs ORDER BY created DESC LIMIT 100)")]);
   };
   const lock = async (k, s) => {
@@ -1489,12 +1489,12 @@ function createApi(db2, sourceParam = {}) {
     let b = {};
     try {
       const u = new URL(req.url);
-      const path = u.pathname.replace(/\/+$/, "") || "/";
+      const path2 = u.pathname.replace(/\/+$/, "") || "/";
       const dbSourceLog = db2.source || (process.env.DATABASE_URL ? "postgresql" : "sqlite");
-      console.log(`[API REQUEST] ${req.method} ${path} db_source=${dbSourceLog}`);
+      console.log(`[API REQUEST] ${req.method} ${path2} db_source=${dbSourceLog}`);
       if (req.method === "GET") {
-        if (path === "/api/tournaments") return json({ tournaments: await list() }, 200, {}, req);
-        if (path === "/api/banners") {
+        if (path2 === "/api/tournaments") return json({ tournaments: await list() }, 200, {}, req);
+        if (path2 === "/api/banners") {
           try {
             const r = await db2.prepare("SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC").all();
             const banners = r.results || [];
@@ -1505,7 +1505,7 @@ function createApi(db2, sourceParam = {}) {
             return json({ banners: [] }, 200, {}, req);
           }
         }
-        if (path === "/api/admin") {
+        if (path2 === "/api/admin") {
           const s2 = await session(req);
           if (!s2) return json({ admin: false }, 200, {}, req);
           let bannersList = [];
@@ -1550,7 +1550,7 @@ function createApi(db2, sourceParam = {}) {
           console.log(`[ADMIN DATA INIT] db_source=${dbSourceLog} tournaments=${tourList.length} banners=${bannersList.length} prizes=${prizesList.length} slides=${slidesList.length} syncLogs=${syncLogsList.length}`);
           return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: tourList, banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results || [] }, 200, {}, req);
         }
-        if (path === "/api/slides" || path === "/api/slides/home" || path === "/api/home/slides") {
+        if (path2 === "/api/slides" || path2 === "/api/slides/home" || path2 === "/api/home/slides") {
           await ensureSlidesTableSchema(db2);
           const tid = u.searchParams.get("tournament_id") || u.searchParams.get("t") || "";
           try {
@@ -1568,19 +1568,19 @@ function createApi(db2, sourceParam = {}) {
               ...item,
               tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
             }));
-            if (path === "/api/slides/home" || path === "/api/home/slides") {
+            if (path2 === "/api/slides/home" || path2 === "/api/home/slides") {
               return json(slidesList, 200, {}, req);
             }
             return json({ slides: slidesList }, 200, {}, req);
           } catch (err) {
             console.error("Error fetching tournament_slides:", err);
-            if (path === "/api/slides/home" || path === "/api/home/slides") {
+            if (path2 === "/api/slides/home" || path2 === "/api/home/slides") {
               return json([], 200, {}, req);
             }
             return json({ slides: [] }, 200, {}, req);
           }
         }
-        if (path === "/api/admin/slides") {
+        if (path2 === "/api/admin/slides") {
           await ensureSlidesTableSchema(db2);
           const s2 = await session(req);
           if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n." }, 401, {}, req);
@@ -1605,7 +1605,7 @@ function createApi(db2, sourceParam = {}) {
             return json({ slides: [] }, 200, {}, req);
           }
         }
-        if (path === "/api/admin/prizes") {
+        if (path2 === "/api/admin/prizes") {
           const s2 = await session(req);
           if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n." }, 401, {}, req);
           try {
@@ -1621,7 +1621,7 @@ function createApi(db2, sourceParam = {}) {
             return json({ prizes: [] }, 200, {}, req);
           }
         }
-        if (path === "/api/player") {
+        if (path2 === "/api/player") {
           const id = u.searchParams.get("t") || "", pid = u.searchParams.get("p") || "";
           if (!/^\d+$/.test(id) || !/^\d+-\d+$/.test(pid)) return json({ error: "M\xE3 h\u1ED3 s\u01A1 kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
           let t = await get(id);
@@ -1798,7 +1798,7 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
       }
       if (!["POST", "PUT", "DELETE"].includes(req.method)) return json({ error: "Ph\u01B0\u01A1ng th\u1EE9c kh\xF4ng h\u1EE3p l\u1EC7." }, 405, {}, req);
       const reqOrigin = req.headers.get("origin");
-      if (reqOrigin && process.env.NODE_ENV === "production" && path !== "/api/auth/login") {
+      if (reqOrigin && process.env.NODE_ENV === "production" && path2 !== "/api/auth/login") {
         const allowedSet = /* @__PURE__ */ new Set([
           u.origin,
           ...[
@@ -1815,7 +1815,7 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
           return json({ error: "Y\xEAu c\u1EA7u kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y thao t\xE1c trong \u1EE9ng d\u1EE5ng." }, 403, {}, req);
         }
       }
-      if (path === "/api/admin/upload-image" || path === "/api/admin/slides/upload") {
+      if (path2 === "/api/admin/upload-image" || path2 === "/api/admin/slides/upload") {
         const s2 = await session(req);
         if (!s2) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401, {}, req);
         if (req.headers.get("x-csrf-token") !== s2.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
@@ -1871,7 +1871,7 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
         }
         const safeExt = isPng ? "png" : isJpg ? "jpg" : "webp";
         const mimeType = isPng ? "image/png" : isJpg ? "image/jpeg" : "image/webp";
-        const filename = `${path.includes("slides") ? "slide_" : ""}${crypto.randomUUID()}.${safeExt}`;
+        const filename = `${path2.includes("slides") ? "slide_" : ""}${crypto.randomUUID()}.${safeExt}`;
         let publicUrl = await uploadToCloudinary(fileBuffer, filename, mimeType);
         if (!publicUrl) {
           publicUrl = await uploadToSupabaseStorage(fileBuffer, filename, mimeType);
@@ -1880,7 +1880,7 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
           const base64Str = Buffer.from(fileBuffer).toString("base64");
           publicUrl = `data:${mimeType};base64,${base64Str}`;
         }
-        await log(true, `Upload image th\xE0nh c\xF4ng: ${publicUrl.startsWith("data:") ? "Embedded Data URL" : publicUrl}`);
+        await log2(true, `Upload image th\xE0nh c\xF4ng: ${publicUrl.startsWith("data:") ? "Embedded Data URL" : publicUrl}`);
         return json({ url: publicUrl, message: "Upload \u1EA3nh th\xE0nh c\xF4ng!" }, 200, {}, req);
       }
       if (Number(req.headers.get("content-length") || 0) > 6e6) return json({ error: "D\u1EEF li\u1EC7u g\u1EEDi l\xEAn qu\xE1 l\u1EDBn." }, 413, {}, req);
@@ -1894,7 +1894,7 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
           return json({ error: "D\u1EEF li\u1EC7u kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
         }
       }
-      if (path === "/api/auth/login") {
+      if (path2 === "/api/auth/login") {
         const k = "login:" + await digest(ip), now = Date.now();
         await db2.prepare("INSERT INTO auth_attempts (key,count,reset) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count = CASE WHEN auth_attempts.reset < ? THEN 1 ELSE auth_attempts.count + 1 END, reset = CASE WHEN auth_attempts.reset < ? THEN excluded.reset ELSE auth_attempts.reset END").bind(k, now + 9e5, now, now).run();
         const at = await db2.prepare("SELECT count FROM auth_attempts WHERE key = ?").bind(k).first();
@@ -1915,7 +1915,7 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
       if (!s) return json({ error: "Phi\xEAn \u0111\u0103ng nh\u1EADp \u0111\xE3 h\u1EBFt h\u1EA1n. Vui l\xF2ng \u0111\u0103ng nh\u1EADp l\u1EA1i." }, 401, {}, req);
       if (req.headers.get("x-csrf-token") !== s.csrf) return json({ error: "Phi\xEAn x\xE1c th\u1EF1c kh\xF4ng h\u1EE3p l\u1EC7. H\xE3y t\u1EA3i l\u1EA1i trang." }, 403, {}, req);
       authorized = true;
-      if (path === "/api/tournaments/bulk") {
+      if (path2 === "/api/tournaments/bulk") {
         const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x).trim()).filter(Boolean) : [];
         if (ids.length === 0) return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t 1 gi\u1EA3i \u0111\u1EA5u \u0111\u1EC3 x\xF3a." }, 400, {}, req);
         const statements = [];
@@ -1932,17 +1932,17 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
           );
         }
         await db2.batch(statements);
-        await log(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} gi\u1EA3i \u0111\u1EA5u.`);
+        await log2(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} gi\u1EA3i \u0111\u1EA5u.`);
         return json({ message: `\u0110\xE3 x\xF3a th\xE0nh c\xF4ng ${ids.length} gi\u1EA3i \u0111\u1EA5u.` }, 200, {}, req);
       }
-      if (path === "/api/admin/slides" || path.startsWith("/api/admin/slides/")) {
+      if (path2 === "/api/admin/slides" || path2.startsWith("/api/admin/slides/")) {
         await ensureSlidesTableSchema(db2);
-        const slideId = path.replace(/^\/api\/admin\/slides\/?/, "");
+        const slideId = path2.replace(/^\/api\/admin\/slides\/?/, "");
         if (req.method === "DELETE" || b.action === "slide_delete") {
           const targetId = slideId || String(b.id || "");
           if (!targetId) return json({ error: "M\xE3 slide kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
           await db2.prepare("DELETE FROM tournament_slides WHERE id = ?").bind(targetId).run();
-          await log(true, `\u0110\xE3 x\xF3a slide id: ${targetId}`);
+          await log2(true, `\u0110\xE3 x\xF3a slide id: ${targetId}`);
           return json({ message: "\u0110\xE3 x\xF3a slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng." }, 200, {}, req);
         }
         const rawTid = b.tournament_id || b.tournamentId;
@@ -1963,7 +1963,7 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
             SET tournament_id = ?, title = ?, slide_type = ?, image_url = ?, display_order = ?, status = ?, updated_at = ?
             WHERE id = ?
           `).bind(tournament_id, title, slide_type, image_url, display_order, status, now, targetId).run();
-          await log(true, `C\u1EADp nh\u1EADt slide: ${title}`);
+          await log2(true, `C\u1EADp nh\u1EADt slide: ${title}`);
           return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt slide th\xE0nh c\xF4ng." }, 200, {}, req);
         }
         const id = crypto.randomUUID();
@@ -1971,12 +1971,12 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
           INSERT INTO tournament_slides (id, tournament_id, title, slide_type, image_url, display_order, status, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(id, tournament_id, title, slide_type, image_url, display_order, status, now, now).run();
-        await log(true, `T\u1EA1o slide m\u1EDBi: ${title}`);
+        await log2(true, `T\u1EA1o slide m\u1EDBi: ${title}`);
         return json({ message: "\u0110\xE3 t\u1EA1o slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng.", id }, 200, {}, req);
       }
-      if (path === "/api/admin/prizes" || path.startsWith("/api/admin/prizes/") || path === "/api/prizes" || path.startsWith("/api/prizes/")) {
-        const prizeId = path.replace(/^\/api\/(?:admin\/)?prizes\/?/, "");
-        if (path === "/api/prizes/bulk-delete" || path === "/api/admin/prizes/bulk-delete" || prizeId === "bulk-delete" || b.action === "prize_bulk_delete") {
+      if (path2 === "/api/admin/prizes" || path2.startsWith("/api/admin/prizes/") || path2 === "/api/prizes" || path2.startsWith("/api/prizes/")) {
+        const prizeId = path2.replace(/^\/api\/(?:admin\/)?prizes\/?/, "");
+        if (path2 === "/api/prizes/bulk-delete" || path2 === "/api/admin/prizes/bulk-delete" || prizeId === "bulk-delete" || b.action === "prize_bulk_delete") {
           const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x).trim()).filter(Boolean) : [];
           if (ids.length === 0) {
             return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t 1 quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng \u0111\u1EC3 x\xF3a." }, 400, {}, req);
@@ -1990,14 +1990,14 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
               deletedCount++;
             }
           }
-          await log(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng.`);
+          await log2(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng.`);
           return json({
             message: `\u0110\xE3 x\xF3a th\xE0nh c\xF4ng ${ids.length} c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng!`,
             deletedCount: ids.length,
             ids
           }, 200, {}, req);
         }
-        if (path === "/api/admin/prizes/bulk" || prizeId === "bulk" || b.action === "prize_bulk_apply") {
+        if (path2 === "/api/admin/prizes/bulk" || prizeId === "bulk" || b.action === "prize_bulk_apply") {
           const targets = Array.isArray(b.targets) ? b.targets : [];
           const rules = Array.isArray(b.rules) ? b.rules : [];
           const conflictStrategy = String(b.conflictStrategy || "skip");
@@ -2090,7 +2090,7 @@ ${JSON.stringify({
               createdCount++;
             }
           }
-          await log(true, `\xC1p d\u1EE5ng h\xE0ng lo\u1EA1t c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng: T\u1EA1o m\u1EDBi ${createdCount}, ghi \u0111\xE8 ${overwrittenCount}, b\u1ECF qua ${skippedCount}`);
+          await log2(true, `\xC1p d\u1EE5ng h\xE0ng lo\u1EA1t c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng: T\u1EA1o m\u1EDBi ${createdCount}, ghi \u0111\xE8 ${overwrittenCount}, b\u1ECF qua ${skippedCount}`);
           return json({
             message: `\u0110\xE3 \xE1p d\u1EE5ng th\xE0nh c\xF4ng ${createdCount} quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng cho ${targets.length} m\u1EE5c!`,
             createdCount,
@@ -2103,7 +2103,7 @@ ${JSON.stringify({
           const targetId = prizeId || String(b.id || "");
           if (!targetId) return json({ error: "M\xE3 gi\u1EA3i th\u01B0\u1EDFng kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
           await db2.prepare("DELETE FROM prizes WHERE id = ?").bind(targetId).run();
-          await log(true, `\u0110\xE3 x\xF3a c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng id: ${targetId}`);
+          await log2(true, `\u0110\xE3 x\xF3a c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng id: ${targetId}`);
           return json({ message: "\u0110\xE3 x\xF3a quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng." }, 200, {}, req);
         }
         const tournament_id = String(b.tournament_id || b.tournamentId || "").trim();
@@ -2144,7 +2144,7 @@ ${JSON.stringify({
             SET tournament_id = ?, group_name = ?, rank_from = ?, rank_to = ?, medal = ?, prize_name = ?, description = ?, updated_at = ?
             WHERE id = ?
           `).bind(tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, now, targetId).run();
-          await log(true, `C\u1EADp nh\u1EADt c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng: ${prize_name}`);
+          await log2(true, `C\u1EADp nh\u1EADt c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng: ${prize_name}`);
           return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng." }, 200, {}, req);
         }
         const id = crypto.randomUUID();
@@ -2152,14 +2152,14 @@ ${JSON.stringify({
           INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, now, now).run();
-        await log(true, `T\u1EA1o c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng m\u1EDBi: ${prize_name}`);
+        await log2(true, `T\u1EA1o c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng m\u1EDBi: ${prize_name}`);
         return json({ message: "\u0110\xE3 t\u1EA1o quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng.", id }, 200, {}, req);
       }
-      if (path === "/api/auth/logout") {
+      if (path2 === "/api/auth/logout") {
         await db2.prepare("DELETE FROM admin_sessions WHERE hash = ?").bind(s.hash).run();
         return json({ message: "\u0110\xE3 \u0111\u0103ng xu\u1EA5t." }, 200, { "Set-Cookie": cookie(req, "", 0) }, req);
       }
-      if (path !== "/api/admin") return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404, {}, req);
+      if (path2 !== "/api/admin") return json({ error: "Kh\xF4ng t\xECm th\u1EA5y ch\u1EE9c n\u0103ng." }, 404, {}, req);
       action = String(b.action || "");
       if (action === "detect") {
         if (!await lock("source-detect", 2)) return json({ error: "Vui l\xF2ng ch\u1EDD v\xE0i gi\xE2y gi\u1EEFa c\xE1c l\u1EA7n ki\u1EC3m tra." }, 429, {}, req);
@@ -2189,7 +2189,7 @@ ${JSON.stringify({
         const t = JSON.parse(row.payload);
         if (await get(t.id, true)) return json({ error: "Gi\u1EA3i n\xE0y \u0111\xE3 t\u1ED3n t\u1EA1i. H\xE3y ch\u1ECDn S\u1EEDa ho\u1EB7c \u0110\u1ED3ng b\u1ED9." }, 409, {}, req);
         await db2.batch([db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,0,?)").bind(t.id, JSON.stringify(t), t.updated), db2.prepare("DELETE FROM previews WHERE token = ?").bind(b.token)]);
-        await log(true, `Th\xEAm gi\u1EA3i: ${t.name} \xB7 ${t.players.length} k\u1EF3 th\u1EE7`);
+        await log2(true, `Th\xEAm gi\u1EA3i: ${t.name} \xB7 ${t.players.length} k\u1EF3 th\u1EE7`);
         return json({ message: "\u0110\xE3 th\xEAm gi\u1EA3i \u1EDF tr\u1EA1ng th\xE1i \u1EA9n. Nh\u1EA5n Hi\u1EC7n gi\u1EA3i khi \u0111\xE3 s\u1EB5n s\xE0ng." }, 200, {}, req);
       }
       if (action === "batch_import") {
@@ -2321,7 +2321,7 @@ ${JSON.stringify({
           }
         }
         const isFullySuccess = successCount === items.length;
-        await log(isFullySuccess, `\u0110\u1ED3ng b\u1ED9 V2 gi\u1EA3i \u0111\u1EA5u: ${mainTournamentTitle} \xB7 ${successCount}/${items.length} b\u1EA3ng \u0111\u1EA5u, t\u1ED5ng ${totalPlayers} k\u1EF3 th\u1EE7`);
+        await log2(isFullySuccess, `\u0110\u1ED3ng b\u1ED9 V2 gi\u1EA3i \u0111\u1EA5u: ${mainTournamentTitle} \xB7 ${successCount}/${items.length} b\u1EA3ng \u0111\u1EA5u, t\u1ED5ng ${totalPlayers} k\u1EF3 th\u1EE7`);
         await logSync({
           tournament_id: masterId,
           tournament_name: mainTournamentTitle,
@@ -2351,7 +2351,7 @@ ${JSON.stringify({
           INSERT INTO home_banners (id, title, description, image_url, button_text, button_link, is_active, sort_order, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(id, title, description, image_url, button_text, button_link, is_active, sort_order, now, now).run();
-        await log(true, `T\u1EA1o banner m\u1EDBi: ${title}`);
+        await log2(true, `T\u1EA1o banner m\u1EDBi: ${title}`);
         return json({ message: "\u0110\xE3 t\u1EA1o banner m\u1EDBi th\xE0nh c\xF4ng." }, 200, {}, req);
       }
       if (action === "banner_update") {
@@ -2370,14 +2370,14 @@ ${JSON.stringify({
           SET title = ?, description = ?, image_url = ?, button_text = ?, button_link = ?, is_active = ?, sort_order = ?, updated_at = ?
           WHERE id = ?
         `).bind(title, description, image_url, button_text, button_link, is_active, sort_order, now, id).run();
-        await log(true, `C\u1EADp nh\u1EADt banner: ${title}`);
+        await log2(true, `C\u1EADp nh\u1EADt banner: ${title}`);
         return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt banner th\xE0nh c\xF4ng." }, 200, {}, req);
       }
       if (action === "banner_delete") {
         const id = String(b.id || "");
         if (!id) return json({ error: "M\xE3 banner kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
         await db2.prepare("DELETE FROM home_banners WHERE id = ?").bind(id).run();
-        await log(true, `\u0110\xE3 x\xF3a banner id: ${id}`);
+        await log2(true, `\u0110\xE3 x\xF3a banner id: ${id}`);
         return json({ message: "\u0110\xE3 x\xF3a banner th\xE0nh c\xF4ng." }, 200, {}, req);
       }
       if (action === "banner_toggle") {
@@ -2385,7 +2385,7 @@ ${JSON.stringify({
         const is_active = b.is_active ? 1 : 0;
         if (!id) return json({ error: "M\xE3 banner kh\xF4ng h\u1EE3p l\u1EC7." }, 400, {}, req);
         await db2.prepare("UPDATE home_banners SET is_active = ?, updated_at = ? WHERE id = ?").bind(is_active, (/* @__PURE__ */ new Date()).toISOString(), id).run();
-        await log(true, `${is_active ? "Hi\u1EC7n" : "\u1EA8n"} banner id: ${id}`);
+        await log2(true, `${is_active ? "Hi\u1EC7n" : "\u1EA8n"} banner id: ${id}`);
         return json({ message: is_active ? "\u0110\xE3 hi\u1EC3n th\u1ECB banner." : "\u0110\xE3 \u1EA9n banner." }, 200, {}, req);
       }
       if (action === "bulk_delete") {
@@ -2405,7 +2405,7 @@ ${JSON.stringify({
           );
         }
         await db2.batch(statements);
-        await log(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} gi\u1EA3i \u0111\u1EA5u.`);
+        await log2(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} gi\u1EA3i \u0111\u1EA5u.`);
         return json({ message: `\u0110\xE3 x\xF3a th\xE0nh c\xF4ng ${ids.length} gi\u1EA3i \u0111\u1EA5u.` }, 200, {}, req);
       }
       const old = await get(String(b.id || ""), true);
@@ -2413,8 +2413,35 @@ ${JSON.stringify({
       if (action === "publish") {
         const shown = b.published === true;
         await db2.prepare("UPDATE tournaments SET published = ? WHERE id = ?").bind(shown ? 1 : 0, old.id).run();
-        await log(true, `${shown ? "Hi\u1EC7n" : "\u1EA8n"} gi\u1EA3i: ${old.name}`);
+        await log2(true, `${shown ? "Hi\u1EC7n" : "\u1EA8n"} gi\u1EA3i: ${old.name}`);
         return json({ message: shown ? "\u0110\xE3 c\xF4ng b\u1ED1 gi\u1EA3i \u0111\u1EA5u." : "\u0110\xE3 \u1EA9n gi\u1EA3i \u0111\u1EA5u." }, 200, {}, req);
+      }
+      if (action === "toggle_auto_sync") {
+        const autoSync = b.auto_sync === true || b.auto_sync === 1;
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const interval = old.syncInterval || old.sync_interval || 5;
+        const nextSyncIso = autoSync ? new Date(Date.now() + interval * 60 * 1e3).toISOString() : null;
+        const updatedTour = {
+          ...old,
+          autoSync,
+          auto_sync: autoSync,
+          syncInterval: interval,
+          sync_interval: interval,
+          ...autoSync ? {
+            lastSync: old.lastSync || old.last_sync || nowIso,
+            last_sync: old.lastSync || old.last_sync || nowIso,
+            nextSync: nextSyncIso,
+            next_sync: nextSyncIso
+          } : {}
+        };
+        const payloadStr = JSON.stringify(updatedTour);
+        try {
+          await db2.prepare("UPDATE tournaments SET payload = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(payloadStr, autoSync ? 1 : 0, interval, updatedTour.lastSync || null, nextSyncIso, old.id).run();
+        } catch {
+          await db2.prepare("UPDATE tournaments SET payload = ? WHERE id = ?").bind(payloadStr, old.id).run();
+        }
+        await log2(true, `${autoSync ? "B\u1EADt" : "T\u1EAFt"} t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 gi\u1EA3i: ${old.name}`);
+        return json({ message: autoSync ? "\u0110\xE3 b\u1EADt t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 (m\u1ED7i 5 ph\xFAt)." : "\u0110\xE3 t\u1EAFt t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9." }, 200, {}, req);
       }
       if (action === "delete") {
         if (b.confirmName !== old.name) return json({ error: "T\xEAn x\xE1c nh\u1EADn x\xF3a kh\xF4ng kh\u1EDBp." }, 400, {}, req);
@@ -2426,7 +2453,7 @@ ${JSON.stringify({
           db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id),
           db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(old.id)
         ]);
-        await log(true, `\u0110\xE3 x\xF3a gi\u1EA3i: ${old.name}`);
+        await log2(true, `\u0110\xE3 x\xF3a gi\u1EA3i: ${old.name}`);
         return json({ message: "\u0110\xE3 x\xF3a gi\u1EA3i v\xE0 to\xE0n b\u1ED9 d\u1EEF li\u1EC7u k\u1EF3 th\u1EE7 c\u1EE7a gi\u1EA3i." }, 200, {}, req);
       }
       if (action === "edit" || action === "sync" || action === "force_sync") {
@@ -2463,16 +2490,37 @@ ${JSON.stringify({
           t.name = old.name;
         }
         t.published = old.published;
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const interval = t.syncInterval || t.sync_interval || old.syncInterval || old.sync_interval || 5;
+        const nextSyncIso = new Date(Date.now() + interval * 60 * 1e3).toISOString();
+        if (action === "sync" || action === "force_sync") {
+          t.autoSync = old.autoSync !== false && old.auto_sync !== false;
+          t.auto_sync = t.autoSync;
+          t.syncInterval = interval;
+          t.sync_interval = interval;
+          t.lastSync = nowIso;
+          t.last_sync = nowIso;
+          t.nextSync = nextSyncIso;
+          t.next_sync = nextSyncIso;
+        }
         const statements = [];
         if (t.id !== old.id) {
-          statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          try {
+            statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated,auto_sync,sync_interval,last_sync,next_sync) VALUES (?,?,?,?,?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated, t.autoSync ? 1 : 0, interval, t.lastSync || nowIso, t.nextSync || nextSyncIso));
+          } catch {
+            statements.push(db2.prepare("INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)").bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          }
           statements.push(db2.prepare("DELETE FROM tournaments WHERE id = ?").bind(old.id));
         } else {
-          statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
+          try {
+            statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.autoSync ? 1 : 0, interval, t.lastSync || nowIso, t.nextSync || nextSyncIso, t.id));
+          } catch {
+            statements.push(db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(JSON.stringify(t), t.updated, t.id));
+          }
         }
         if (t.updated !== old.updated || t.id !== old.id || action === "force_sync") statements.push(db2.prepare("DELETE FROM details WHERE tid = ?").bind(old.id));
         await db2.batch(statements);
-        await log(true, `${action === "edit" ? "S\u1EEDa" : action === "force_sync" ? "\xC9p \u0111\u1ED3ng b\u1ED9" : "\u0110\u1ED3ng b\u1ED9"} gi\u1EA3i: ${t.name}`);
+        await log2(true, `${action === "edit" ? "S\u1EEDa" : action === "force_sync" ? "\xC9p \u0111\u1ED3ng b\u1ED9" : "\u0110\u1ED3ng b\u1ED9"} gi\u1EA3i: ${t.name}`);
         await logSync({
           tournament_id: t.id,
           tournament_name: t.name,
@@ -2519,15 +2567,15 @@ ${JSON.stringify({
         } catch (pErr) {
           console.error("[PRIZE SAVE DB SYNC ERROR]", pErr);
         }
-        await log(true, `C\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng gi\u1EA3i: ${oldTour.name}`);
+        await log2(true, `C\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng gi\u1EA3i: ${oldTour.name}`);
         return json({ message: "\u0110\xE3 c\u1EADp nh\u1EADt th\xF4ng tin & c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng th\xE0nh c\xF4ng!" }, 200, {}, req);
       }
       return json({ error: "Thao t\xE1c kh\xF4ng \u0111\u01B0\u1EE3c h\u1ED7 tr\u1EE3." }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info"].includes(action)) {
+      if (authorized && ["preview", "sync", "edit", "batch_import", "detect", "banner_create", "banner_update", "banner_delete", "banner_toggle", "tournament_update_info", "toggle_auto_sync"].includes(action)) {
         try {
-          await log(false, m);
+          await log2(false, m);
           await logSync({
             tournament_id: b.id || void 0,
             tournament_name: b.name || void 0,
@@ -2745,17 +2793,2106 @@ function openDatabase(connectionStringOrFile, migrations) {
   };
 }
 
+// node_modules/node-cron/dist/_shared.js
+import { EventEmitter } from "events";
+import { randomUUID } from "node:crypto";
+function createID() {
+  return randomUUID();
+}
+var levelColors = {
+  INFO: "\x1B[36m",
+  WARN: "\x1B[33m",
+  ERROR: "\x1B[31m",
+  DEBUG: "\x1B[35m"
+};
+var GREEN = "\x1B[32m";
+var RESET = "\x1B[0m";
+function log(level, message2, extra) {
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+  const color = levelColors[level];
+  const prefix = `[${timestamp}] [PID: ${process.pid}] ${GREEN}[NODE-CRON]${GREEN} ${color}[${level}]${RESET}`;
+  const output = `${prefix} ${message2}`;
+  switch (level) {
+    case "ERROR":
+      console.error(output, extra ?? "");
+      break;
+    case "DEBUG":
+      console.debug(output, extra ?? "");
+      break;
+    case "WARN":
+      console.warn(output);
+      break;
+    case "INFO":
+    default:
+      console.info(output);
+      break;
+  }
+}
+var defaultLogger = {
+  info(message2) {
+    log("INFO", message2);
+  },
+  warn(message2) {
+    log("WARN", message2);
+  },
+  error(message2, err) {
+    if (message2 instanceof Error) {
+      log("ERROR", message2.message, message2);
+    } else {
+      log("ERROR", message2, err);
+    }
+  },
+  debug(message2, err) {
+    if (message2 instanceof Error) {
+      log("DEBUG", message2.message, message2);
+    } else {
+      log("DEBUG", message2, err);
+    }
+  }
+};
+var activeLogger = defaultLogger;
+function setLogger(logger2) {
+  activeLogger = logger2 ?? defaultLogger;
+}
+var logger = {
+  info: (message2) => activeLogger.info(message2),
+  warn: (message2) => activeLogger.warn(message2),
+  error: (message2, err) => activeLogger.error(message2, err),
+  debug: (message2, err) => activeLogger.debug(message2, err)
+};
+var TrackedPromise = class {
+  promise;
+  error;
+  state;
+  value;
+  constructor(executor) {
+    this.state = "pending";
+    this.promise = new Promise((resolve5, reject) => {
+      executor((value) => {
+        this.state = "fulfilled";
+        this.value = value;
+        resolve5(value);
+      }, (error) => {
+        this.state = "rejected";
+        this.error = error;
+        reject(error);
+      });
+    });
+  }
+  getPromise() {
+    return this.promise;
+  }
+  getState() {
+    return this.state;
+  }
+  isPending() {
+    return this.state === "pending";
+  }
+  isFulfilled() {
+    return this.state === "fulfilled";
+  }
+  isRejected() {
+    return this.state === "rejected";
+  }
+  getValue() {
+    return this.value;
+  }
+  getError() {
+    return this.error;
+  }
+  then(onfulfilled, onrejected) {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+  catch(onrejected) {
+    return this.promise.catch(onrejected);
+  }
+  finally(onfinally) {
+    return this.promise.finally(onfinally);
+  }
+};
+function planBeat(expected, now, toleranceMs, getNextMatch2) {
+  const missed = [];
+  let slot = expected;
+  while (true) {
+    const nowMs = now.getTime();
+    const slotMs = slot.getTime();
+    if (nowMs < slotMs) {
+      return { missed, next: slot };
+    }
+    const next = getNextMatch2(slot);
+    if (next.getTime() <= slotMs) {
+      return { missed, next: getNextMatch2(now) };
+    }
+    const gap = next.getTime() - slotMs;
+    const lateBy = nowMs - slotMs;
+    if (lateBy <= toleranceMs && lateBy < gap) {
+      return { missed, run: slot, next };
+    }
+    missed.push(slot);
+    slot = next;
+  }
+}
+var DEFAULT_MISSED_EXECUTION_TOLERANCE = 1e3;
+function emptyOnFn() {
+}
+function emptySkipFn() {
+}
+function emptyHookFn() {
+  return true;
+}
+var DEFAULT_COORDINATOR_TTL = 3e4;
+var Runner = class {
+  timeMatcher;
+  onMatch;
+  noOverlap;
+  maxExecutions;
+  maxRandomDelay;
+  missedExecutionTolerance;
+  runCount;
+  running;
+  heartBeatTimeout;
+  jitterTimeout;
+  logger;
+  onMissedExecution;
+  onOverlap;
+  onError;
+  beforeRun;
+  onFinished;
+  onMaxExecutions;
+  runCoordinator;
+  coordinatorKeyPrefix;
+  coordinatorTtl;
+  onSkipped;
+  unref;
+  constructor(timeMatcher, onMatch, options) {
+    this.timeMatcher = timeMatcher;
+    this.onMatch = onMatch;
+    this.noOverlap = options == void 0 || options.noOverlap === void 0 ? false : options.noOverlap;
+    this.maxExecutions = options?.maxExecutions;
+    this.maxRandomDelay = options?.maxRandomDelay || 0;
+    this.missedExecutionTolerance = options?.missedExecutionTolerance ?? DEFAULT_MISSED_EXECUTION_TOLERANCE;
+    this.logger = options?.logger || logger;
+    this.onMissedExecution = options?.onMissedExecution || emptyOnFn;
+    this.onOverlap = options?.onOverlap || emptyOnFn;
+    this.onError = options?.onError || ((date, error) => this.logger.error("Task failed with error!", error));
+    this.onFinished = options?.onFinished || emptyHookFn;
+    this.beforeRun = options?.beforeRun || emptyHookFn;
+    this.onMaxExecutions = options?.onMaxExecutions || emptyOnFn;
+    this.runCoordinator = options?.runCoordinator;
+    this.coordinatorKeyPrefix = options?.coordinatorKeyPrefix || "";
+    this.coordinatorTtl = options?.coordinatorTtl ?? DEFAULT_COORDINATOR_TTL;
+    this.onSkipped = options?.onSkipped || emptySkipFn;
+    this.unref = options?.unref ?? false;
+    this.runCount = 0;
+    this.running = false;
+  }
+  onErrorFallback = (date, error) => {
+    this.logger.error("Task failed with error!", error);
+  };
+  async runCoordinated(slot, run) {
+    if (!this.runCoordinator) {
+      await run();
+      return;
+    }
+    const key2 = `${this.coordinatorKeyPrefix}:${slot.toISOString()}`;
+    let allowed;
+    try {
+      allowed = await this.runCoordinator.shouldRun(key2, this.coordinatorTtl);
+    } catch (err) {
+      this.logger.error("Run coordinator failed; skipping execution (fail-closed)", err);
+      this.emitSkipped(slot, "coordinator-error");
+      return;
+    }
+    if (!allowed) {
+      this.emitSkipped(slot, "not-elected");
+      return;
+    }
+    try {
+      await run();
+    } finally {
+      try {
+        await this.runCoordinator.onComplete?.(key2);
+      } catch (err) {
+        this.logger.error("Run coordinator onComplete failed", err);
+      }
+    }
+  }
+  emitSkipped(slot, reason) {
+    Promise.resolve(this.onSkipped(slot, reason)).catch((err) => this.onErrorFallback(slot, err));
+  }
+  start() {
+    this.running = true;
+    let lastExecution;
+    let expectedNextExecution = this.timeMatcher.getNextMatch(nowWithoutMs());
+    const armHeartBeat = () => {
+      if (this.running) {
+        clearTimeout(this.heartBeatTimeout);
+        this.heartBeatTimeout = setTimeout(heartBeat, getDelay(expectedNextExecution));
+        if (this.unref)
+          this.heartBeatTimeout.unref();
+      }
+    };
+    const runTask = async (date) => {
+      const execution = {
+        id: createID(),
+        reason: "scheduled"
+      };
+      let shouldExecute;
+      try {
+        shouldExecute = await this.beforeRun(date, execution);
+      } catch (error) {
+        this.onError(date, error, execution);
+        return;
+      }
+      if (!shouldExecute)
+        return;
+      const execute = async () => {
+        try {
+          this.runCount++;
+          execution.startedAt = /* @__PURE__ */ new Date();
+          const result = await this.onMatch(date, execution);
+          execution.finishedAt = /* @__PURE__ */ new Date();
+          execution.result = result;
+        } catch (error) {
+          execution.finishedAt = /* @__PURE__ */ new Date();
+          execution.error = error;
+          try {
+            this.onError(date, error, execution);
+          } catch (hookError) {
+            this.onErrorFallback(date, hookError);
+          }
+          return;
+        }
+        try {
+          await this.onFinished(date, execution);
+        } catch (hookError) {
+          this.onErrorFallback(date, hookError);
+        }
+        if (this.maxExecutions && this.runCount >= this.maxExecutions) {
+          this.onMaxExecutions(date);
+          this.stop();
+        }
+      };
+      const randomDelay = Math.floor(Math.random() * this.maxRandomDelay);
+      if (randomDelay > 0) {
+        await new Promise((resolve5) => {
+          this.jitterTimeout = setTimeout(() => {
+            execute().then(() => resolve5(), () => resolve5());
+          }, randomDelay);
+          if (this.unref)
+            this.jitterTimeout.unref();
+        });
+      } else {
+        await execute();
+      }
+    };
+    const heartBeat = async () => {
+      const currentDate = nowWithoutMs();
+      const plan = planBeat(expectedNextExecution, currentDate, this.missedExecutionTolerance, (date) => this.timeMatcher.getNextMatch(date));
+      expectedNextExecution = plan.next;
+      for (const missedSlot of plan.missed) {
+        runAsync(this.onMissedExecution, missedSlot, this.onErrorFallback);
+      }
+      if (plan.run) {
+        if (lastExecution && lastExecution.getState() === "pending") {
+          runAsync(this.onOverlap, plan.run, this.onErrorFallback);
+          if (this.noOverlap) {
+            this.logger.warn("task still running, new execution blocked by overlap prevention!");
+            armHeartBeat();
+            return;
+          }
+        }
+        const slot = plan.run;
+        lastExecution = new TrackedPromise(async (resolve5, reject) => {
+          try {
+            await this.runCoordinated(slot, () => runTask(slot));
+            resolve5(true);
+          } catch (err) {
+            reject(err);
+          }
+        });
+        lastExecution.catch(() => {
+        });
+      }
+      armHeartBeat();
+    };
+    armHeartBeat();
+  }
+  nextRun() {
+    return this.timeMatcher.getNextMatch(/* @__PURE__ */ new Date());
+  }
+  stop() {
+    this.running = false;
+    if (this.heartBeatTimeout) {
+      clearTimeout(this.heartBeatTimeout);
+      this.heartBeatTimeout = void 0;
+    }
+    if (this.jitterTimeout) {
+      clearTimeout(this.jitterTimeout);
+      this.jitterTimeout = void 0;
+    }
+  }
+  isStarted() {
+    return !!this.heartBeatTimeout && this.running;
+  }
+  isStopped() {
+    return !this.isStarted();
+  }
+  setUnref(value) {
+    this.unref = value;
+    if (this.heartBeatTimeout) {
+      if (value)
+        this.heartBeatTimeout.unref();
+      else
+        this.heartBeatTimeout.ref();
+    }
+    if (this.jitterTimeout) {
+      if (value)
+        this.jitterTimeout.unref();
+      else
+        this.jitterTimeout.ref();
+    }
+  }
+  async execute(executionId) {
+    const date = /* @__PURE__ */ new Date();
+    const execution = {
+      id: executionId ?? createID(),
+      reason: "invoked"
+    };
+    try {
+      const shouldExecute = await this.beforeRun(date, execution);
+      if (!shouldExecute)
+        return;
+      execution.startedAt = /* @__PURE__ */ new Date();
+      const result = await this.onMatch(date, execution);
+      execution.finishedAt = /* @__PURE__ */ new Date();
+      execution.result = result;
+    } catch (error) {
+      execution.finishedAt = /* @__PURE__ */ new Date();
+      execution.error = error;
+      this.onError(date, error, execution);
+      return;
+    }
+    try {
+      await this.onFinished(date, execution);
+    } catch (hookError) {
+      this.onErrorFallback(date, hookError);
+    }
+  }
+};
+async function runAsync(fn, date, onError) {
+  try {
+    await fn(date);
+  } catch (error) {
+    onError(date, error);
+  }
+}
+function getDelay(nextRun) {
+  const maxDelay = 864e5;
+  const now = /* @__PURE__ */ new Date();
+  const delay = nextRun.getTime() - now.getTime();
+  if (delay > maxDelay) {
+    return maxDelay;
+  }
+  return Math.max(0, delay);
+}
+function nowWithoutMs() {
+  const date = /* @__PURE__ */ new Date();
+  date.setMilliseconds(0);
+  return date;
+}
+var monthNamesConversion = /* @__PURE__ */ (() => {
+  const months = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december"
+  ];
+  const shortMonths = [
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec"
+  ];
+  function convertMonthName(expression, items) {
+    for (let i = 0; i < items.length; i++) {
+      expression = expression.replace(new RegExp(items[i], "gi"), i + 1);
+    }
+    return expression;
+  }
+  function interpret(monthExpression) {
+    monthExpression = convertMonthName(monthExpression, months);
+    monthExpression = convertMonthName(monthExpression, shortMonths);
+    return monthExpression;
+  }
+  return interpret;
+})();
+var weekDayNamesConversion = /* @__PURE__ */ (() => {
+  const weekDays = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday"
+  ];
+  const shortWeekDays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  function convertWeekDayName(expression, items) {
+    for (let i = 0; i < items.length; i++) {
+      expression = expression.replace(new RegExp(items[i], "gi"), i);
+    }
+    return expression;
+  }
+  function convertWeekDays(expression) {
+    expression = convertWeekDayName(expression, weekDays);
+    return convertWeekDayName(expression, shortWeekDays);
+  }
+  return convertWeekDays;
+})();
+var convertAsterisksToRanges = /* @__PURE__ */ (() => {
+  function convertAsterisk(expression, replecement) {
+    return expression.split(",").map((token) => token.indexOf("*") !== -1 ? token.replace("*", replecement) : token).join(",");
+  }
+  function convertAsterisksToRanges2(expressions) {
+    expressions[0] = convertAsterisk(expressions[0], "0-59");
+    expressions[1] = convertAsterisk(expressions[1], "0-59");
+    expressions[2] = convertAsterisk(expressions[2], "0-23");
+    expressions[3] = convertAsterisk(expressions[3], "1-31");
+    expressions[4] = convertAsterisk(expressions[4], "1-12");
+    expressions[5] = convertAsterisk(expressions[5], "0-6");
+    return expressions;
+  }
+  return convertAsterisksToRanges2;
+})();
+var convertRanges = /* @__PURE__ */ (() => {
+  const rangeRegEx = /^(\d+)-(\d+)(?:\/(\d+))?$/;
+  const FIELD_BOUNDS = [
+    { min: 0, max: 59 },
+    { min: 0, max: 59 },
+    { min: 0, max: 23 },
+    { min: 1, max: 31 },
+    { min: 1, max: 12 },
+    { min: 0, max: 6 }
+  ];
+  function expandRange(initTxt, endTxt, stepTxt, bounds) {
+    const step = parseInt(stepTxt, 10);
+    if (!(step >= 1))
+      return `${initTxt}-${endTxt}/${stepTxt}`;
+    const first = parseInt(initTxt, 10);
+    const last = parseInt(endTxt, 10);
+    const numbers = [];
+    if (first <= last) {
+      for (let i = first; i <= last; i += step) {
+        numbers.push(i);
+      }
+      return numbers.join();
+    }
+    const { min, max } = bounds;
+    const size = max - min + 1;
+    const span = ((last - first) % size + size) % size;
+    for (let offset = 0; offset <= span; offset += step) {
+      let value = first + offset;
+      if (value > max)
+        value -= size;
+      numbers.push(value);
+    }
+    return numbers.join();
+  }
+  function convertRange(expression, bounds) {
+    return expression.split(",").map((token) => {
+      const match = rangeRegEx.exec(token.trim());
+      return match ? expandRange(match[1], match[2], match[3] || "1", bounds) : token;
+    }).join();
+  }
+  function convertAllRanges(expressions) {
+    for (let i = 0; i < expressions.length; i++) {
+      expressions[i] = convertRange(expressions[i], FIELD_BOUNDS[i]);
+    }
+    return expressions;
+  }
+  return convertAllRanges;
+})();
+var NICKNAMES = {
+  "@yearly": "0 0 1 1 *",
+  "@annually": "0 0 1 1 *",
+  "@monthly": "0 0 1 * *",
+  "@weekly": "0 0 * * 0",
+  "@daily": "0 0 * * *",
+  "@midnight": "0 0 * * *",
+  "@hourly": "0 * * * *"
+};
+function resolveNickname(expression) {
+  const key2 = expression.trim().toLowerCase();
+  return NICKNAMES[key2] ?? expression;
+}
+var convertExpression = /* @__PURE__ */ (() => {
+  function appendSecondExpression(expressions) {
+    if (expressions.length === 5) {
+      return ["0"].concat(expressions);
+    }
+    return expressions;
+  }
+  function removeSpaces(str) {
+    return str.replace(/\s{2,}/g, " ").trim();
+  }
+  function normalizeIntegers(expressions) {
+    for (let i = 0; i < expressions.length; i++) {
+      const numbers = expressions[i].split(",");
+      for (let j = 0; j < numbers.length; j++) {
+        const token = String(numbers[j]).trim();
+        if (/^l$/i.test(token)) {
+          numbers[j] = "L";
+        } else if (/^l-\d{1,2}$/i.test(token)) {
+          numbers[j] = token.toUpperCase();
+        } else if (/^[0-7]l$/i.test(token)) {
+          numbers[j] = token.toUpperCase();
+        } else if (/w/i.test(token)) {
+          numbers[j] = token.toUpperCase();
+        } else if (token.indexOf("#") !== -1) {
+          numbers[j] = token;
+        } else if (/^\d+$/.test(token)) {
+          numbers[j] = parseInt(token, 10);
+        } else {
+          numbers[j] = token;
+        }
+      }
+      expressions[i] = numbers;
+    }
+    return expressions;
+  }
+  function convertQuestionMarks(expressions) {
+    if (expressions[3] === "?")
+      expressions[3] = "*";
+    if (expressions[5] === "?")
+      expressions[5] = "*";
+    return expressions;
+  }
+  function interpret(expression) {
+    let expressions = removeSpaces(resolveNickname(`${expression}`)).split(" ");
+    expressions = appendSecondExpression(expressions);
+    expressions = convertQuestionMarks(expressions);
+    expressions[4] = monthNamesConversion(expressions[4]);
+    expressions[5] = weekDayNamesConversion(expressions[5]);
+    expressions = convertAsterisksToRanges(expressions);
+    expressions = convertRanges(expressions);
+    expressions = normalizeIntegers(expressions);
+    const weekdays = expressions[5];
+    for (let i = 0; i < weekdays.length; i++) {
+      if (weekdays[i] === 7)
+        weekdays[i] = 0;
+      else if (typeof weekdays[i] === "string" && weekdays[i].startsWith("7")) {
+        weekdays[i] = "0" + weekdays[i].slice(1);
+      }
+    }
+    expressions[5] = [...new Set(weekdays)];
+    return expressions;
+  }
+  return interpret;
+})();
+var LocalizedTime = class {
+  timestamp;
+  parts;
+  timezone;
+  constructor(date, timezone) {
+    this.timestamp = date.getTime();
+    this.timezone = timezone;
+    this.parts = buildDateParts(date, timezone);
+  }
+  toDate() {
+    return new Date(this.timestamp);
+  }
+  toISO() {
+    const gmt = this.parts.gmt.replace(/^GMT/, "");
+    const offset = gmt ? gmt : "Z";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${this.parts.year}-${pad(this.parts.month)}-${pad(this.parts.day)}T${pad(this.parts.hour)}:${pad(this.parts.minute)}:${pad(this.parts.second)}.${String(this.parts.millisecond).padStart(3, "0")}` + offset;
+  }
+  getParts() {
+    return this.parts;
+  }
+};
+function getOffsetMinutes(date, timezone) {
+  const offset = parseOffsetMinutes(getTimezoneGMT(date, timezone).replace(/^GMT/, "") || "Z");
+  return offset ?? 0;
+}
+function readsBackTo(timestamp, parts, timezone) {
+  const p = buildDateParts(new Date(timestamp), timezone);
+  return p.year === parts.year && p.month === parts.month && p.day === parts.day && p.hour === parts.hour && p.minute === parts.minute && p.second === parts.second;
+}
+function localTimeToTimestamp(parts, timezone) {
+  const guess = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, parts.millisecond);
+  const firstOffset = getOffsetMinutes(new Date(guess), timezone);
+  const candidate1 = guess - firstOffset * 6e4;
+  const secondOffset = getOffsetMinutes(new Date(candidate1), timezone);
+  if (secondOffset === firstOffset) {
+    return candidate1;
+  }
+  const candidate2 = guess - secondOffset * 6e4;
+  if (readsBackTo(candidate1, parts, timezone))
+    return candidate1;
+  if (readsBackTo(candidate2, parts, timezone))
+    return candidate2;
+  return Math.max(candidate1, candidate2);
+}
+var partsFormatterCache = /* @__PURE__ */ new Map();
+var offsetFormatterCache = /* @__PURE__ */ new Map();
+function getPartsFormatter(timezone) {
+  const key2 = timezone ?? "";
+  let formatter = partsFormatterCache.get(key2);
+  if (!formatter) {
+    const dftOptions = {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      weekday: "short",
+      hour12: false
+    };
+    if (timezone) {
+      dftOptions.timeZone = timezone;
+    }
+    formatter = new Intl.DateTimeFormat("en-US", dftOptions);
+    partsFormatterCache.set(key2, formatter);
+  }
+  return formatter;
+}
+function getOffsetFormatter(timezone) {
+  const key2 = timezone ?? "";
+  let formatter = offsetFormatterCache.get(key2);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: "shortOffset"
+    });
+    offsetFormatterCache.set(key2, formatter);
+  }
+  return formatter;
+}
+function buildDateParts(date, timezone) {
+  const dateFormat = getPartsFormatter(timezone);
+  const parts = dateFormat.formatToParts(date).filter((part) => {
+    return part.type !== "literal";
+  }).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const result = {
+    day: parseInt(parts.day),
+    month: parseInt(parts.month),
+    year: parseInt(parts.year),
+    hour: parts.hour === "24" ? 0 : parseInt(parts.hour),
+    minute: parseInt(parts.minute),
+    second: parseInt(parts.second),
+    millisecond: date.getMilliseconds(),
+    weekday: parts.weekday
+  };
+  let gmt;
+  Object.defineProperty(result, "gmt", {
+    enumerable: true,
+    configurable: true,
+    get() {
+      return gmt ??= getTimezoneGMT(date, timezone);
+    }
+  });
+  return result;
+}
+function parseOffsetMinutes(isoString) {
+  if (isoString.endsWith("Z"))
+    return 0;
+  const match = isoString.match(/([+-])(\d{2}):(\d{2})$/);
+  if (!match)
+    return null;
+  const sign = match[1] === "+" ? 1 : -1;
+  return sign * (parseInt(match[2]) * 60 + parseInt(match[3]));
+}
+function getTimezoneGMT(date, timezone) {
+  const fmt = getOffsetFormatter(timezone);
+  const parts = fmt.formatToParts(date);
+  const tzPart = parts.find((p) => p.type === "timeZoneName");
+  if (!tzPart)
+    return "Z";
+  const tzValue = tzPart.value;
+  if (tzValue === "GMT")
+    return "Z";
+  const match = tzValue.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+  if (!match)
+    return "Z";
+  const sign = match[1];
+  const hoursNum = parseInt(match[2]);
+  const minutesNum = parseInt(match[3] || "0");
+  if (hoursNum === 0 && minutesNum === 0)
+    return "Z";
+  const hours = match[2].padStart(2, "0");
+  const minutes = (match[3] || "00").padStart(2, "0");
+  return `GMT${sign}${hours}:${minutes}`;
+}
+var LAST_DAY_TOKEN = "L";
+var WEEKDAY_TOKEN = /^(\d{1,2}|L)W$/;
+var LAST_DAY_OFFSET_TOKEN = /^L-(\d{1,2})$/;
+function lastDayOfMonth(year, month) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+function nearestWeekday(year, month, target) {
+  const last = lastDayOfMonth(year, month);
+  if (target < 1 || target > last)
+    return -1;
+  const weekday = new Date(Date.UTC(year, month - 1, target)).getUTCDay();
+  if (weekday === 6)
+    return target === 1 ? target + 2 : target - 1;
+  if (weekday === 0)
+    return target === last ? target - 2 : target + 1;
+  return target;
+}
+function matchesDayOfMonth(field, year, month, day) {
+  for (const value of field) {
+    if (value === day)
+      return true;
+    if (value === LAST_DAY_TOKEN && day === lastDayOfMonth(year, month))
+      return true;
+    if (typeof value === "string") {
+      const weekdayMatch = WEEKDAY_TOKEN.exec(value);
+      if (weekdayMatch) {
+        const target = weekdayMatch[1] === LAST_DAY_TOKEN ? lastDayOfMonth(year, month) : parseInt(weekdayMatch[1], 10);
+        if (nearestWeekday(year, month, target) === day)
+          return true;
+      }
+      const offsetMatch = LAST_DAY_OFFSET_TOKEN.exec(value);
+      if (offsetMatch) {
+        const target = lastDayOfMonth(year, month) - parseInt(offsetMatch[1], 10);
+        if (target >= 1 && target === day)
+          return true;
+      }
+    }
+  }
+  return false;
+}
+var LAST_WEEKDAY_REGEX = /^([0-7])L$/i;
+var NTH_WEEKDAY_REGEX = /^([0-7])#([1-5])$/;
+function parseLastWeekdayToken(value) {
+  if (typeof value !== "string")
+    return null;
+  const match = LAST_WEEKDAY_REGEX.exec(value);
+  if (!match)
+    return null;
+  const weekday = parseInt(match[1], 10);
+  return weekday === 7 ? 0 : weekday;
+}
+function isLastWeekdayOfMonth(year, month, day) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const inSevenDays = new Date(date.getTime());
+  inSevenDays.setUTCDate(inSevenDays.getUTCDate() + 7);
+  return inSevenDays.getUTCMonth() + 1 !== month;
+}
+function isNthWeekdayToken(value) {
+  return typeof value === "string" && NTH_WEEKDAY_REGEX.test(value);
+}
+function parseNthWeekday(value) {
+  if (typeof value !== "string")
+    return null;
+  const match = NTH_WEEKDAY_REGEX.exec(value);
+  if (!match)
+    return null;
+  const weekday = parseInt(match[1], 10) % 7;
+  const nth = parseInt(match[2], 10);
+  return { weekday, nth };
+}
+function occurrenceInMonth(day) {
+  return Math.floor((day - 1) / 7) + 1;
+}
+function matchesNthWeekday(token, year, month, day) {
+  const parsed = parseNthWeekday(token);
+  if (!parsed)
+    return false;
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  if (weekday !== parsed.weekday)
+    return false;
+  return occurrenceInMonth(day) === parsed.nth;
+}
+function matchesDayOfWeek(field, year, month, day, weekday) {
+  for (const value of field) {
+    if (value === weekday)
+      return true;
+    if (isNthWeekdayToken(value)) {
+      if (matchesNthWeekday(value, year, month, day))
+        return true;
+      continue;
+    }
+    const lastWeekday = parseLastWeekdayToken(value);
+    if (lastWeekday !== null && lastWeekday === weekday && isLastWeekdayOfMonth(year, month, day)) {
+      return true;
+    }
+  }
+  return false;
+}
+var MAX_DAYS = 366 * 100;
+var MatcherWalker = class {
+  baseDate;
+  timeMatcher;
+  timezone;
+  seconds;
+  minutes;
+  hours;
+  days;
+  months;
+  weekdays;
+  constructor(timeMatcher, baseDate, timezone) {
+    this.baseDate = baseDate;
+    this.timeMatcher = timeMatcher;
+    this.timezone = timezone;
+    const expressions = timeMatcher.expressions;
+    this.seconds = sortedAsc(expressions[0]);
+    this.minutes = sortedAsc(expressions[1]);
+    this.hours = sortedAsc(expressions[2]);
+    this.days = expressions[3];
+    this.months = expressions[4];
+    this.weekdays = expressions[5];
+  }
+  isMatching() {
+    return this.timeMatcher.match(this.baseDate);
+  }
+  matchNext() {
+    const months = this.months;
+    const days = this.days;
+    const baseMs = Math.floor(this.baseDate.getTime() / 1e3) * 1e3;
+    const baseParts = new LocalizedTime(new Date(baseMs), this.timezone).getParts();
+    let { year, month, day } = baseParts;
+    for (let i = 0; i < MAX_DAYS; i++) {
+      if (months.includes(month) && matchesDayOfMonth(days, year, month, day) && this.matchesWeekday(year, month, day)) {
+        const lowerBound = i === 0 ? baseParts : null;
+        const found = this.firstTimeOnDay(year, month, day, lowerBound, baseMs);
+        if (found !== null) {
+          return new LocalizedTime(new Date(found), this.timezone);
+        }
+      }
+      ({ year, month, day } = nextDay(year, month, day));
+    }
+    throw new Error("Could not find next matching date within reasonable time range");
+  }
+  firstTimeOnDay(year, month, day, lowerBound, baseMs) {
+    const { seconds, minutes, hours } = this;
+    for (const hour of hours) {
+      if (lowerBound && hour < lowerBound.hour)
+        continue;
+      for (const minute of minutes) {
+        for (const second of seconds) {
+          if (lowerBound && !isLaterInDay(hour, minute, second, lowerBound))
+            continue;
+          const ts = localTimeToTimestamp({ year, month, day, hour, minute, second, millisecond: 0 }, this.timezone);
+          if (ts > baseMs && this.timeMatcher.match(new Date(ts))) {
+            return ts;
+          }
+        }
+      }
+    }
+    return null;
+  }
+  matchesWeekday(year, month, day) {
+    const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    return matchesDayOfWeek(this.weekdays, year, month, day, weekday);
+  }
+};
+function nextDay(year, month, day) {
+  const d = new Date(Date.UTC(year, month - 1, day + 1));
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
+function sortedAsc(values) {
+  return [...values].sort((a, b) => a - b);
+}
+function isLaterInDay(hour, minute, second, bound) {
+  return hour * 3600 + minute * 60 + second > bound.hour * 3600 + bound.minute * 60 + bound.second;
+}
+function matchValue(allowedValues, value) {
+  return allowedValues.indexOf(value) !== -1;
+}
+var TimeMatcher = class {
+  timezone;
+  pattern;
+  expressions;
+  constructor(pattern, timezone) {
+    this.timezone = timezone;
+    this.pattern = pattern;
+    this.expressions = convertExpression(pattern);
+  }
+  match(date) {
+    const localizedTime = new LocalizedTime(date, this.timezone);
+    const parts = localizedTime.getParts();
+    const runOnSecond = matchValue(this.expressions[0], parts.second);
+    const runOnMinute = matchValue(this.expressions[1], parts.minute);
+    const runOnHour = matchValue(this.expressions[2], parts.hour);
+    const runOnDay = matchesDayOfMonth(this.expressions[3], parts.year, parts.month, parts.day);
+    const runOnMonth = matchValue(this.expressions[4], parts.month);
+    const weekday = parseInt(weekDayNamesConversion(parts.weekday));
+    const runOnWeekDay = matchesDayOfWeek(this.expressions[5], parts.year, parts.month, parts.day, weekday);
+    return runOnSecond && runOnMinute && runOnHour && runOnDay && runOnMonth && runOnWeekDay;
+  }
+  getNextMatch(date) {
+    const walker = new MatcherWalker(this, date, this.timezone);
+    const next = walker.matchNext();
+    return next.toDate();
+  }
+};
+var allowedTransitions = {
+  "stopped": ["stopped", "idle", "destroyed"],
+  "idle": ["idle", "running", "stopped", "destroyed"],
+  "running": ["running", "idle", "stopped", "destroyed"],
+  "destroyed": ["destroyed"]
+};
+var StateMachine = class {
+  state;
+  constructor(initial = "stopped") {
+    this.state = initial;
+  }
+  changeState(state) {
+    if (allowedTransitions[this.state].includes(state)) {
+      this.state = state;
+    } else {
+      throw new Error(`invalid transition from ${this.state} to ${state}`);
+    }
+  }
+};
+var EnvVarRunCoordinator = class {
+  envName;
+  constructor(envName = "NODE_CRON_RUN") {
+    this.envName = envName;
+    this.read();
+  }
+  shouldRun() {
+    return this.read();
+  }
+  read() {
+    const value = process.env[this.envName];
+    if (value !== "true" && value !== "false") {
+      throw new Error(`node-cron: a \`distributed\` task needs ${this.envName} set to 'true' or 'false'. Set it to 'true' on exactly one instance and 'false' on the others, or provide a coordinator via cron.setRunCoordinator(...).`);
+    }
+    return value === "true";
+  }
+};
+var globalRunCoordinator;
+function setRunCoordinator(coordinator) {
+  globalRunCoordinator = coordinator;
+}
+function resolveRunCoordinator(perTask) {
+  return perTask ?? globalRunCoordinator ?? new EnvVarRunCoordinator();
+}
+var TaskEmitter = class extends EventEmitter {
+};
+function safeEmit(emitter, event, context, onError) {
+  for (const listener of emitter.listeners(event)) {
+    try {
+      Promise.resolve(listener(context)).catch(onError);
+    } catch (error) {
+      onError(error);
+    }
+  }
+}
+var InlineScheduledTask = class {
+  emitter;
+  cronExpression;
+  timeMatcher;
+  runner;
+  id;
+  name;
+  stateMachine;
+  timezone;
+  logger;
+  suppressMissedWarning;
+  _lastRun = null;
+  constructor(cronExpression, taskFn, options) {
+    this.emitter = new TaskEmitter();
+    this.cronExpression = cronExpression;
+    this.id = createID();
+    this.name = options?.name || this.id;
+    this.timezone = options?.timezone;
+    this.logger = options?.logger || logger;
+    this.suppressMissedWarning = options?.suppressMissedWarning || false;
+    this.timeMatcher = new TimeMatcher(cronExpression, options?.timezone);
+    this.stateMachine = new StateMachine();
+    const runnerOptions = {
+      timezone: options?.timezone,
+      noOverlap: options?.noOverlap,
+      maxExecutions: options?.maxExecutions,
+      maxRandomDelay: options?.maxRandomDelay,
+      missedExecutionTolerance: options?.missedExecutionTolerance,
+      logger: this.logger,
+      beforeRun: (date, execution) => {
+        if (execution.reason === "scheduled") {
+          this.changeState("running");
+        }
+        this.emit("execution:started", this.createContext(date, execution));
+        return true;
+      },
+      onFinished: (date, execution) => {
+        if (execution.reason === "scheduled") {
+          this.changeState("idle");
+        }
+        this.recordLastRun(execution);
+        this.emit("execution:finished", this.createContext(date, execution));
+        return true;
+      },
+      onError: (date, error, execution) => {
+        this.logger.error(error);
+        this.recordLastRun(execution);
+        this.emit("execution:failed", this.createContext(date, execution));
+        this.changeState("idle");
+      },
+      onOverlap: (date) => {
+        this.emit("execution:overlap", this.createContext(date));
+      },
+      onMissedExecution: (date) => {
+        const handled = this.emitter.listenerCount("execution:missed") > 0;
+        if (!this.suppressMissedWarning && !handled) {
+          this.logger.warn(`missed execution at ${date}! Possible blocking IO or high CPU user at the same process used by node-cron.`);
+        }
+        this.emit("execution:missed", this.createContext(date));
+      },
+      onMaxExecutions: (date) => {
+        this.emit("execution:maxReached", this.createContext(date));
+        this.destroy();
+      },
+      runCoordinator: options?.distributed ? resolveRunCoordinator(options?.runCoordinator) : void 0,
+      coordinatorKeyPrefix: this.name,
+      coordinatorTtl: options?.distributedLease,
+      onSkipped: (date, reason) => {
+        this.emit("execution:skipped", this.createContext(date, void 0, reason));
+      },
+      unref: options?.unref
+    };
+    this.runner = new Runner(this.timeMatcher, (date, execution) => {
+      return taskFn(this.createContext(date, execution));
+    }, runnerOptions);
+  }
+  getNextRun() {
+    if (this.stateMachine.state !== "stopped") {
+      return this.runner.nextRun();
+    }
+    return null;
+  }
+  getNextRuns(count) {
+    const runs = [];
+    let from = /* @__PURE__ */ new Date();
+    for (let i = 0; i < count; i++) {
+      from = this.timeMatcher.getNextMatch(from);
+      runs.push(from);
+    }
+    return runs;
+  }
+  match(date) {
+    return this.timeMatcher.match(date);
+  }
+  msToNext() {
+    const next = this.getNextRun();
+    return next ? next.getTime() - Date.now() : null;
+  }
+  isBusy() {
+    return this.getStatus() === "running";
+  }
+  runsLeft() {
+    if (this.runner.maxExecutions == null)
+      return void 0;
+    return Math.max(0, this.runner.maxExecutions - this.runner.runCount);
+  }
+  getPattern() {
+    return this.cronExpression;
+  }
+  lastRun() {
+    return this._lastRun;
+  }
+  recordLastRun(execution) {
+    const date = execution.finishedAt;
+    const lastRun = { date };
+    if (execution.error) {
+      lastRun.error = execution.error;
+    } else {
+      lastRun.result = execution.result;
+    }
+    this._lastRun = lastRun;
+  }
+  emit(event, context) {
+    safeEmit(this.emitter, event, context, (error) => this.logger.error(error));
+  }
+  changeState(state) {
+    if (this.runner.isStarted()) {
+      this.stateMachine.changeState(state);
+    }
+  }
+  start() {
+    if (this.stateMachine.state === "destroyed")
+      return;
+    if (this.runner.isStopped()) {
+      this.runner.start();
+      this.stateMachine.changeState("idle");
+      this.emit("task:started", this.createContext(/* @__PURE__ */ new Date()));
+    }
+  }
+  stop() {
+    if (this.runner.isStarted()) {
+      this.runner.stop();
+      this.stateMachine.changeState("stopped");
+      this.emit("task:stopped", this.createContext(/* @__PURE__ */ new Date()));
+    }
+  }
+  getStatus() {
+    return this.stateMachine.state;
+  }
+  unref() {
+    this.runner.setUnref(true);
+  }
+  ref() {
+    this.runner.setUnref(false);
+  }
+  destroy() {
+    if (this.stateMachine.state === "destroyed")
+      return;
+    this.stop();
+    this.stateMachine.changeState("destroyed");
+    this.emit("task:destroyed", this.createContext(/* @__PURE__ */ new Date()));
+  }
+  execute(executionId) {
+    const id = executionId ?? createID();
+    return new Promise((resolve5, reject) => {
+      const onFail = (context) => {
+        if (context.execution?.id !== id)
+          return;
+        this.off("execution:finished", onFinished);
+        this.off("execution:failed", onFail);
+        reject(context.execution?.error);
+      };
+      const onFinished = (context) => {
+        if (context.execution?.id !== id)
+          return;
+        this.off("execution:finished", onFinished);
+        this.off("execution:failed", onFail);
+        resolve5(context.execution?.result);
+      };
+      this.on("execution:finished", onFinished);
+      this.on("execution:failed", onFail);
+      this.runner.execute(id);
+    });
+  }
+  on(event, fun) {
+    this.emitter.on(event, fun);
+  }
+  off(event, fun) {
+    this.emitter.off(event, fun);
+  }
+  once(event, fun) {
+    this.emitter.once(event, fun);
+  }
+  createContext(executionDate, execution, reason) {
+    const localTime = new LocalizedTime(executionDate, this.timezone);
+    const ctx = {
+      date: localTime.toDate(),
+      dateLocalIso: localTime.toISO(),
+      triggeredAt: /* @__PURE__ */ new Date(),
+      task: this,
+      execution
+    };
+    if (reason)
+      ctx.reason = reason;
+    return ctx;
+  }
+};
+
+// node_modules/node-cron/dist/node-cron.js
+import path, { resolve as resolve3, dirname as dirname2 } from "path";
+import { fileURLToPath, pathToFileURL } from "url";
+import { fork } from "child_process";
+import { EventEmitter as EventEmitter2 } from "events";
+var tasks = /* @__PURE__ */ new Map();
+var TaskRegistry = class {
+  add(task) {
+    if (this.has(task.id)) {
+      throw Error(`task ${task.id} already registered!`);
+    }
+    tasks.set(task.id, task);
+    task.on("task:destroyed", () => {
+      this.remove(task);
+    });
+  }
+  get(taskId) {
+    return tasks.get(taskId);
+  }
+  remove(task) {
+    if (this.has(task.id)) {
+      tasks.delete(task.id);
+      task.destroy();
+    }
+  }
+  all() {
+    return tasks;
+  }
+  has(taskId) {
+    return tasks.has(taskId);
+  }
+  killAll() {
+    tasks.forEach((id) => this.remove(id));
+  }
+};
+var validationRegex = /^(?:\d+|\*|\*\/\d+)$/;
+var ALLOWED_CHARS_REGEX = /^[a-zA-Z0-9-*/,#? ]+$/;
+function splitFields(resolved) {
+  return resolved.replace(/\s{2,}/g, " ").trim().split(" ");
+}
+function isValidExpression(expression, min, max) {
+  const options = expression;
+  for (const option of options) {
+    const optionAsInt = parseInt(option, 10);
+    if (!Number.isNaN(optionAsInt) && (optionAsInt < min || optionAsInt > max) || !validationRegex.test(option))
+      return false;
+  }
+  return true;
+}
+function isInvalidSecond(expression) {
+  return !isValidExpression(expression, 0, 59);
+}
+function isInvalidMinute(expression) {
+  return !isValidExpression(expression, 0, 59);
+}
+function isInvalidHour(expression) {
+  return !isValidExpression(expression, 0, 23);
+}
+var DAY_OF_MONTH_W_TOKEN = /^(\d{1,2}|L)W$/i;
+var DAY_OF_MONTH_OFFSET_TOKEN = /^L-(\d{1,2})$/i;
+function isInvalidDayOfMonth(expression) {
+  const days = expression.filter((value) => {
+    if (value === "L")
+      return false;
+    const weekday = DAY_OF_MONTH_W_TOKEN.exec(String(value));
+    if (weekday) {
+      if (weekday[1] === "L")
+        return false;
+      const target = parseInt(weekday[1], 10);
+      return target < 1 || target > 31;
+    }
+    const offset = DAY_OF_MONTH_OFFSET_TOKEN.exec(String(value));
+    if (offset) {
+      const n = parseInt(offset[1], 10);
+      return n < 1 || n > 30;
+    }
+    return true;
+  });
+  return !isValidExpression(days, 1, 31);
+}
+function hasInvalidWModifier(rawDayOfMonth) {
+  if (!/w/i.test(rawDayOfMonth))
+    return false;
+  return rawDayOfMonth.split(",").some((token) => {
+    const value = token.trim();
+    if (!/w/i.test(value))
+      return false;
+    return !DAY_OF_MONTH_W_TOKEN.test(value);
+  });
+}
+function isInvalidMonth(expression) {
+  return !isValidExpression(expression, 1, 12);
+}
+function isInvalidWeekDay(expression) {
+  const days = expression.filter((value) => !isNthWeekdayToken(value) && !/^[0-7]L$/.test(value));
+  return !isValidExpression(days, 0, 7);
+}
+var MAX_DAYS_IN_MONTH = {
+  1: 31,
+  2: 29,
+  3: 31,
+  4: 30,
+  5: 31,
+  6: 30,
+  7: 31,
+  8: 31,
+  9: 30,
+  10: 31,
+  11: 30,
+  12: 31
+};
+function isImpossibleDayOfMonth(days, months) {
+  if (days.some((day) => typeof day !== "number"))
+    return false;
+  return !months.some((month) => days.some((day) => day <= MAX_DAYS_IN_MONTH[month]));
+}
+function validateFields(patterns, executablePatterns) {
+  if (isInvalidSecond(executablePatterns[0]))
+    throw new Error(`${patterns[0]} is a invalid expression for second`);
+  if (isInvalidMinute(executablePatterns[1]))
+    throw new Error(`${patterns[1]} is a invalid expression for minute`);
+  if (isInvalidHour(executablePatterns[2]))
+    throw new Error(`${patterns[2]} is a invalid expression for hour`);
+  if (isInvalidDayOfMonth(executablePatterns[3]) || hasInvalidWModifier(patterns[3]))
+    throw new Error(`${patterns[3]} is a invalid expression for day of month`);
+  if (isInvalidMonth(executablePatterns[4]))
+    throw new Error(`${patterns[4]} is a invalid expression for month`);
+  if (isInvalidWeekDay(executablePatterns[5]))
+    throw new Error(`${patterns[5]} is a invalid expression for week day`);
+  if (isImpossibleDayOfMonth(executablePatterns[3], executablePatterns[4]))
+    throw new Error(`${patterns[3]} ${patterns[4]} is an impossible day of month for the given month`);
+}
+var FIELDS = [
+  { key: "second", label: "second", invalid: isInvalidSecond },
+  { key: "minute", label: "minute", invalid: isInvalidMinute },
+  { key: "hour", label: "hour", invalid: isInvalidHour },
+  { key: "dayOfMonth", label: "day of month", invalid: isInvalidDayOfMonth },
+  { key: "month", label: "month", invalid: isInvalidMonth },
+  { key: "dayOfWeek", label: "week day", invalid: isInvalidWeekDay }
+];
+function validateDetailed$1(pattern) {
+  if (typeof pattern !== "string")
+    return { valid: false, errors: [{ field: "expression", message: "pattern must be a string" }] };
+  const resolved = resolveNickname(pattern);
+  if (!ALLOWED_CHARS_REGEX.test(resolved))
+    return { valid: false, errors: [{ field: "expression", value: pattern, message: "pattern includes illegal characters" }] };
+  const raw = splitFields(resolved);
+  if (raw.length !== 5 && raw.length !== 6)
+    return { valid: false, errors: [{ field: "expression", value: pattern, message: `expected 5 or 6 fields but got ${raw.length}` }] };
+  const patterns = raw.length === 5 ? ["0", ...raw] : raw;
+  const executable = convertExpression(pattern);
+  const errors = [];
+  FIELDS.forEach((f, i) => {
+    const rawWMisuse = f.key === "dayOfMonth" && hasInvalidWModifier(patterns[i]);
+    if (f.invalid(executable[i]) || rawWMisuse)
+      errors.push({ field: f.key, value: patterns[i], message: `${patterns[i]} is a invalid expression for ${f.label}` });
+  });
+  if (!errors.length && isImpossibleDayOfMonth(executable[3], executable[4])) {
+    errors.push({
+      field: "dayOfMonth",
+      value: patterns[3],
+      message: `${patterns[3]} ${patterns[4]} is an impossible day of month for the given month`
+    });
+  }
+  if (errors.length)
+    return { valid: false, errors };
+  return {
+    valid: true,
+    errors: [],
+    fields: {
+      second: executable[0],
+      minute: executable[1],
+      hour: executable[2],
+      dayOfMonth: executable[3],
+      month: executable[4],
+      dayOfWeek: executable[5]
+    }
+  };
+}
+function parse$1(pattern) {
+  const result = validateDetailed$1(pattern);
+  if (!result.valid)
+    throw new Error(result.errors[0].message);
+  return result.fields;
+}
+function validate$1(pattern) {
+  if (typeof pattern !== "string")
+    throw new TypeError("pattern must be a string!");
+  const resolved = resolveNickname(pattern);
+  if (!ALLOWED_CHARS_REGEX.test(resolved))
+    throw new TypeError("pattern includes illegal characters!");
+  const raw = splitFields(resolved);
+  if (raw.length !== 5 && raw.length !== 6)
+    throw new Error(`expected 5 or 6 fields but got ${raw.length}`);
+  const patterns = raw.length === 5 ? ["0", ...raw] : raw;
+  const executablePatterns = convertExpression(resolved);
+  validateFields(patterns, executablePatterns);
+}
+var daemonPath = resolve3(dirname2(fileURLToPath(import.meta.url)), "daemon.js");
+var TaskEmitter2 = class extends EventEmitter2 {
+};
+var BackgroundScheduledTask = class {
+  emitter;
+  id;
+  name;
+  cronExpression;
+  taskPath;
+  options;
+  forkProcess;
+  stateMachine;
+  logger;
+  suppressMissedWarning;
+  timeMatcher;
+  runCount;
+  runCoordinator;
+  _lastRun = null;
+  executing = false;
+  killPending = false;
+  pendingKillCleanup;
+  currentExecution;
+  killRequested = false;
+  startPromise;
+  constructor(cronExpression, taskPath, options) {
+    this.cronExpression = cronExpression;
+    this.taskPath = taskPath;
+    this.options = options;
+    this.id = createID();
+    this.name = options?.name || this.id;
+    this.emitter = new TaskEmitter2();
+    this.stateMachine = new StateMachine("stopped");
+    this.timeMatcher = new TimeMatcher(cronExpression, options?.timezone);
+    this.runCount = 0;
+    this.on("execution:started", (context) => {
+      if (context?.execution?.reason === "scheduled")
+        this.runCount++;
+      this.executing = true;
+      this.currentExecution = context?.execution;
+    });
+    this.on("execution:finished", (context) => {
+      this.executing = false;
+      this.currentExecution = void 0;
+      this.recordLastRun(context.execution);
+    });
+    this.on("execution:failed", (context) => {
+      this.executing = false;
+      this.currentExecution = void 0;
+      this.recordLastRun(context.execution);
+    });
+    this.logger = options?.logger || logger;
+    this.suppressMissedWarning = options?.suppressMissedWarning || false;
+    this.runCoordinator = options?.distributed ? resolveRunCoordinator(options?.runCoordinator) : void 0;
+    this.on("task:stopped", () => {
+      this.killForkWhenSettled();
+      if (this.stateMachine.state !== "destroyed") {
+        this.stateMachine.changeState("stopped");
+      }
+    });
+    this.on("task:destroyed", () => {
+      this.killForkWhenSettled();
+      this.stateMachine.changeState("destroyed");
+    });
+  }
+  getNextRun() {
+    if (this.stateMachine.state !== "stopped") {
+      return this.timeMatcher.getNextMatch(/* @__PURE__ */ new Date());
+    }
+    return null;
+  }
+  getNextRuns(count) {
+    const runs = [];
+    let from = /* @__PURE__ */ new Date();
+    for (let i = 0; i < count; i++) {
+      from = this.timeMatcher.getNextMatch(from);
+      runs.push(from);
+    }
+    return runs;
+  }
+  match(date) {
+    return this.timeMatcher.match(date);
+  }
+  msToNext() {
+    const next = this.getNextRun();
+    return next ? next.getTime() - Date.now() : null;
+  }
+  isBusy() {
+    return this.getStatus() === "running";
+  }
+  runsLeft() {
+    if (this.options?.maxExecutions == null)
+      return void 0;
+    return Math.max(0, this.options.maxExecutions - this.runCount);
+  }
+  getPattern() {
+    return this.cronExpression;
+  }
+  lastRun() {
+    return this._lastRun;
+  }
+  recordLastRun(execution) {
+    if (!execution)
+      return;
+    const raw = execution.finishedAt ?? execution.startedAt;
+    const date = raw ? new Date(raw) : /* @__PURE__ */ new Date();
+    const lastRun = { date };
+    if (execution.error) {
+      lastRun.error = execution.error;
+    } else {
+      lastRun.result = execution.result;
+    }
+    this._lastRun = lastRun;
+  }
+  killForkWhenSettled() {
+    if (!this.forkProcess)
+      return;
+    if (!this.executing) {
+      this.killFork();
+      return;
+    }
+    if (this.killPending)
+      return;
+    this.killPending = true;
+    const onSettled = () => this.killFork();
+    this.once("execution:finished", onSettled);
+    this.once("execution:failed", onSettled);
+    this.pendingKillCleanup = () => {
+      this.off("execution:finished", onSettled);
+      this.off("execution:failed", onSettled);
+    };
+  }
+  clearPendingKillWait() {
+    this.pendingKillCleanup?.();
+    this.pendingKillCleanup = void 0;
+    this.killPending = false;
+  }
+  killFork() {
+    this.clearPendingKillWait();
+    this.killRequested = true;
+    this.forkProcess?.kill();
+    this.forkProcess = void 0;
+  }
+  handleUnexpectedExit(code, signal) {
+    this.clearPendingKillWait();
+    const erro = new Error(`daemon exited unexpectedly (code ${code}, signal ${signal})`);
+    this.logger.error(erro);
+    if (this.executing) {
+      const execution = { id: createID(), reason: "scheduled", ...this.currentExecution, error: erro, finishedAt: /* @__PURE__ */ new Date() };
+      this.emitter.emit("execution:failed", this.createContext(/* @__PURE__ */ new Date(), execution));
+    }
+    try {
+      this.stateMachine.changeState("stopped");
+    } catch (err) {
+      this.logger.error(err);
+    }
+    const context = this.createContext(/* @__PURE__ */ new Date());
+    context.error = erro;
+    this.emitter.emit("task:failed", context);
+    this.forkProcess = void 0;
+  }
+  start() {
+    if (this.stateMachine.state === "destroyed") {
+      return Promise.resolve();
+    }
+    if (this.startPromise) {
+      return this.startPromise;
+    }
+    if (this.forkProcess) {
+      return Promise.resolve();
+    }
+    this.startPromise = this.forkAndStart().finally(() => {
+      this.startPromise = void 0;
+    });
+    return this.startPromise;
+  }
+  forkAndStart() {
+    return new Promise((resolve5, reject) => {
+      const startTimeout = this.options?.startTimeout ?? 5e3;
+      const failStart = (error) => {
+        clearTimeout(timeout);
+        this.killFork();
+        reject(error);
+      };
+      const timeout = setTimeout(() => {
+        failStart(new Error(`Start operation timed out after ${startTimeout}ms. The background task file may have failed to load or taken too long to import; verify it runs on its own and consider increasing the \`startTimeout\` option.`));
+      }, startTimeout);
+      this.killRequested = false;
+      let startSucceeded = false;
+      try {
+        this.forkProcess = fork(daemonPath);
+        this.forkProcess.on("error", (err) => {
+          failStart(new Error(`Error on daemon: ${err.message}`));
+        });
+        this.forkProcess.on("exit", (code, signal) => {
+          if (this.killRequested) {
+            this.killRequested = false;
+            return;
+          }
+          if (code !== 0 && signal !== "SIGTERM") {
+            if (startSucceeded) {
+              this.handleUnexpectedExit(code, signal);
+              return;
+            }
+            const erro = new Error(`node-cron daemon exited with code ${code || signal}`);
+            this.logger.error(erro);
+            failStart(erro);
+          }
+        });
+        this.forkProcess.on("message", (message2) => {
+          if (message2.type === "coordinator:shouldRun") {
+            void this.handleShouldRun(message2);
+            return;
+          }
+          if (message2.type === "coordinator:complete") {
+            this.runCoordinator?.onComplete?.(message2.key)?.catch?.((err) => this.logger.error("Run coordinator onComplete failed", err));
+            return;
+          }
+          if (message2.event === "daemon:error") {
+            failStart(message2.jsonError ? deserializeError(message2.jsonError) : new Error("Background task failed to start"));
+            return;
+          }
+          if (message2.jsonError) {
+            if (message2.context?.execution) {
+              message2.context.execution.error = deserializeError(message2.jsonError);
+              delete message2.jsonError;
+            }
+          }
+          if (message2.context?.task?.state) {
+            this.stateMachine.changeState(message2.context?.task?.state);
+          }
+          if (message2.context) {
+            const execution = message2.context?.execution;
+            delete execution?.hasError;
+            const context = this.createContext(new Date(message2.context.date), execution, message2.context.reason);
+            this.logEvent(message2.event, context);
+            this.emitter.emit(message2.event, context);
+          }
+        });
+        this.once("task:started", () => {
+          startSucceeded = true;
+          this.stateMachine.changeState("idle");
+          clearTimeout(timeout);
+          resolve5(void 0);
+        });
+        this.forkProcess.send({
+          command: "task:start",
+          path: this.taskPath,
+          cron: this.cronExpression,
+          options: serializableOptions(this.options)
+        });
+      } catch (error) {
+        failStart(error);
+      }
+    });
+  }
+  stop() {
+    return new Promise((resolve5, reject) => {
+      if (this.stateMachine.state === "destroyed") {
+        return resolve5(void 0);
+      }
+      if (!this.forkProcess) {
+        this.emitter.emit("task:stopped");
+        return resolve5(void 0);
+      }
+      const timeoutId = setTimeout(() => {
+        clearTimeout(timeoutId);
+        this.killFork();
+        reject(new Error("Stop operation timed out"));
+      }, 5e3);
+      const cleanupAndResolve = () => {
+        clearTimeout(timeoutId);
+        this.off("task:stopped", onStopped);
+        resolve5(void 0);
+      };
+      const onStopped = () => {
+        cleanupAndResolve();
+      };
+      this.once("task:stopped", onStopped);
+      this.forkProcess.send({
+        command: "task:stop"
+      });
+    });
+  }
+  getStatus() {
+    return this.stateMachine.state;
+  }
+  unref() {
+    if (!this.forkProcess)
+      return;
+    this.forkProcess.unref();
+    this.forkProcess.channel?.unref();
+  }
+  ref() {
+    if (!this.forkProcess)
+      return;
+    this.forkProcess.ref();
+    this.forkProcess.channel?.ref();
+  }
+  destroy() {
+    return new Promise((resolve5, reject) => {
+      if (this.stateMachine.state === "destroyed") {
+        return resolve5(void 0);
+      }
+      if (!this.forkProcess) {
+        this.emitter.emit("task:destroyed");
+        return resolve5(void 0);
+      }
+      const timeoutId = setTimeout(() => {
+        clearTimeout(timeoutId);
+        this.killFork();
+        reject(new Error("Destroy operation timed out"));
+      }, 5e3);
+      const onDestroy = () => {
+        clearTimeout(timeoutId);
+        this.off("task:destroyed", onDestroy);
+        resolve5(void 0);
+      };
+      this.once("task:destroyed", onDestroy);
+      this.forkProcess.send({
+        command: "task:destroy"
+      });
+    });
+  }
+  execute() {
+    return new Promise((resolve5, reject) => {
+      if (!this.forkProcess) {
+        return reject(new Error("Cannot execute background task because it hasn't been started yet. Please initialize the task using the start() method before attempting to execute it."));
+      }
+      const executionId = createID();
+      let timeoutId;
+      if (typeof this.options?.executeTimeout === "number") {
+        timeoutId = setTimeout(() => {
+          cleanupListeners();
+          reject(new Error("Execution timeout exceeded"));
+        }, this.options.executeTimeout);
+      }
+      const cleanupListeners = () => {
+        if (timeoutId)
+          clearTimeout(timeoutId);
+        this.off("execution:finished", onFinished);
+        this.off("execution:failed", onFail);
+      };
+      const onFinished = (context) => {
+        if (context.execution?.id !== executionId)
+          return;
+        cleanupListeners();
+        resolve5(context.execution?.result);
+      };
+      const onFail = (context) => {
+        if (context.execution?.id !== executionId)
+          return;
+        cleanupListeners();
+        reject(context.execution?.error || new Error("Execution failed without specific error"));
+      };
+      this.on("execution:finished", onFinished);
+      this.on("execution:failed", onFail);
+      this.forkProcess.send({
+        command: "task:execute",
+        executionId
+      });
+    });
+  }
+  async handleShouldRun(message2) {
+    let allowed = false;
+    let error;
+    try {
+      allowed = this.runCoordinator ? await this.runCoordinator.shouldRun(message2.key, message2.ttlMs) : false;
+    } catch (err) {
+      error = err?.message ?? String(err);
+    }
+    this.forkProcess?.send({ type: "coordinator:result", reqId: message2.reqId, allowed, error });
+  }
+  on(event, fun) {
+    this.emitter.on(event, fun);
+  }
+  off(event, fun) {
+    this.emitter.off(event, fun);
+  }
+  once(event, fun) {
+    this.emitter.once(event, fun);
+  }
+  logEvent(event, context) {
+    switch (event) {
+      case "execution:missed": {
+        const handled = this.emitter.listenerCount("execution:missed") > 0;
+        if (!this.suppressMissedWarning && !handled) {
+          this.logger.warn(`missed execution at ${context.date}! Possible blocking IO or high CPU user at the same process used by node-cron.`);
+        }
+        break;
+      }
+      case "execution:overlap":
+        if (this.options?.noOverlap) {
+          this.logger.warn("task still running, new execution blocked by overlap prevention!");
+        }
+        break;
+      case "execution:failed":
+        if (context.execution?.error) {
+          this.logger.error(context.execution.error);
+        }
+        break;
+    }
+  }
+  createContext(executionDate, execution, reason) {
+    const localTime = new LocalizedTime(executionDate, this.options?.timezone);
+    const ctx = {
+      date: localTime.toDate(),
+      dateLocalIso: localTime.toISO(),
+      triggeredAt: /* @__PURE__ */ new Date(),
+      task: this,
+      execution
+    };
+    if (reason)
+      ctx.reason = reason;
+    return ctx;
+  }
+};
+function serializableOptions(options) {
+  if (!options)
+    return options;
+  const { logger: _logger, runCoordinator: _runCoordinator, ...rest } = options;
+  return rest;
+}
+function deserializeError(str) {
+  const data = JSON.parse(str);
+  const Err = globalThis[data.name] || Error;
+  const err = new Err(data.message);
+  if (data.stack) {
+    err.stack = data.stack;
+  }
+  Object.keys(data).forEach((key2) => {
+    if (!["name", "message", "stack"].includes(key2)) {
+      err[key2] = data[key2];
+    }
+  });
+  return err;
+}
+var moduleFilename = fileURLToPath(import.meta.url);
+var registry = new TaskRegistry();
+function schedule(expression, func, options) {
+  const task = createTask(expression, func, options);
+  let started;
+  try {
+    started = task.start();
+  } catch (error) {
+    registry.remove(task);
+    throw error;
+  }
+  if (started && typeof started.catch === "function") {
+    started.catch((error) => {
+      (options?.logger || logger).error(`Failed to start scheduled task: ${error?.message ?? error}`);
+    });
+  }
+  return task;
+}
+function createTask(expression, func, options) {
+  parse$1(expression);
+  if (options?.distributed && !options.name) {
+    throw new Error("`distributed` requires a `name` (it forms the coordination key shared across instances).");
+  }
+  let task;
+  if (func instanceof Function) {
+    task = new InlineScheduledTask(expression, func, options);
+  } else {
+    const taskPath = solvePath(func);
+    task = new BackgroundScheduledTask(expression, taskPath, options);
+  }
+  registry.add(task);
+  return task;
+}
+function solvePath(filePath) {
+  if (path.isAbsolute(filePath))
+    return pathToFileURL(filePath).href;
+  if (filePath.startsWith("file://"))
+    return filePath;
+  const stackLines = new Error().stack?.split("\n");
+  if (stackLines) {
+    stackLines?.shift();
+    const callerLine = stackLines?.find((line) => {
+      return line.indexOf(moduleFilename) === -1;
+    });
+    const match = callerLine?.match(/(file:\/\/)?(((\/?)(\w:))?([/\\].+)):\d+:\d+/);
+    if (match) {
+      const dir = `${match[5] ?? ""}${path.dirname(match[6])}`;
+      return pathToFileURL(path.resolve(dir, filePath)).href;
+    }
+  }
+  throw new Error(`Could not locate task file ${filePath}`);
+}
+function validate(expression) {
+  try {
+    validate$1(expression);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+var validateDetailed = validateDetailed$1;
+var parse = parse$1;
+async function shutdown(timeout = 5e3) {
+  const tasks2 = registry.all();
+  const pending = [];
+  for (const task of tasks2.values()) {
+    const wait = new Promise((resolve5) => {
+      const onSettled = () => {
+        task.off("execution:finished", onSettled);
+        task.off("execution:failed", onSettled);
+        resolve5();
+      };
+      task.once("execution:finished", onSettled);
+      task.once("execution:failed", onSettled);
+    });
+    const busy = task.isBusy();
+    Promise.resolve(task.stop()).catch((error) => {
+      logger.error(`Error stopping task "${task.name}" during shutdown: ${error?.message ?? error}`);
+    });
+    if (busy) {
+      pending.push(wait);
+    }
+  }
+  if (pending.length) {
+    await Promise.race([
+      Promise.allSettled(pending),
+      new Promise((r) => setTimeout(r, timeout))
+    ]);
+  }
+  for (const task of tasks2.values()) {
+    Promise.resolve(task.destroy()).catch((error) => {
+      logger.error(`Error destroying task "${task.name}" during shutdown: ${error?.message ?? error}`);
+    });
+  }
+}
+var getTasks = registry.all;
+var getTask = registry.get;
+var nodeCron = {
+  schedule,
+  createTask,
+  validate,
+  validateDetailed,
+  parse,
+  getTasks,
+  getTask,
+  setLogger,
+  setRunCoordinator,
+  shutdown
+};
+
+// jobs/sync-scheduler.ts
+var isSyncRunning = false;
+function startSyncScheduler(db2, sourceOverride) {
+  console.log("[Sync Scheduler] Initializing automatic 5-minute Chess-Results sync scheduler...");
+  nodeCron.schedule("*/5 * * * *", async () => {
+    if (isSyncRunning) {
+      console.log("[Sync Scheduler] Previous sync cycle still running, skipping...");
+      return;
+    }
+    isSyncRunning = true;
+    try {
+      await runAutoSyncCycle(db2, sourceOverride);
+    } catch (err) {
+      console.error("[Sync Scheduler] Error in auto sync cycle:", err);
+    } finally {
+      isSyncRunning = false;
+    }
+  });
+  setTimeout(() => {
+    runAutoSyncCycle(db2, sourceOverride).catch((e) => console.error("[Sync Scheduler] Initial check error:", e));
+  }, 1e4);
+}
+async function runAutoSyncCycle(db2, sourceOverride) {
+  try {
+    let rows = [];
+    try {
+      const res = await db2.prepare("SELECT payload, published, auto_sync, sync_interval, last_sync, next_sync FROM tournaments").all();
+      rows = res.results || [];
+    } catch {
+      const res = await db2.prepare("SELECT payload, published FROM tournaments").all();
+      rows = res.results || [];
+    }
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+    for (const r of rows) {
+      let t;
+      try {
+        t = JSON.parse(r.payload);
+      } catch {
+        continue;
+      }
+      const published = r.published !== void 0 && r.published !== null ? !!r.published : !!t.published;
+      if (!published) continue;
+      const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
+      if (!autoSync) continue;
+      const interval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
+      const lastSyncStr = r.last_sync || t.lastSync || t.last_sync || null;
+      const lastSyncTime = lastSyncStr ? new Date(lastSyncStr).getTime() : 0;
+      const intervalMs = interval * 60 * 1e3;
+      if (lastSyncTime > 0 && now - lastSyncTime < intervalMs - 3e4) {
+        continue;
+      }
+      console.log(`[AUTO SYNC DEBUG] AUTO SYNC START:
+time: ${nowIso}
+tournament: ${t.name} (${t.id})`);
+      try {
+        const fetcher = sourceOverride?.tournament ? sourceOverride.tournament : importTournament;
+        const updatedTour = await fetcher(t.source, t.group);
+        updatedTour.name = t.name;
+        updatedTour.published = true;
+        updatedTour.info = t.info;
+        updatedTour.prizes = t.prizes;
+        const nextSyncIso = new Date(now + intervalMs).toISOString();
+        updatedTour.autoSync = true;
+        updatedTour.auto_sync = true;
+        updatedTour.syncInterval = interval;
+        updatedTour.sync_interval = interval;
+        updatedTour.lastSync = nowIso;
+        updatedTour.last_sync = nowIso;
+        updatedTour.nextSync = nextSyncIso;
+        updatedTour.next_sync = nextSyncIso;
+        const payloadStr = JSON.stringify(updatedTour);
+        try {
+          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = 1, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, interval, nowIso, nextSyncIso, t.id).run();
+        } catch {
+          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, t.id).run();
+        }
+        try {
+          const logId = crypto.randomUUID();
+          await db2.prepare(`
+            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            logId,
+            t.id,
+            t.name,
+            t.source,
+            nowIso,
+            "success",
+            updatedTour.players ? updatedTour.players.length : 0,
+            `T\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results: ${t.name} (${updatedTour.players ? updatedTour.players.length : 0} k\u1EF3 th\u1EE7)`
+          ).run();
+        } catch (logErr) {
+          console.error("[Sync Scheduler] Failed to write sync log:", logErr);
+        }
+        console.log(`[AUTO SYNC DEBUG] AUTO SYNC FINISH:
+time: ${(/* @__PURE__ */ new Date()).toISOString()}
+updated: ${updatedTour.players?.length || 0}`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[Sync Scheduler] Error auto syncing "${t.name}":`, errMsg);
+        try {
+          const logId = crypto.randomUUID();
+          await db2.prepare(`
+            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            logId,
+            t.id,
+            t.name,
+            t.source,
+            nowIso,
+            "failed",
+            0,
+            `L\u1ED7i t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9: ${errMsg}`
+          ).run();
+        } catch {
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Sync Scheduler] Error in runAutoSyncCycle:", err);
+  }
+}
+
 // server.ts
-var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
+var root = resolve4(dirname3(fileURLToPath2(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
 var host = process.env.HOST || "0.0.0.0";
 var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
 var dbUrl = process.env.DATABASE_URL;
-var dbPath = dbUrl || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
-var db = openDatabase(dbPath, resolve3(root, "migrations"));
+var dbPath = dbUrl || resolve4(root, process.env.DATA_DIR || "data", "chess.sqlite");
+var db = openDatabase(dbPath, resolve4(root, "migrations"));
 console.log(`[DB INIT] db_source=${db.source || (dbUrl ? "postgresql" : "sqlite")} (${dbUrl ? "Supabase PostgreSQL" : "SQLite Local"})`);
+startSyncScheduler(db);
 var api = createApi(db);
-var web = resolve3(root, "web");
+var web = resolve4(root, "web");
 var types = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -2832,15 +4969,15 @@ var server = createServer(async (req, res) => {
       res.end();
       return;
     }
-    const path = decodeURIComponent(url.pathname);
-    if (path.startsWith("/uploads/")) {
+    const path2 = decodeURIComponent(url.pathname);
+    if (path2.startsWith("/uploads/")) {
       const candidates = [
-        resolve3(web, "." + path),
-        resolve3(root, "web", "." + path),
-        resolve3(root, "public", "." + path),
-        resolve3(process.cwd(), "web", "." + path),
-        resolve3(process.cwd(), "public", "." + path),
-        resolve3(process.cwd(), "." + path)
+        resolve4(web, "." + path2),
+        resolve4(root, "web", "." + path2),
+        resolve4(root, "public", "." + path2),
+        resolve4(process.cwd(), "web", "." + path2),
+        resolve4(process.cwd(), "public", "." + path2),
+        resolve4(process.cwd(), "." + path2)
       ];
       let fileFound = null;
       for (const cand of candidates) {
@@ -2864,8 +5001,8 @@ var server = createServer(async (req, res) => {
         return;
       }
     }
-    const asset = path === "/" || path === "/admin" || path === "/admin/" ? "index.html" : "." + path;
-    const full = resolve3(web, asset);
+    const asset = path2 === "/" || path2 === "/admin" || path2 === "/admin/" ? "index.html" : "." + path2;
+    const full = resolve4(web, asset);
     if (!full.startsWith(web + sep)) {
       res.writeHead(403, security);
       res.end();
@@ -2877,7 +5014,7 @@ var server = createServer(async (req, res) => {
       res.writeHead(200, {
         ...security,
         "Content-Type": types[extname(full)] || "application/octet-stream",
-        "Cache-Control": path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache"
+        "Cache-Control": path2.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache"
       });
       res.end(req.method === "HEAD" ? void 0 : bytes);
     } catch {

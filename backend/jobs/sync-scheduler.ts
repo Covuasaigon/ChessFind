@@ -67,7 +67,7 @@ export async function runAutoSyncCycle(db: Database, sourceOverride?: ApiSource)
         continue;
       }
 
-      console.log(`[Sync Scheduler] Auto syncing tournament "${t.name}" (${t.id})...`);
+      console.log(`[AUTO SYNC DEBUG] AUTO SYNC START:\ntime: ${nowIso}\ntournament: ${t.name} (${t.id})`);
 
       try {
         const fetcher = sourceOverride?.tournament ? sourceOverride.tournament : importTournament;
@@ -118,7 +118,7 @@ export async function runAutoSyncCycle(db: Database, sourceOverride?: ApiSource)
           console.error('[Sync Scheduler] Failed to write sync log:', logErr);
         }
 
-        console.log(`[Sync Scheduler] Auto synced "${t.name}" successfully (${updatedTour.players?.length || 0} players).`);
+        console.log(`[AUTO SYNC DEBUG] AUTO SYNC FINISH:\ntime: ${new Date().toISOString()}\nupdated: ${updatedTour.players?.length || 0}`);
 
       } catch (err: any) {
         const errMsg = err instanceof Error ? err.message : String(err);

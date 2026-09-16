@@ -1518,6 +1518,38 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         return json({ message: shown ? 'Đã công bố giải đấu.' : 'Đã ẩn giải đấu.' }, 200, {}, req);
       }
 
+      if (action === 'toggle_auto_sync') {
+        const autoSync = b.auto_sync === true || b.auto_sync === 1;
+        const nowIso = new Date().toISOString();
+        const interval = old.syncInterval || old.sync_interval || 5;
+        const nextSyncIso = autoSync ? new Date(Date.now() + interval * 60 * 1000).toISOString() : null;
+
+        const updatedTour: Tournament = {
+          ...old,
+          autoSync,
+          auto_sync: autoSync,
+          syncInterval: interval,
+          sync_interval: interval,
+          ...(autoSync ? {
+            lastSync: old.lastSync || old.last_sync || nowIso,
+            last_sync: old.lastSync || old.last_sync || nowIso,
+            nextSync: nextSyncIso,
+            next_sync: nextSyncIso
+          } : {})
+        };
+
+        const payloadStr = JSON.stringify(updatedTour);
+        try {
+          await db.prepare('UPDATE tournaments SET payload = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?')
+            .bind(payloadStr, autoSync ? 1 : 0, interval, updatedTour.lastSync || null, nextSyncIso, old.id).run();
+        } catch {
+          await db.prepare('UPDATE tournaments SET payload = ? WHERE id = ?').bind(payloadStr, old.id).run();
+        }
+
+        await log(true, `${autoSync ? 'Bật' : 'Tắt'} tự động đồng bộ giải: ${old.name}`);
+        return json({ message: autoSync ? 'Đã bật tự động đồng bộ (mỗi 5 phút).' : 'Đã tắt tự động đồng bộ.' }, 200, {}, req);
+      }
+
       if (action === 'delete') {
         if (b.confirmName !== old.name) return json({ error: 'Tên xác nhận xóa không khớp.' }, 400, {}, req);
         await db.batch([
@@ -1565,12 +1597,38 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           if (t.players.length < old.players.length) throw Error(`Nguồn chỉ trả ${t.players.length}/${old.players.length} kỳ thủ. Dữ liệu cũ được giữ để tránh mất kết quả.`);
           t.name = old.name;
         }
-        t.published = old.published; const statements = [];
+        t.published = old.published;
+        const nowIso = new Date().toISOString();
+        const interval = t.syncInterval || t.sync_interval || old.syncInterval || old.sync_interval || 5;
+        const nextSyncIso = new Date(Date.now() + interval * 60 * 1000).toISOString();
+
+        if (action === 'sync' || action === 'force_sync') {
+          t.autoSync = old.autoSync !== false && old.auto_sync !== false;
+          t.auto_sync = t.autoSync;
+          t.syncInterval = interval;
+          t.sync_interval = interval;
+          t.lastSync = nowIso;
+          t.last_sync = nowIso;
+          t.nextSync = nextSyncIso;
+          t.next_sync = nextSyncIso;
+        }
+
+        const statements = [];
         if (t.id !== old.id) {
-          statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)').bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          try {
+            statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,updated,auto_sync,sync_interval,last_sync,next_sync) VALUES (?,?,?,?,?,?,?,?)')
+              .bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated, t.autoSync ? 1 : 0, interval, t.lastSync || nowIso, t.nextSync || nextSyncIso));
+          } catch {
+            statements.push(db.prepare('INSERT INTO tournaments (id,payload,published,updated) VALUES (?,?,?,?)').bind(t.id, JSON.stringify(t), old.published ? 1 : 0, t.updated));
+          }
           statements.push(db.prepare('DELETE FROM tournaments WHERE id = ?').bind(old.id));
         } else {
-          statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, t.id));
+          try {
+            statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ?, auto_sync = ?, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?')
+              .bind(JSON.stringify(t), t.updated, t.autoSync ? 1 : 0, interval, t.lastSync || nowIso, t.nextSync || nextSyncIso, t.id));
+          } catch {
+            statements.push(db.prepare('UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?').bind(JSON.stringify(t), t.updated, t.id));
+          }
         }
         if (t.updated !== old.updated || t.id !== old.id || action === 'force_sync') statements.push(db.prepare('DELETE FROM details WHERE tid = ?').bind(old.id));
         await db.batch(statements);
@@ -1638,7 +1696,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       return json({ error: 'Thao tác không được hỗ trợ.' }, 400, {}, req);
     } catch (e) {
       const m = message(e);
-      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info'].includes(action)) {
+      if (authorized && ['preview', 'sync', 'edit', 'batch_import', 'detect', 'banner_create', 'banner_update', 'banner_delete', 'banner_toggle', 'tournament_update_info', 'toggle_auto_sync'].includes(action)) {
         try {
           await log(false, m);
           await logSync({

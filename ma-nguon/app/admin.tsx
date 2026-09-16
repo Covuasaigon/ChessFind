@@ -828,6 +828,10 @@ export default function Admin({ onChanged }: AdminProps) {
 
   useEffect(() => {
     load();
+    const interval = setInterval(() => {
+      load();
+    }, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   async function action(type: string, extra: Record<string, unknown> = {}): Promise<boolean> {
@@ -994,7 +998,7 @@ export default function Admin({ onChanged }: AdminProps) {
   const tournaments = activeTournaments.filter((t: Tournament) => normalize(t.name + ' ' + t.group).includes(normalize(q)));
   const totalPlayersCount = activeTournaments.reduce((a: number, t: Tournament) => a + (t.players ? t.players.length : 0), 0);
   const publishedCount = activeTournaments.filter((t: Tournament) => t.published).length;
-  const lastSyncTime = activeTournaments[0]?.updated ? new Date(activeTournaments[0].updated).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null;
+  const lastSyncTime = (activeTournaments[0]?.lastSync || activeTournaments[0]?.last_sync || activeTournaments[0]?.updated) ? formatVietnamTime(activeTournaments[0]?.lastSync || activeTournaments[0]?.last_sync || activeTournaments[0]?.updated) : null;
 
   return (
     <>

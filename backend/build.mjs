@@ -14,7 +14,7 @@ await build({
   format: 'esm',
   target: 'node22',
   outfile: resolve(root, 'server.mjs'),
-  packages: 'external'
+  external: ['pg']
 });
 
 mkdirSync(resolve(root, 'uploads/banner'), { recursive: true });
