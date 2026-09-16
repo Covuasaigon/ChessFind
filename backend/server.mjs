@@ -140,13 +140,20 @@ function matchCategoryGroup(ruleGrp, userGrp) {
   const uNorm = normalizeCategoryGroup(userGrp);
   if (rNorm === "tat ca" || rNorm.includes("tat ca") || rNorm === "all" || rNorm === "") return true;
   if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
-  const rAgeMatch = rNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
-  const uAgeMatch = uNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
+  const isRuleMale = rNorm.includes("nam");
+  const isRuleFemale = rNorm.includes("nu") && !rNorm.includes("nam");
+  const isUserMale = uNorm.includes("nam");
+  const isUserFemale = uNorm.includes("nu") && !uNorm.includes("nam");
+  if (isRuleMale && isUserFemale || isRuleFemale && isUserMale) {
+    return false;
+  }
+  const rAgeMatch = rNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh|tre)\b/g);
+  const uAgeMatch = uNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh|tre)\b/g);
   if (rAgeMatch && uAgeMatch) {
     const hasCommonAge = rAgeMatch.some((tag) => uAgeMatch.includes(tag));
     if (!hasCommonAge) return false;
   }
-  const stopWords = /* @__PURE__ */ new Set(["bang", "nhom", "giai", "nam", "nu", "co", "vua", "cau", "thu", "hang"]);
+  const stopWords = /* @__PURE__ */ new Set(["bang", "nhom", "giai", "co", "vua", "cau", "thu", "hang"]);
   const rTokens = rNorm.split(/\s+/).filter((t) => t.length >= 2 && !stopWords.has(t));
   const uTokens = uNorm.split(/\s+/).filter((t) => t.length >= 2 && !stopWords.has(t));
   if (rTokens.length > 0 && uTokens.length > 0) {
@@ -154,49 +161,70 @@ function matchCategoryGroup(ruleGrp, userGrp) {
   }
   return false;
 }
-function getMedal(rank, group, prizes) {
-  if (!rank || rank <= 0) return null;
-  if (prizes && prizes.length > 0) {
-    const matching = prizes.filter((p) => {
-      const rf = p.rank_from ?? p.rankFrom ?? p.rank;
-      const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
-      const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
-      const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
-      const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
-      const fromVal = rfNum !== null ? rfNum : rNum;
-      const toVal = rtNum !== null ? rtNum : rNum !== null ? rNum : fromVal;
-      if (fromVal === null || toVal === null) return false;
-      const rankMatches = rank >= fromVal && rank <= toVal;
-      if (!rankMatches) return false;
-      const ruleGrp = p.group_name || p.group;
-      return matchCategoryGroup(ruleGrp, group);
-    });
-    if (matching.length > 0) {
-      const specificMatch = group ? matching.find((p) => {
-        const ruleGrp = p.group_name || p.group;
-        if (!ruleGrp) return false;
-        const norm = normalize(ruleGrp);
-        return !norm.includes("tat ca") && norm !== "all";
-      }) : null;
-      const match = specificMatch || matching[0];
-      const label = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
-      let medalIcon = "\u{1F3C6}";
-      const mStr = (match.medal || "").toLowerCase();
-      const pNameLower = label.toLowerCase();
-      if (mStr.includes("gold") || mStr.includes("vang") || pNameLower.includes("gold") || pNameLower.includes("v\xE0ng") || pNameLower.includes("vang")) {
-        medalIcon = "\u{1F947}";
-      } else if (mStr.includes("silver") || mStr.includes("bac") || pNameLower.includes("silver") || pNameLower.includes("b\u1EA1c") || pNameLower.includes("bac")) {
-        medalIcon = "\u{1F948}";
-      } else if (mStr.includes("bronze") || mStr.includes("dong") || pNameLower.includes("bronze") || pNameLower.includes("\u0111\u1ED3ng") || pNameLower.includes("dong")) {
-        medalIcon = "\u{1F949}";
-      } else if (mStr.includes("certificate") || mStr.includes("consolation") || mStr.includes("khuyen khich") || mStr.includes("top") || mStr.includes("khen") || mStr.includes("bang") || pNameLower.includes("khuyen khich") || pNameLower.includes("khuy\u1EBFn kh\xEDch") || pNameLower.includes("khen") || rank >= 4) {
-        medalIcon = "\u{1F396}";
-      }
-      return { medal: medalIcon, label, matchedRule: match };
-    }
-    return null;
+function getMedal(rank, group, prizes, options) {
+  if (options?.loadError) {
+    return {
+      medal: "\u26A0\uFE0F",
+      label: "Ch\u01B0a t\u1EA3i \u0111\u01B0\u1EE3c th\xF4ng tin gi\u1EA3i th\u01B0\u1EDFng",
+      status: "error"
+    };
   }
-  return null;
+  if (rank == null || rank <= 0 || isNaN(rank)) {
+    return {
+      medal: "\u265F",
+      label: "Ch\u01B0a \u0111\u1EE7 d\u1EEF li\u1EC7u x\xE9t gi\u1EA3i",
+      status: "no_rank"
+    };
+  }
+  if (!prizes || prizes.length === 0) {
+    return {
+      medal: "\u2139\uFE0F",
+      label: "Ch\u01B0a c\u1EA5u h\xECnh gi\u1EA3i th\u01B0\u1EDFng",
+      status: "no_rules"
+    };
+  }
+  const matching = prizes.filter((p) => {
+    const rf = p.rank_from ?? p.rankFrom ?? p.rank;
+    const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
+    const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
+    const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
+    const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
+    const fromVal = rfNum !== null ? rfNum : rNum;
+    const toVal = rtNum !== null ? rtNum : rNum !== null ? rNum : fromVal;
+    if (fromVal === null || toVal === null) return false;
+    const rankMatches = rank >= fromVal && rank <= toVal;
+    if (!rankMatches) return false;
+    const ruleGrp = p.group_name || p.group;
+    return matchCategoryGroup(ruleGrp, group);
+  });
+  if (matching.length > 0) {
+    const specificMatch = group ? matching.find((p) => {
+      const ruleGrp = p.group_name || p.group;
+      if (!ruleGrp) return false;
+      const norm = normalizeCategoryGroup(ruleGrp);
+      return !norm.includes("tat ca") && norm !== "all";
+    }) : null;
+    const match = specificMatch || matching[0];
+    const label = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
+    let medalIcon = "\u{1F3C6}";
+    const mStr = (match.medal || "").toLowerCase();
+    const pNameLower = label.toLowerCase();
+    if (mStr.includes("gold") || mStr.includes("vang") || pNameLower.includes("gold") || pNameLower.includes("v\xE0ng") || pNameLower.includes("vang")) {
+      medalIcon = "\u{1F947}";
+    } else if (mStr.includes("silver") || mStr.includes("bac") || pNameLower.includes("silver") || pNameLower.includes("b\u1EA1c") || pNameLower.includes("bac")) {
+      medalIcon = "\u{1F948}";
+    } else if (mStr.includes("bronze") || mStr.includes("dong") || pNameLower.includes("bronze") || pNameLower.includes("\u0111\u1ED3ng") || pNameLower.includes("dong")) {
+      medalIcon = "\u{1F949}";
+    } else if (mStr.includes("certificate") || mStr.includes("consolation") || mStr.includes("khuyen khich") || mStr.includes("top") || mStr.includes("khen") || mStr.includes("bang") || pNameLower.includes("khuyen khich") || pNameLower.includes("khuy\u1EBFn kh\xEDch") || pNameLower.includes("khen") || rank >= 4) {
+      medalIcon = "\u{1F396}";
+    }
+    return { medal: medalIcon, label, status: "matched", matchedRule: match };
+  }
+  return {
+    medal: "\u{1F396}",
+    label: "Ngo\xE0i ph\u1EA1m vi gi\u1EA3i th\u01B0\u1EDFng",
+    status: "outside_range"
+  };
 }
 function getNextMatch(p) {
   if (!p.rounds || !p.rounds.length) return null;

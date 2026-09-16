@@ -57,7 +57,7 @@ export type Player = {
   draws?: number;
   losses?: number;
   nextMatch?: Round | null;
-  medalPrediction?: { medal: string; label: string; type?: string } | null;
+  medalPrediction?: { medal: string; label: string; status?: 'matched' | 'no_rules' | 'outside_range' | 'no_rank' | 'error' | string; type?: string } | null;
 };
 
 export type Category = {
@@ -290,16 +290,26 @@ export function matchCategoryGroup(ruleGrp?: string, userGrp?: string): boolean 
   if (rNorm === 'tat ca' || rNorm.includes('tat ca') || rNorm === 'all' || rNorm === '') return true;
   if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
 
-  // Extract age/division tags (e.g. u6, u8, u10, open, baby)
-  const rAgeMatch = rNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
-  const uAgeMatch = uNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
+  // Check gender conflict
+  const isRuleMale = rNorm.includes('nam');
+  const isRuleFemale = rNorm.includes('nu') && !rNorm.includes('nam');
+  const isUserMale = uNorm.includes('nam');
+  const isUserFemale = uNorm.includes('nu') && !uNorm.includes('nam');
+
+  if ((isRuleMale && isUserFemale) || (isRuleFemale && isUserMale)) {
+    return false;
+  }
+
+  // Extract age/division tags (e.g. u6, u8, u10, u11, open, baby, tre)
+  const rAgeMatch = rNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh|tre)\b/g);
+  const uAgeMatch = uNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh|tre)\b/g);
 
   if (rAgeMatch && uAgeMatch) {
     const hasCommonAge = rAgeMatch.some(tag => uAgeMatch.includes(tag));
     if (!hasCommonAge) return false;
   }
 
-  const stopWords = new Set(['bang', 'nhom', 'giai', 'nam', 'nu', 'co', 'vua', 'cau', 'thu', 'hang']);
+  const stopWords = new Set(['bang', 'nhom', 'giai', 'co', 'vua', 'cau', 'thu', 'hang']);
   const rTokens = rNorm.split(/\s+/).filter(t => t.length >= 2 && !stopWords.has(t));
   const uTokens = uNorm.split(/\s+/).filter(t => t.length >= 2 && !stopWords.has(t));
 
@@ -310,60 +320,96 @@ export function matchCategoryGroup(ruleGrp?: string, userGrp?: string): boolean 
   return false;
 }
 
-export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule[]): { medal: string; label: string; matchedRule?: PrizeRule } | null {
-  if (!rank || rank <= 0) return null;
-  if (prizes && prizes.length > 0) {
-    const matching = prizes.filter(p => {
-      const rf = p.rank_from ?? p.rankFrom ?? p.rank;
-      const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
-      const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
-      const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
-      const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
+export type MedalPredictionResult = {
+  medal: string;
+  label: string;
+  status: 'matched' | 'no_rules' | 'outside_range' | 'no_rank' | 'error';
+  matchedRule?: PrizeRule;
+  isOfficial?: boolean;
+};
 
-      const fromVal = rfNum !== null ? rfNum : rNum;
-      const toVal = rtNum !== null ? rtNum : (rNum !== null ? rNum : fromVal);
-
-      if (fromVal === null || toVal === null) return false;
-      const rankMatches = rank >= fromVal && rank <= toVal;
-      if (!rankMatches) return false;
-
-      const ruleGrp = p.group_name || p.group;
-      return matchCategoryGroup(ruleGrp, group);
-    });
-
-    if (matching.length > 0) {
-      // Prioritize specific category match over 'tat ca'
-      const specificMatch = group ? matching.find(p => {
-        const ruleGrp = p.group_name || p.group;
-        if (!ruleGrp) return false;
-        const norm = normalize(ruleGrp);
-        return !norm.includes('tat ca') && norm !== 'all';
-      }) : null;
-
-      const match = specificMatch || matching[0];
-      const label = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
-      let medalIcon = '🏆';
-      const mStr = (match.medal || '').toLowerCase();
-      const pNameLower = label.toLowerCase();
-
-      if (mStr.includes('gold') || mStr.includes('vang') || pNameLower.includes('gold') || pNameLower.includes('vàng') || pNameLower.includes('vang')) {
-        medalIcon = '🥇';
-      } else if (mStr.includes('silver') || mStr.includes('bac') || pNameLower.includes('silver') || pNameLower.includes('bạc') || pNameLower.includes('bac')) {
-        medalIcon = '🥈';
-      } else if (mStr.includes('bronze') || mStr.includes('dong') || pNameLower.includes('bronze') || pNameLower.includes('đồng') || pNameLower.includes('dong')) {
-        medalIcon = '🥉';
-      } else if (mStr.includes('certificate') || mStr.includes('consolation') || mStr.includes('khuyen khich') || mStr.includes('top') || mStr.includes('khen') || mStr.includes('bang') || pNameLower.includes('khuyen khich') || pNameLower.includes('khuyến khích') || pNameLower.includes('khen') || rank >= 4) {
-        medalIcon = '🎖';
-      }
-
-      return { medal: medalIcon, label, matchedRule: match };
-    }
-
-    // If prizes array exists but rank doesn't match any configured rule, player is outside prize structure
-    return null;
+export function getMedal(
+  rank: number | null,
+  group?: string,
+  prizes?: PrizeRule[],
+  options?: { loadError?: boolean }
+): MedalPredictionResult {
+  if (options?.loadError) {
+    return {
+      medal: '⚠️',
+      label: 'Chưa tải được thông tin giải thưởng',
+      status: 'error'
+    };
   }
 
-  return null;
+  if (rank == null || rank <= 0 || isNaN(rank)) {
+    return {
+      medal: '♟',
+      label: 'Chưa đủ dữ liệu xét giải',
+      status: 'no_rank'
+    };
+  }
+
+  if (!prizes || prizes.length === 0) {
+    return {
+      medal: 'ℹ️',
+      label: 'Chưa cấu hình giải thưởng',
+      status: 'no_rules'
+    };
+  }
+
+  const matching = prizes.filter(p => {
+    const rf = p.rank_from ?? p.rankFrom ?? p.rank;
+    const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
+    const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
+    const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
+    const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
+
+    const fromVal = rfNum !== null ? rfNum : rNum;
+    const toVal = rtNum !== null ? rtNum : (rNum !== null ? rNum : fromVal);
+
+    if (fromVal === null || toVal === null) return false;
+    const rankMatches = rank >= fromVal && rank <= toVal;
+    if (!rankMatches) return false;
+
+    const ruleGrp = p.group_name || p.group;
+    return matchCategoryGroup(ruleGrp, group);
+  });
+
+  if (matching.length > 0) {
+    // Prioritize specific category match over 'tat ca'
+    const specificMatch = group ? matching.find(p => {
+      const ruleGrp = p.group_name || p.group;
+      if (!ruleGrp) return false;
+      const norm = normalizeCategoryGroup(ruleGrp);
+      return !norm.includes('tat ca') && norm !== 'all';
+    }) : null;
+
+    const match = specificMatch || matching[0];
+    const label = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
+    let medalIcon = '🏆';
+    const mStr = (match.medal || '').toLowerCase();
+    const pNameLower = label.toLowerCase();
+
+    if (mStr.includes('gold') || mStr.includes('vang') || pNameLower.includes('gold') || pNameLower.includes('vàng') || pNameLower.includes('vang')) {
+      medalIcon = '🥇';
+    } else if (mStr.includes('silver') || mStr.includes('bac') || pNameLower.includes('silver') || pNameLower.includes('bạc') || pNameLower.includes('bac')) {
+      medalIcon = '🥈';
+    } else if (mStr.includes('bronze') || mStr.includes('dong') || pNameLower.includes('bronze') || pNameLower.includes('đồng') || pNameLower.includes('dong')) {
+      medalIcon = '🥉';
+    } else if (mStr.includes('certificate') || mStr.includes('consolation') || mStr.includes('khuyen khich') || mStr.includes('top') || mStr.includes('khen') || mStr.includes('bang') || pNameLower.includes('khuyen khich') || pNameLower.includes('khuyến khích') || pNameLower.includes('khen') || rank >= 4) {
+      medalIcon = '🎖';
+    }
+
+    return { medal: medalIcon, label, status: 'matched', matchedRule: match };
+  }
+
+  // If prizes array exists but rank doesn't match any configured rule range
+  return {
+    medal: '🎖',
+    label: 'Ngoài phạm vi giải thưởng',
+    status: 'outside_range'
+  };
 }
 
 export function getNextMatch(p: Player): Round | null {

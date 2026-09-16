@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { getMedal, type PrizeRule } from '../lib/chess.ts';
+import { getMedal, matchCategoryGroup, type PrizeRule } from '../lib/chess.ts';
 
 const prizes: PrizeRule[] = [
   { rank_from: 1, rank_to: 1, group_name: 'Bảng U11 Nam', medal: 'Gold', prize_name: 'Huy chương Vàng' },
@@ -11,89 +11,67 @@ const prizes: PrizeRule[] = [
 // Mandatory Test Cases:
 // Rank 1 -> Huy chương Vàng
 const r1 = getMedal(1, 'Bảng U11 Nam', prizes);
-assert.notEqual(r1, null);
-assert.equal(r1?.medal, '🥇');
-assert.equal(r1?.label, 'Huy chương Vàng');
-console.log('✓ Case Rank 1 passed: 🥇 Huy chương Vàng');
+assert.equal(r1.medal, '🥇');
+assert.equal(r1.label, 'Huy chương Vàng');
+assert.equal(r1.status, 'matched');
+console.log('✓ Case Rank 1 passed: 🥇 Huy chương Vàng (matched)');
 
 // Rank 2 -> Huy chương Bạc
 const r2 = getMedal(2, 'Bảng U11 Nam', prizes);
-assert.notEqual(r2, null);
-assert.equal(r2?.medal, '🥈');
-assert.equal(r2?.label, 'Huy chương Bạc');
-console.log('✓ Case Rank 2 passed: 🥈 Huy chương Bạc');
+assert.equal(r2.medal, '🥈');
+assert.equal(r2.label, 'Huy chương Bạc');
+assert.equal(r2.status, 'matched');
+console.log('✓ Case Rank 2 passed: 🥈 Huy chương Bạc (matched)');
 
 // Rank 3 -> Huy chương Đồng
 const r3 = getMedal(3, 'Bảng U11 Nam', prizes);
-assert.notEqual(r3, null);
-assert.equal(r3?.medal, '🥉');
-assert.equal(r3?.label, 'Huy chương Đồng');
-console.log('✓ Case Rank 3 passed: 🥉 Huy chương Đồng');
+assert.equal(r3.medal, '🥉');
+assert.equal(r3.label, 'Huy chương Đồng');
+assert.equal(r3.status, 'matched');
+console.log('✓ Case Rank 3 passed: 🥉 Huy chương Đồng (matched)');
 
 // Rank 4 -> Giải Khuyến Khích
 const r4 = getMedal(4, 'Bảng U11 Nam', prizes);
-assert.notEqual(r4, null);
-assert.equal(r4?.medal, '🎖');
-assert.equal(r4?.label, 'Giải Khuyến Khích');
-console.log('✓ Case Rank 4 passed: 🎖 Giải Khuyến Khích');
+assert.equal(r4.medal, '🎖');
+assert.equal(r4.label, 'Giải Khuyến Khích');
+assert.equal(r4.status, 'matched');
+console.log('✓ Case Rank 4 passed: 🎖 Giải Khuyến Khích (matched)');
 
 // Rank 5 -> Giải Khuyến Khích
 const r5 = getMedal(5, 'Bảng U11 Nam', prizes);
-assert.notEqual(r5, null);
-assert.equal(r5?.medal, '🎖');
-assert.equal(r5?.label, 'Giải Khuyến Khích');
-console.log('✓ Case Rank 5 passed: 🎖 Giải Khuyến Khích');
+assert.equal(r5.medal, '🎖');
+assert.equal(r5.label, 'Giải Khuyến Khích');
+assert.equal(r5.status, 'matched');
+console.log('✓ Case Rank 5 passed: 🎖 Giải Khuyến Khích (matched)');
 
-// Rank 6 (ngoài cơ cấu) -> null (Chưa đạt giải / Không đạt giải)
+// Rank 6 (ngoài cơ cấu) -> Ngoài phạm vi giải thưởng
 const r6 = getMedal(6, 'Bảng U11 Nam', prizes);
-assert.equal(r6, null);
-console.log('✓ Case Rank 6 (ngoài cơ cấu) passed: null (Không đạt giải)');
+assert.equal(r6.label, 'Ngoài phạm vi giải thưởng');
+assert.equal(r6.status, 'outside_range');
+console.log('✓ Case Rank 6 (ngoài cơ cấu) passed: Ngoài phạm vi giải thưởng (outside_range)');
 
-// API Integration Test for Ranks 1-5
-import { getDb } from '../lib/db.ts';
-import { createApi } from '../lib/api.ts';
+// Case 7: Không có cơ cấu áp dụng
+const rNoRules = getMedal(1, 'Bảng U11 Nam', []);
+assert.equal(rNoRules.label, 'Chưa cấu hình giải thưởng');
+assert.equal(rNoRules.status, 'no_rules');
+console.log('✓ Case Không có cơ cấu: Chưa cấu hình giải thưởng (no_rules)');
 
-async function testApiPrizes() {
-  const db = getDb();
-  const api = createApi(db);
-  const tourId = '1461992';
-  const groupName = 'Bảng U11 Nam';
+// Case 8: Chưa có thứ hạng
+const rNoRank = getMedal(null, 'Bảng U11 Nam', prizes);
+assert.equal(rNoRank.label, 'Chưa đủ dữ liệu xét giải');
+assert.equal(rNoRank.status, 'no_rank');
+console.log('✓ Case Chưa có thứ hạng: Chưa đủ dữ liệu xét giải (no_rank)');
 
-  await db.prepare('DELETE FROM prizes WHERE tournament_id = ?').bind(tourId).run();
-  const now = new Date().toISOString();
-  for (let i = 0; i < prizes.length; i++) {
-    const p = prizes[i];
-    await db.prepare(`
-      INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)
-    `).bind(`rule_${i+1}`, tourId, groupName, p.rank_from, p.rank_to, p.medal, p.prize_name, now, now).run();
-  }
+// Case 9: Lỗi tải cơ cấu
+const rError = getMedal(null, 'Bảng U11 Nam', prizes, { loadError: true });
+assert.equal(rError.label, 'Chưa tải được thông tin giải thưởng');
+assert.equal(rError.status, 'error');
+console.log('✓ Case Lỗi tải cơ cấu: Chưa tải được thông tin giải thưởng (error)');
 
-  // Create fake tournament player check or test getMedal logic via api mapping
-  const rank1Medal = getMedal(1, groupName, prizes);
-  assert.equal(rank1Medal?.label, 'Huy chương Vàng');
-  console.log('Rank 1 => Huy chương Vàng PASS');
+// Gender Matching Tests
+assert.equal(matchCategoryGroup('Bảng U8 Nam', 'Bảng U8 Nữ'), false);
+assert.equal(matchCategoryGroup('Bảng U8 Nam', 'Bảng U8 Nam'), true);
+assert.equal(matchCategoryGroup('Tất cả các bảng', 'Bảng U8 Nữ'), true);
+console.log('✓ Gender mismatch rules verified correctly!');
 
-  const rank2Medal = getMedal(2, groupName, prizes);
-  assert.equal(rank2Medal?.label, 'Huy chương Bạc');
-  console.log('Rank 2 => Huy chương Bạc PASS');
-
-  const rank3Medal = getMedal(3, groupName, prizes);
-  assert.equal(rank3Medal?.label, 'Huy chương Đồng');
-  console.log('Rank 3 => Huy chương Đồng PASS');
-
-  const rank4Medal = getMedal(4, groupName, prizes);
-  assert.equal(rank4Medal?.label, 'Giải Khuyến Khích');
-  console.log('Rank 4 => Giải Khuyến Khích PASS');
-
-  const rank5Medal = getMedal(5, groupName, prizes);
-  assert.equal(rank5Medal?.label, 'Giải Khuyến Khích');
-  console.log('Rank 5 => Giải Khuyến Khích PASS');
-
-  await db.prepare('DELETE FROM prizes WHERE tournament_id = ?').bind(tourId).run();
-}
-
-await testApiPrizes();
-
-console.log('\n✅ ALL MANDATORY PRIZE PREDICTION TESTS PASSED SUCCESSFULLY!');
-
+console.log('\n✅ ALL 5 STATUS CASES & PRIZE PREDICTION TESTS PASSED SUCCESSFULLY!');
