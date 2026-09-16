@@ -284,9 +284,18 @@ export default function ChessApp() {
             (current.categories && player.categoryId ? current.categories.find(c => c.id === player.categoryId)?.name : null) ||
             current.group ||
             (player.ageGroup ? (player.ageGroup.toLowerCase().includes('bảng') ? player.ageGroup : 'Bảng ' + player.ageGroup) : null);
-          const medal = (player.detailsLoaded || player.medalPrediction !== undefined)
-            ? player.medalPrediction
-            : (detailError ? getMedal(null, currentDivision, current?.prizes, { loadError: true }) : getMedal(currentRank, currentDivision, current?.prizes));
+          let medal = player.medalPrediction;
+          if (!medal && player.detailsLoaded !== true && !detailError) {
+            medal = {
+              medal: '⏳',
+              label: 'Đang xác định giải thưởng...',
+              status: 'loading'
+            } as any;
+          } else if (!medal) {
+            medal = detailError
+              ? getMedal(null, currentDivision, current?.prizes, { loadError: true })
+              : (current?.prizes && current.prizes.length > 0 ? getMedal(currentRank, currentDivision, current.prizes) : { medal: 'ℹ️', label: 'Chưa cấu hình giải thưởng', status: 'no_rules' });
+          }
 
           let isNextWhite = false;
           let isNextBlack = false;
