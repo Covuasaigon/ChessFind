@@ -401,12 +401,6 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         `SELECT * FROM prizes WHERE tournament_id IN (${placeholders}) OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC`
       ).bind(...idsArr, masterId + '-%', id + '-%').all<any>();
 
-      if (!prizesRes.results || prizesRes.results.length === 0) {
-        prizesRes = await db.prepare(
-          "SELECT * FROM prizes ORDER BY rank_from ASC"
-        ).all<any>();
-      }
-
       const dbPrizes = (prizesRes.results || []).map((row: any) => ({
         id: row.id,
         tournamentId: row.tournament_id,
@@ -723,15 +717,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             matchedRuleRange = `${rF}-${rT}`;
           }
 
-          console.log(`rank: ${rank}`);
-          console.log(`group: ${userCategory || t.group || 'None'}`);
-          console.log(`tournament_id: ${id}`);
-          console.log(`\nDanh sách prizes tìm được:\n${JSON.stringify((t.prizes || []).map(p => ({
-            rank_from: p.rank_from ?? p.rankFrom,
-            rank_to: p.rank_to ?? p.rankTo,
-            prize_name: p.prize_name ?? p.prizeName
-          })), null, 2)}\n`);
-          console.log(`Kết quả getMedal():\n${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : 'None'}\n`);
+          console.log(`[PRIZE DEBUG]\nTournament ID: ${id}\nPlayer ID: ${pid}\nPlayer Rank: ${rank}\nPlayer Category: ${userCategory || t.group || 'None'}\nPrize query: ${t.prizes ? t.prizes.length : 0} rows\nMatched rule: ${medalPrediction && medalPrediction.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : 'None'}`);
 
           const fullPlayer = {
             ...playerObj,
