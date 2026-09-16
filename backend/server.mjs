@@ -1410,9 +1410,9 @@ function createApi(db2, sourceParam = {}) {
       let prizesRes = await db2.prepare(
         `SELECT * FROM prizes WHERE tournament_id IN (${placeholders}) OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC`
       ).bind(...idsArr, masterId + "-%", id + "-%").all();
-      if ((!prizesRes.results || prizesRes.results.length === 0) && idsArr.length > 0) {
+      if (!prizesRes.results || prizesRes.results.length === 0) {
         prizesRes = await db2.prepare(
-          "SELECT * FROM prizes WHERE tournament_id = 'all' OR tournament_id = 'global' OR tournament_id IS NULL OR tournament_id = '' ORDER BY rank_from ASC"
+          "SELECT * FROM prizes ORDER BY rank_from ASC"
         ).all();
       }
       const dbPrizes = (prizesRes.results || []).map((row) => ({
@@ -1700,21 +1700,18 @@ function createApi(db2, sourceParam = {}) {
             const rT = mR.rank_to ?? mR.rankTo ?? mR.rank ?? rF;
             matchedRuleRange = `${rF}-${rT}`;
           }
-          console.log(`PLAYER:
-rank: ${rank}
-group_name: ${userCategory || t.group || "None"}
-tournament_id: ${id}
-`);
-          console.log(`PRIZE RULES FOUND:
+          console.log(`rank: ${rank}`);
+          console.log(`group: ${userCategory || t.group || "None"}`);
+          console.log(`tournament_id: ${id}`);
+          console.log(`
+Danh s\xE1ch prizes t\xECm \u0111\u01B0\u1EE3c:
 ${JSON.stringify((t.prizes || []).map((p2) => ({
-            tournament_id: p2.tournament_id ?? p2.tournamentId,
-            group_name: p2.group_name ?? p2.group,
             rank_from: p2.rank_from ?? p2.rankFrom,
             rank_to: p2.rank_to ?? p2.rankTo,
             prize_name: p2.prize_name ?? p2.prizeName
           })), null, 2)}
 `);
-          console.log(`MATCH RESULT:
+          console.log(`K\u1EBFt qu\u1EA3 getMedal():
 ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
 `);
           const fullPlayer = {

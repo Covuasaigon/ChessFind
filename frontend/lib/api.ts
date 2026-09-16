@@ -401,9 +401,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         `SELECT * FROM prizes WHERE tournament_id IN (${placeholders}) OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC`
       ).bind(...idsArr, masterId + '-%', id + '-%').all<any>();
 
-      if ((!prizesRes.results || prizesRes.results.length === 0) && idsArr.length > 0) {
+      if (!prizesRes.results || prizesRes.results.length === 0) {
         prizesRes = await db.prepare(
-          "SELECT * FROM prizes WHERE tournament_id = 'all' OR tournament_id = 'global' OR tournament_id IS NULL OR tournament_id = '' ORDER BY rank_from ASC"
+          "SELECT * FROM prizes ORDER BY rank_from ASC"
         ).all<any>();
       }
 
@@ -723,15 +723,15 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             matchedRuleRange = `${rF}-${rT}`;
           }
 
-          console.log(`PLAYER:\nrank: ${rank}\ngroup_name: ${userCategory || t.group || 'None'}\ntournament_id: ${id}\n`);
-          console.log(`PRIZE RULES FOUND:\n${JSON.stringify((t.prizes || []).map(p => ({
-            tournament_id: p.tournament_id ?? p.tournamentId,
-            group_name: p.group_name ?? p.group,
+          console.log(`rank: ${rank}`);
+          console.log(`group: ${userCategory || t.group || 'None'}`);
+          console.log(`tournament_id: ${id}`);
+          console.log(`\nDanh sách prizes tìm được:\n${JSON.stringify((t.prizes || []).map(p => ({
             rank_from: p.rank_from ?? p.rankFrom,
             rank_to: p.rank_to ?? p.rankTo,
             prize_name: p.prize_name ?? p.prizeName
           })), null, 2)}\n`);
-          console.log(`MATCH RESULT:\n${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : 'None'}\n`);
+          console.log(`Kết quả getMedal():\n${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : 'None'}\n`);
 
           const fullPlayer = {
             ...playerObj,
