@@ -332,7 +332,7 @@ export function getMedal(
   rank: number | null,
   group?: string,
   prizes?: PrizeRule[],
-  options?: { loadError?: boolean }
+  options?: { loadError?: boolean; tournamentId?: string }
 ): MedalPredictionResult {
   if (options?.loadError) {
     return {
@@ -350,7 +350,20 @@ export function getMedal(
     };
   }
 
-  if (!prizes || prizes.length === 0) {
+  let filteredPrizes = prizes || [];
+  if (options?.tournamentId && filteredPrizes.length > 0) {
+    const tourId = String(options.tournamentId).trim();
+    const masterId = tourId.split('-')[0];
+    const exactMatches = filteredPrizes.filter(p => {
+      const tId = String(p.tournament_id || p.tournamentId || '').trim();
+      return tId === tourId || tId === masterId || tId.startsWith(masterId + '-');
+    });
+    if (exactMatches.length > 0) {
+      filteredPrizes = exactMatches;
+    }
+  }
+
+  if (!filteredPrizes || filteredPrizes.length === 0) {
     return {
       medal: 'ℹ️',
       label: 'Chưa cấu hình giải thưởng',
@@ -358,7 +371,7 @@ export function getMedal(
     };
   }
 
-  const matching = prizes.filter(p => {
+  const matching = filteredPrizes.filter(p => {
     const rf = p.rank_from ?? p.rankFrom ?? p.rank;
     const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
     const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;

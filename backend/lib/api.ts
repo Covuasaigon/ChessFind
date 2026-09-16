@@ -707,7 +707,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) ||
             undefined;
 
-          const medalPrediction = getMedal(rank, userCategory, t.prizes);
+          const medalPrediction = getMedal(rank, userCategory, t.prizes, { tournamentId: id });
 
           let matchedRuleRange = 'none';
           if (medalPrediction && (medalPrediction as any).matchedRule) {
@@ -717,7 +717,14 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             matchedRuleRange = `${rF}-${rT}`;
           }
 
-          console.log(`[PRIZE DEBUG]\nTournament ID: ${id}\nPlayer ID: ${pid}\nPlayer Rank: ${rank}\nPlayer Category: ${userCategory || t.group || 'None'}\nPrize query: ${t.prizes ? t.prizes.length : 0} rows\nMatched rule: ${medalPrediction && medalPrediction.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : 'None'}`);
+          const tourIdsList = [...new Set((t.prizes || []).map((p: any) => p.tournament_id || p.tournamentId || ''))].filter(Boolean);
+          const masterId = id.split('-')[0];
+          const filteredByTour = (t.prizes || []).filter((p: any) => {
+            const tId = String(p.tournament_id || p.tournamentId || '').trim();
+            return tId === id || tId === masterId || tId.startsWith(masterId + '-');
+          });
+
+          console.log(`[PRIZE MATCH DEBUG]\nPlayer tournament_id: ${id}\nPlayer rank: ${rank}\nPlayer category: ${userCategory || t.group || 'None'}\nALL PRIZES BEFORE FILTER: ${t.prizes ? t.prizes.length : 0} rows\nDanh sách tournament_id đang lấy: ${tourIdsList.join(', ')}\nFILTER BY TOURNAMENT RESULT: ${filteredByTour.length} rows\nMatched rule: ${medalPrediction && medalPrediction.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : 'None'}\nFinal result: ${JSON.stringify(medalPrediction)}`);
 
           const fullPlayer = {
             ...playerObj,

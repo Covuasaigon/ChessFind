@@ -176,14 +176,26 @@ function getMedal(rank, group, prizes, options) {
       status: "no_rank"
     };
   }
-  if (!prizes || prizes.length === 0) {
+  let filteredPrizes = prizes || [];
+  if (options?.tournamentId && filteredPrizes.length > 0) {
+    const tourId = String(options.tournamentId).trim();
+    const masterId = tourId.split("-")[0];
+    const exactMatches = filteredPrizes.filter((p) => {
+      const tId = String(p.tournament_id || p.tournamentId || "").trim();
+      return tId === tourId || tId === masterId || tId.startsWith(masterId + "-");
+    });
+    if (exactMatches.length > 0) {
+      filteredPrizes = exactMatches;
+    }
+  }
+  if (!filteredPrizes || filteredPrizes.length === 0) {
     return {
       medal: "\u2139\uFE0F",
       label: "Ch\u01B0a c\u1EA5u h\xECnh gi\u1EA3i th\u01B0\u1EDFng",
       status: "no_rules"
     };
   }
-  const matching = prizes.filter((p) => {
+  const matching = filteredPrizes.filter((p) => {
     const rf = p.rank_from ?? p.rankFrom ?? p.rank;
     const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
     const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
@@ -1715,7 +1727,7 @@ function createApi(db2, sourceParam = {}) {
           console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || "none"} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
           const userCategory = playerObj.categoryName || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || t.group || (p.ageGroup ? p.ageGroup.toLowerCase().includes("b\u1EA3ng") ? p.ageGroup : "B\u1EA3ng " + p.ageGroup : null) || (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) || void 0;
-          const medalPrediction = getMedal(rank, userCategory, t.prizes);
+          const medalPrediction = getMedal(rank, userCategory, t.prizes, { tournamentId: id });
           let matchedRuleRange = "none";
           if (medalPrediction && medalPrediction.matchedRule) {
             const mR = medalPrediction.matchedRule;
@@ -1723,13 +1735,21 @@ function createApi(db2, sourceParam = {}) {
             const rT = mR.rank_to ?? mR.rankTo ?? mR.rank ?? rF;
             matchedRuleRange = `${rF}-${rT}`;
           }
-          console.log(`[PRIZE DEBUG]
-Tournament ID: ${id}
-Player ID: ${pid}
-Player Rank: ${rank}
-Player Category: ${userCategory || t.group || "None"}
-Prize query: ${t.prizes ? t.prizes.length : 0} rows
-Matched rule: ${medalPrediction && medalPrediction.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : "None"}`);
+          const tourIdsList = [...new Set((t.prizes || []).map((p2) => p2.tournament_id || p2.tournamentId || ""))].filter(Boolean);
+          const masterId = id.split("-")[0];
+          const filteredByTour = (t.prizes || []).filter((p2) => {
+            const tId = String(p2.tournament_id || p2.tournamentId || "").trim();
+            return tId === id || tId === masterId || tId.startsWith(masterId + "-");
+          });
+          console.log(`[PRIZE MATCH DEBUG]
+Player tournament_id: ${id}
+Player rank: ${rank}
+Player category: ${userCategory || t.group || "None"}
+ALL PRIZES BEFORE FILTER: ${t.prizes ? t.prizes.length : 0} rows
+Danh s\xE1ch tournament_id \u0111ang l\u1EA5y: ${tourIdsList.join(", ")}
+FILTER BY TOURNAMENT RESULT: ${filteredByTour.length} rows
+Matched rule: ${medalPrediction && medalPrediction.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : "None"}
+Final result: ${JSON.stringify(medalPrediction)}`);
           const fullPlayer = {
             ...playerObj,
             medalPrediction,
