@@ -703,7 +703,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             matchedRuleRange = `${rF}-${rT}`;
           }
 
-          console.log(`[PRIZE DEBUG]\nTournament: ${id} (${t.name})\nPlayer: ${playerObj.name}\nRank: ${rank}\nCategory: ${userCategory || 'None'}\nAvailable prize rules count: ${t.prizes ? t.prizes.length : 0}\nRule matched: ${medalPrediction?.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : 'None'}\nFinal prediction: ${medalPrediction ? JSON.stringify(medalPrediction) : 'None'}\n`);
+          console.log(`[PRIZE PREDICTION DEBUG]\nTournament ID: ${id}\nPlayer ID: ${pid}\nPlayer Rank: ${rank}\nPlayer Group: ${t.group || 'None'}\nPlayer Category: ${userCategory || 'None'}\n\nDanh sách prize lấy từ database:\n${JSON.stringify((t.prizes || []).map(p => ({ rank_from: p.rank_from ?? p.rankFrom, rank_to: p.rank_to ?? p.rankTo, group_name: p.group_name ?? p.group, prize_name: p.prize_name ?? p.prizeName, medal: p.medal })), null, 2)}\n\nRule được match:\n${medalPrediction?.matchedRule ? JSON.stringify(medalPrediction.matchedRule, null, 2) : 'None'}\n\nKết quả cuối:\nmedalPrediction: ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : 'None'}\n`);
 
           const fullPlayer = {
             ...playerObj,
@@ -981,7 +981,18 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const rules = Array.isArray(b.rules) ? b.rules : [];
           const conflictStrategy = String(b.conflictStrategy || 'skip');
 
-          console.log('[PRIZE SAVE] bulk applied targets:', targets.length, 'rules:', JSON.stringify(rules));
+          console.log(`[PRIZE SAVE DEBUG]\npayload gửi:\n${JSON.stringify({
+            action: 'prize_bulk_apply',
+            targetsCount: targets.length,
+            targets: targets.map((t: any) => `${t.tournament_id || t.tournamentId} (${t.group_name || t.groupName})`),
+            rules: rules.map((r: any) => ({
+              rank_from: r.rank_from ?? r.rankFrom,
+              rank_to: r.rank_to ?? r.rankTo,
+              medal: r.medal,
+              prize: r.prize_name ?? r.prizeName,
+              description: r.description
+            }))
+          }, null, 2)}\n`);
 
           if (targets.length === 0) {
             return json({ error: 'Vui lòng chọn ít nhất một giải đấu hoặc bảng đấu.' }, 400, {}, req);
@@ -1102,7 +1113,16 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         const description = String(b.description || '').trim();
         const now = new Date().toISOString();
 
-        console.log('[PRIZE SAVE] tournamentId:', tournament_id, 'groupName:', group_name, 'payload:', JSON.stringify({ rank_from, rank_to, medal, prize_name, description }));
+        console.log(`[PRIZE SAVE DEBUG]\npayload gửi:\n${JSON.stringify({
+          action: (req.method === 'PUT' || (prizeId && prizeId !== '') || b.action === 'prize_update') ? 'prize_update' : 'prize_create',
+          tournament_id,
+          group: group_name,
+          rank_from,
+          rank_to,
+          prize: prize_name,
+          medal,
+          description
+        }, null, 2)}\n`);
 
         if (!tournament_id) return json({ error: 'Vui lòng chọn Giải đấu (tournament required).' }, 400, {}, req);
         if (!group_name) return json({ error: 'Vui lòng nhập Bảng/Nhóm đấu (group required).' }, 400, {}, req);

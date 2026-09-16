@@ -130,11 +130,14 @@ function stats(p) {
     winRate: totalPlayed > 0 ? Math.round(wins / totalPlayed * 100) : null
   };
 }
+function normalizeCategoryGroup(s) {
+  if (!s) return "";
+  return normalize(s).replace(/\bbang\b/g, "").replace(/\bnhom\b/g, "").replace(/\bu0*(\d+)\b/g, "u$1").replace(/\bu\s+0*(\d+)\b/g, "u$1").replace(/\bu-0*(\d+)\b/g, "u$1").replace(/\s+/g, " ").trim();
+}
 function matchCategoryGroup(ruleGrp, userGrp) {
   if (!userGrp || !ruleGrp) return true;
-  const cleanCategory = (s) => normalize(s).replace(/\bu0*(\d+)\b/g, "u$1").replace(/\bu\s+0*(\d+)\b/g, "u$1").replace(/\bu-0*(\d+)\b/g, "u$1");
-  const rNorm = cleanCategory(ruleGrp);
-  const uNorm = cleanCategory(userGrp);
+  const rNorm = normalizeCategoryGroup(ruleGrp);
+  const uNorm = normalizeCategoryGroup(userGrp);
   if (rNorm === "tat ca" || rNorm.includes("tat ca") || rNorm === "all" || rNorm === "") return true;
   if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
   const rAgeMatch = rNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
@@ -1691,14 +1694,21 @@ function createApi(db2, sourceParam = {}) {
             const rT = mR.rank_to ?? mR.rankTo ?? mR.rank ?? rF;
             matchedRuleRange = `${rF}-${rT}`;
           }
-          console.log(`[PRIZE DEBUG]
-Tournament: ${id} (${t.name})
-Player: ${playerObj.name}
-Rank: ${rank}
-Category: ${userCategory || "None"}
-Available prize rules count: ${t.prizes ? t.prizes.length : 0}
-Rule matched: ${medalPrediction?.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : "None"}
-Final prediction: ${medalPrediction ? JSON.stringify(medalPrediction) : "None"}
+          console.log(`[PRIZE PREDICTION DEBUG]
+Tournament ID: ${id}
+Player ID: ${pid}
+Player Rank: ${rank}
+Player Group: ${t.group || "None"}
+Player Category: ${userCategory || "None"}
+
+Danh s\xE1ch prize l\u1EA5y t\u1EEB database:
+${JSON.stringify((t.prizes || []).map((p2) => ({ rank_from: p2.rank_from ?? p2.rankFrom, rank_to: p2.rank_to ?? p2.rankTo, group_name: p2.group_name ?? p2.group, prize_name: p2.prize_name ?? p2.prizeName, medal: p2.medal })), null, 2)}
+
+Rule \u0111\u01B0\u1EE3c match:
+${medalPrediction?.matchedRule ? JSON.stringify(medalPrediction.matchedRule, null, 2) : "None"}
+
+K\u1EBFt qu\u1EA3 cu\u1ED1i:
+medalPrediction: ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
 `);
           const fullPlayer = {
             ...playerObj,
@@ -1938,7 +1948,21 @@ Final prediction: ${medalPrediction ? JSON.stringify(medalPrediction) : "None"}
           const targets = Array.isArray(b.targets) ? b.targets : [];
           const rules = Array.isArray(b.rules) ? b.rules : [];
           const conflictStrategy = String(b.conflictStrategy || "skip");
-          console.log("[PRIZE SAVE] bulk applied targets:", targets.length, "rules:", JSON.stringify(rules));
+          console.log(`[PRIZE SAVE DEBUG]
+payload g\u1EEDi:
+${JSON.stringify({
+            action: "prize_bulk_apply",
+            targetsCount: targets.length,
+            targets: targets.map((t) => `${t.tournament_id || t.tournamentId} (${t.group_name || t.groupName})`),
+            rules: rules.map((r) => ({
+              rank_from: r.rank_from ?? r.rankFrom,
+              rank_to: r.rank_to ?? r.rankTo,
+              medal: r.medal,
+              prize: r.prize_name ?? r.prizeName,
+              description: r.description
+            }))
+          }, null, 2)}
+`);
           if (targets.length === 0) {
             return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t m\u1ED9t gi\u1EA3i \u0111\u1EA5u ho\u1EB7c b\u1EA3ng \u0111\u1EA5u." }, 400, {}, req);
           }
@@ -2037,7 +2061,19 @@ Final prediction: ${medalPrediction ? JSON.stringify(medalPrediction) : "None"}
         const prize_name = String(b.prize_name || b.prizeName || "").trim();
         const description = String(b.description || "").trim();
         const now = (/* @__PURE__ */ new Date()).toISOString();
-        console.log("[PRIZE SAVE] tournamentId:", tournament_id, "groupName:", group_name, "payload:", JSON.stringify({ rank_from, rank_to, medal, prize_name, description }));
+        console.log(`[PRIZE SAVE DEBUG]
+payload g\u1EEDi:
+${JSON.stringify({
+          action: req.method === "PUT" || prizeId && prizeId !== "" || b.action === "prize_update" ? "prize_update" : "prize_create",
+          tournament_id,
+          group: group_name,
+          rank_from,
+          rank_to,
+          prize: prize_name,
+          medal,
+          description
+        }, null, 2)}
+`);
         if (!tournament_id) return json({ error: "Vui l\xF2ng ch\u1ECDn Gi\u1EA3i \u0111\u1EA5u (tournament required)." }, 400, {}, req);
         if (!group_name) return json({ error: "Vui l\xF2ng nh\u1EADp B\u1EA3ng/Nh\xF3m \u0111\u1EA5u (group required)." }, 400, {}, req);
         if (!prize_name) return json({ error: "Vui l\xF2ng nh\u1EADp T\xEAn gi\u1EA3i th\u01B0\u1EDFng." }, 400, {}, req);

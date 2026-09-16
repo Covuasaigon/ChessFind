@@ -269,16 +269,23 @@ export function stats(p: Player) {
   };
 }
 
+export function normalizeCategoryGroup(s?: string): string {
+  if (!s) return '';
+  return normalize(s)
+    .replace(/\bbang\b/g, '')
+    .replace(/\bnhom\b/g, '')
+    .replace(/\bu0*(\d+)\b/g, 'u$1')
+    .replace(/\bu\s+0*(\d+)\b/g, 'u$1')
+    .replace(/\bu-0*(\d+)\b/g, 'u$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function matchCategoryGroup(ruleGrp?: string, userGrp?: string): boolean {
   if (!userGrp || !ruleGrp) return true;
-  const cleanCategory = (s: string) =>
-    normalize(s)
-      .replace(/\bu0*(\d+)\b/g, 'u$1')
-      .replace(/\bu\s+0*(\d+)\b/g, 'u$1')
-      .replace(/\bu-0*(\d+)\b/g, 'u$1');
 
-  const rNorm = cleanCategory(ruleGrp);
-  const uNorm = cleanCategory(userGrp);
+  const rNorm = normalizeCategoryGroup(ruleGrp);
+  const uNorm = normalizeCategoryGroup(userGrp);
 
   if (rNorm === 'tat ca' || rNorm.includes('tat ca') || rNorm === 'all' || rNorm === '') return true;
   if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
