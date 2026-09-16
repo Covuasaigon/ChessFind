@@ -130,6 +130,27 @@ function stats(p) {
     winRate: totalPlayed > 0 ? Math.round(wins / totalPlayed * 100) : null
   };
 }
+function matchCategoryGroup(ruleGrp, userGrp) {
+  if (!userGrp || !ruleGrp) return true;
+  const cleanCategory = (s) => normalize(s).replace(/\bu0*(\d+)\b/g, "u$1").replace(/\bu\s+0*(\d+)\b/g, "u$1").replace(/\bu-0*(\d+)\b/g, "u$1");
+  const rNorm = cleanCategory(ruleGrp);
+  const uNorm = cleanCategory(userGrp);
+  if (rNorm === "tat ca" || rNorm.includes("tat ca") || rNorm === "all" || rNorm === "") return true;
+  if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
+  const rAgeMatch = rNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
+  const uAgeMatch = uNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
+  if (rAgeMatch && uAgeMatch) {
+    const hasCommonAge = rAgeMatch.some((tag) => uAgeMatch.includes(tag));
+    if (!hasCommonAge) return false;
+  }
+  const stopWords = /* @__PURE__ */ new Set(["bang", "nhom", "giai", "nam", "nu", "co", "vua", "cau", "thu", "hang"]);
+  const rTokens = rNorm.split(/\s+/).filter((t) => t.length >= 2 && !stopWords.has(t));
+  const uTokens = uNorm.split(/\s+/).filter((t) => t.length >= 2 && !stopWords.has(t));
+  if (rTokens.length > 0 && uTokens.length > 0) {
+    return rTokens.some((t) => uTokens.includes(t));
+  }
+  return false;
+}
 function getMedal(rank, group, prizes) {
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
@@ -149,14 +170,7 @@ function getMedal(rank, group, prizes) {
       }
       if (!rankMatches) return false;
       const ruleGrp = p.group || p.group_name;
-      if (!group || !ruleGrp) return true;
-      const rNorm = normalize(ruleGrp);
-      const uNorm = normalize(group);
-      if (rNorm === "tat ca" || rNorm.includes("tat ca") || rNorm === "all" || rNorm === "") return true;
-      if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
-      const rTokens = rNorm.split(/\s+/).filter(Boolean);
-      const uTokens = uNorm.split(/\s+/).filter(Boolean);
-      return rTokens.some((t) => t.length >= 2 && uTokens.includes(t));
+      return matchCategoryGroup(ruleGrp, group);
     });
     if (matching.length > 0) {
       const specificMatch = group ? matching.find((p) => {
@@ -1375,11 +1389,33 @@ function createApi(db2, sourceParam = {}) {
     if (!t) return null;
     try {
       const masterId = id.split("-")[0];
+      const candidateIds = /* @__PURE__ */ new Set([id, masterId]);
+      if (t.categories && Array.isArray(t.categories)) {
+        for (const cat of t.categories) {
+          if (cat.id) candidateIds.add(String(cat.id));
+        }
+      }
+      try {
+        const catRows = await db2.prepare(
+          "SELECT tournament_id, id FROM categories WHERE id = ? OR tournament_id = ? OR id = ? OR tournament_id = ?"
+        ).bind(id, id, masterId, masterId).all();
+        if (catRows.results) {
+          for (const row of catRows.results) {
+            if (row.id) candidateIds.add(String(row.id));
+            if (row.tournament_id) candidateIds.add(String(row.tournament_id));
+          }
+        }
+      } catch (catErr) {
+      }
+      const idsArr = Array.from(candidateIds);
+      const placeholders = idsArr.map(() => "?").join(",");
       let prizesRes = await db2.prepare(
-        "SELECT * FROM prizes WHERE tournament_id = ? OR tournament_id = ? OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC"
-      ).bind(id, masterId, masterId + "-%", id + "-%").all();
-      if (!prizesRes.results || prizesRes.results.length === 0) {
-        prizesRes = await db2.prepare("SELECT * FROM prizes ORDER BY rank_from ASC").all();
+        `SELECT * FROM prizes WHERE tournament_id IN (${placeholders}) OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC`
+      ).bind(...idsArr, masterId + "-%", id + "-%").all();
+      if ((!prizesRes.results || prizesRes.results.length === 0) && idsArr.length > 0) {
+        prizesRes = await db2.prepare(
+          "SELECT * FROM prizes WHERE tournament_id = 'all' OR tournament_id = 'global' OR tournament_id IS NULL OR tournament_id = '' ORDER BY rank_from ASC"
+        ).all();
       }
       const dbPrizes = (prizesRes.results || []).map((row) => ({
         id: row.id,
@@ -1646,7 +1682,7 @@ function createApi(db2, sourceParam = {}) {
           const playedRoundsCount = playerObj.rounds ? playerObj.rounds.filter((r) => r.status === "played" || r.result != null || r.score != null || r.opponent != null).length : 0;
           console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || "none"} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
-          const userCategory = playerObj.categoryName || p.categoryId || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || t.group || p.ageGroup || void 0;
+          const userCategory = playerObj.categoryName || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || (p.ageGroup ? p.ageGroup.toLowerCase().includes("b\u1EA3ng") ? p.ageGroup : "B\u1EA3ng " + p.ageGroup : null) || (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) || t.group || void 0;
           const medalPrediction = getMedal(rank, userCategory, t.prizes);
           let matchedRuleRange = "none";
           if (medalPrediction && medalPrediction.matchedRule) {
@@ -1655,19 +1691,14 @@ function createApi(db2, sourceParam = {}) {
             const rT = mR.rank_to ?? mR.rankTo ?? mR.rank ?? rF;
             matchedRuleRange = `${rF}-${rT}`;
           }
-          console.log(`[PRIZE MATCH]
-
-player:
-${playerObj.name}
-
-rank:
-${rank}
-
-matched rule:
-${matchedRuleRange}
-
-prize:
-${medalPrediction ? medalPrediction.label : "Ch\u01B0a \u0111\u1EA1t gi\u1EA3i"}
+          console.log(`[PRIZE DEBUG]
+Tournament: ${id} (${t.name})
+Player: ${playerObj.name}
+Rank: ${rank}
+Category: ${userCategory || "None"}
+Available prize rules count: ${t.prizes ? t.prizes.length : 0}
+Rule matched: ${medalPrediction?.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : "None"}
+Final prediction: ${medalPrediction ? JSON.stringify(medalPrediction) : "None"}
 `);
           const fullPlayer = {
             ...playerObj,
@@ -2615,137 +2646,12 @@ function openDatabase(connectionStringOrFile, migrations) {
   };
 }
 
-// jobs/sync-scheduler.ts
-import cron from "node-cron";
-var isSyncRunning = false;
-function startSyncScheduler(db2, sourceOverride) {
-  console.log("[Sync Scheduler] Initializing automatic 5-minute Chess-Results sync scheduler...");
-  cron.schedule("*/5 * * * *", async () => {
-    if (isSyncRunning) {
-      console.log("[Sync Scheduler] Previous sync cycle still running, skipping...");
-      return;
-    }
-    isSyncRunning = true;
-    try {
-      await runAutoSyncCycle(db2, sourceOverride);
-    } catch (err) {
-      console.error("[Sync Scheduler] Error in auto sync cycle:", err);
-    } finally {
-      isSyncRunning = false;
-    }
-  });
-  setTimeout(() => {
-    runAutoSyncCycle(db2, sourceOverride).catch((e) => console.error("[Sync Scheduler] Initial check error:", e));
-  }, 1e4);
-}
-async function runAutoSyncCycle(db2, sourceOverride) {
-  try {
-    let rows = [];
-    try {
-      const res = await db2.prepare("SELECT payload, published, auto_sync, sync_interval, last_sync, next_sync FROM tournaments").all();
-      rows = res.results || [];
-    } catch {
-      const res = await db2.prepare("SELECT payload, published FROM tournaments").all();
-      rows = res.results || [];
-    }
-    const now = Date.now();
-    const nowIso = new Date(now).toISOString();
-    for (const r of rows) {
-      let t;
-      try {
-        t = JSON.parse(r.payload);
-      } catch {
-        continue;
-      }
-      const published = r.published !== void 0 && r.published !== null ? !!r.published : !!t.published;
-      if (!published) continue;
-      const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
-      if (!autoSync) continue;
-      const interval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
-      const lastSyncStr = r.last_sync || t.lastSync || t.last_sync || null;
-      const lastSyncTime = lastSyncStr ? new Date(lastSyncStr).getTime() : 0;
-      const intervalMs = interval * 60 * 1e3;
-      if (lastSyncTime > 0 && now - lastSyncTime < intervalMs - 3e4) {
-        continue;
-      }
-      console.log(`[Sync Scheduler] Auto syncing tournament "${t.name}" (${t.id})...`);
-      try {
-        const fetcher = sourceOverride?.tournament ? sourceOverride.tournament : importTournament;
-        const updatedTour = await fetcher(t.source, t.group);
-        updatedTour.name = t.name;
-        updatedTour.published = true;
-        updatedTour.info = t.info;
-        updatedTour.prizes = t.prizes;
-        const nextSyncIso = new Date(now + intervalMs).toISOString();
-        updatedTour.autoSync = true;
-        updatedTour.auto_sync = true;
-        updatedTour.syncInterval = interval;
-        updatedTour.sync_interval = interval;
-        updatedTour.lastSync = nowIso;
-        updatedTour.last_sync = nowIso;
-        updatedTour.nextSync = nextSyncIso;
-        updatedTour.next_sync = nextSyncIso;
-        const payloadStr = JSON.stringify(updatedTour);
-        try {
-          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ?, auto_sync = 1, sync_interval = ?, last_sync = ?, next_sync = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, interval, nowIso, nextSyncIso, t.id).run();
-        } catch {
-          await db2.prepare("UPDATE tournaments SET payload = ?, updated = ? WHERE id = ?").bind(payloadStr, updatedTour.updated, t.id).run();
-        }
-        try {
-          const logId = crypto.randomUUID();
-          await db2.prepare(`
-            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).bind(
-            logId,
-            t.id,
-            t.name,
-            t.source,
-            nowIso,
-            "success",
-            updatedTour.players ? updatedTour.players.length : 0,
-            `T\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9 th\xE0nh c\xF4ng t\u1EEB Chess-Results: ${t.name} (${updatedTour.players ? updatedTour.players.length : 0} k\u1EF3 th\u1EE7)`
-          ).run();
-        } catch (logErr) {
-          console.error("[Sync Scheduler] Failed to write sync log:", logErr);
-        }
-        console.log(`[Sync Scheduler] Auto synced "${t.name}" successfully (${updatedTour.players?.length || 0} players).`);
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[Sync Scheduler] Error auto syncing "${t.name}":`, errMsg);
-        try {
-          const logId = crypto.randomUUID();
-          await db2.prepare(`
-            INSERT INTO sync_logs (id, tournament_id, tournament_name, url, created_at, status, players_updated, message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).bind(
-            logId,
-            t.id,
-            t.name,
-            t.source,
-            nowIso,
-            "failed",
-            0,
-            `L\u1ED7i t\u1EF1 \u0111\u1ED9ng \u0111\u1ED3ng b\u1ED9: ${errMsg}`
-          ).run();
-        } catch {
-        }
-      }
-    }
-  } catch (err) {
-    console.error("[Sync Scheduler] Error in runAutoSyncCycle:", err);
-  }
-}
-
 // server.ts
 var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
 var host = process.env.HOST || "0.0.0.0";
 var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
-var dbUrl = process.env.DATABASE_URL;
-var dbPath = dbUrl || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
-var db = openDatabase(dbPath, resolve3(root, "migrations"));
-startSyncScheduler(db);
+var db = openDatabase(resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite"), resolve3(root, "migrations"));
 var api = createApi(db);
 var web = resolve3(root, "web");
 var types = {

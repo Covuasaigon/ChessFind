@@ -373,12 +373,36 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
     try {
       const masterId = id.split('-')[0];
-      let prizesRes = await db.prepare(
-        'SELECT * FROM prizes WHERE tournament_id = ? OR tournament_id = ? OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC'
-      ).bind(id, masterId, masterId + '-%', id + '-%').all<any>();
+      const candidateIds = new Set<string>([id, masterId]);
+      if (t.categories && Array.isArray(t.categories)) {
+        for (const cat of t.categories) {
+          if (cat.id) candidateIds.add(String(cat.id));
+        }
+      }
 
-      if (!prizesRes.results || prizesRes.results.length === 0) {
-        prizesRes = await db.prepare('SELECT * FROM prizes ORDER BY rank_from ASC').all<any>();
+      try {
+        const catRows = await db.prepare(
+          'SELECT tournament_id, id FROM categories WHERE id = ? OR tournament_id = ? OR id = ? OR tournament_id = ?'
+        ).bind(id, id, masterId, masterId).all<any>();
+        if (catRows.results) {
+          for (const row of catRows.results) {
+            if (row.id) candidateIds.add(String(row.id));
+            if (row.tournament_id) candidateIds.add(String(row.tournament_id));
+          }
+        }
+      } catch (catErr) {}
+
+      const idsArr = Array.from(candidateIds);
+      const placeholders = idsArr.map(() => '?').join(',');
+
+      let prizesRes = await db.prepare(
+        `SELECT * FROM prizes WHERE tournament_id IN (${placeholders}) OR tournament_id LIKE ? OR tournament_id LIKE ? ORDER BY rank_from ASC`
+      ).bind(...idsArr, masterId + '-%', id + '-%').all<any>();
+
+      if ((!prizesRes.results || prizesRes.results.length === 0) && idsArr.length > 0) {
+        prizesRes = await db.prepare(
+          "SELECT * FROM prizes WHERE tournament_id = 'all' OR tournament_id = 'global' OR tournament_id IS NULL OR tournament_id = '' ORDER BY rank_from ASC"
+        ).all<any>();
       }
 
       const dbPrizes = (prizesRes.results || []).map((row: any) => ({
@@ -662,7 +686,13 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
           console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || 'none'} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
-          const userCategory = (playerObj as any).categoryName || p.categoryId || (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) || t.group || p.ageGroup || undefined;
+          const userCategory = (playerObj as any).categoryName ||
+            (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) ||
+            (p.ageGroup ? (p.ageGroup.toLowerCase().includes('bảng') ? p.ageGroup : 'Bảng ' + p.ageGroup) : null) ||
+            (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) ||
+            t.group ||
+            undefined;
+
           const medalPrediction = getMedal(rank, userCategory, t.prizes);
 
           let matchedRuleRange = 'none';
@@ -673,7 +703,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             matchedRuleRange = `${rF}-${rT}`;
           }
 
-          console.log(`[PRIZE MATCH]\n\nplayer:\n${playerObj.name}\n\nrank:\n${rank}\n\nmatched rule:\n${matchedRuleRange}\n\nprize:\n${medalPrediction ? medalPrediction.label : 'Chưa đạt giải'}\n`);
+          console.log(`[PRIZE DEBUG]\nTournament: ${id} (${t.name})\nPlayer: ${playerObj.name}\nRank: ${rank}\nCategory: ${userCategory || 'None'}\nAvailable prize rules count: ${t.prizes ? t.prizes.length : 0}\nRule matched: ${medalPrediction?.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : 'None'}\nFinal prediction: ${medalPrediction ? JSON.stringify(medalPrediction) : 'None'}\n`);
 
           const fullPlayer = {
             ...playerObj,

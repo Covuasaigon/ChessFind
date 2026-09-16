@@ -1,4 +1,4 @@
-import { openDatabase } from '../../backend/database';
+import { openDatabase } from '../portable/database';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { Database } from './api';

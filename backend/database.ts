@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import pg from 'pg';
 import dns from 'node:dns';
-import type { Database, Statement } from './lib/api';
+import type { Database, Statement } from '../lib/api';
 
 try {
   dns.setDefaultResultOrder('ipv4first');

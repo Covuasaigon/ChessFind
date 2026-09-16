@@ -270,8 +270,11 @@ export default function ChessApp() {
           const next = getNextMatch(player);
           const currentRank = player.rank ?? (current?.players ? (current.players.findIndex(x => x.id === player.id) + 1) : null);
           const totalCount = player.totalPlayers || (current?.players ? current.players.length : 0);
-          const currentDivision = (player as any).categoryName || current.group;
-          const medal = player.medalPrediction || getMedal(currentRank, currentDivision || player.ageGroup, current.prizes);
+          const currentDivision = (player as any).categoryName ||
+            (current.categories && player.categoryId ? current.categories.find(c => c.id === player.categoryId)?.name : null) ||
+            (player.ageGroup ? (player.ageGroup.toLowerCase().includes('bảng') ? player.ageGroup : 'Bảng ' + player.ageGroup) : null) ||
+            current.group;
+          const medal = player.medalPrediction || getMedal(currentRank, currentDivision, current.prizes);
 
           let isNextWhite = false;
           let isNextBlack = false;

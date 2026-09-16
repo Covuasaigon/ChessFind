@@ -269,6 +269,40 @@ export function stats(p: Player) {
   };
 }
 
+export function matchCategoryGroup(ruleGrp?: string, userGrp?: string): boolean {
+  if (!userGrp || !ruleGrp) return true;
+  const cleanCategory = (s: string) =>
+    normalize(s)
+      .replace(/\bu0*(\d+)\b/g, 'u$1')
+      .replace(/\bu\s+0*(\d+)\b/g, 'u$1')
+      .replace(/\bu-0*(\d+)\b/g, 'u$1');
+
+  const rNorm = cleanCategory(ruleGrp);
+  const uNorm = cleanCategory(userGrp);
+
+  if (rNorm === 'tat ca' || rNorm.includes('tat ca') || rNorm === 'all' || rNorm === '') return true;
+  if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
+
+  // Extract age/division tags (e.g. u6, u8, u10, open, baby)
+  const rAgeMatch = rNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
+  const uAgeMatch = uNorm.match(/\b(u\d+|open|baby|trung|nhi|truong thanh)\b/g);
+
+  if (rAgeMatch && uAgeMatch) {
+    const hasCommonAge = rAgeMatch.some(tag => uAgeMatch.includes(tag));
+    if (!hasCommonAge) return false;
+  }
+
+  const stopWords = new Set(['bang', 'nhom', 'giai', 'nam', 'nu', 'co', 'vua', 'cau', 'thu', 'hang']);
+  const rTokens = rNorm.split(/\s+/).filter(t => t.length >= 2 && !stopWords.has(t));
+  const uTokens = uNorm.split(/\s+/).filter(t => t.length >= 2 && !stopWords.has(t));
+
+  if (rTokens.length > 0 && uTokens.length > 0) {
+    return rTokens.some(t => uTokens.includes(t));
+  }
+
+  return false;
+}
+
 export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule[]): { medal: string; label: string; matchedRule?: PrizeRule } | null {
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
@@ -291,16 +325,7 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
       if (!rankMatches) return false;
 
       const ruleGrp = p.group || p.group_name;
-      if (!group || !ruleGrp) return true;
-      const rNorm = normalize(ruleGrp);
-      const uNorm = normalize(group);
-
-      if (rNorm === 'tat ca' || rNorm.includes('tat ca') || rNorm === 'all' || rNorm === '') return true;
-      if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
-
-      const rTokens = rNorm.split(/\s+/).filter(Boolean);
-      const uTokens = uNorm.split(/\s+/).filter(Boolean);
-      return rTokens.some(t => t.length >= 2 && uTokens.includes(t));
+      return matchCategoryGroup(ruleGrp, group);
     });
 
     if (matching.length > 0) {
