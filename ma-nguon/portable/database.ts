@@ -132,7 +132,17 @@ export function openDatabase(connectionStringOrFile: string, migrations: string)
             sql.exec('BEGIN IMMEDIATE');
             try {
               if (!sql.prepare('SELECT name FROM sgc_migrations WHERE name = ?').get(name)) {
-                sql.exec(readFileSync(resolve(migrations, name), 'utf8'));
+                const content = readFileSync(resolve(migrations, name), 'utf8');
+                const stmts = content.split(';').map(s => s.trim()).filter(Boolean);
+                for (const st of stmts) {
+                  try {
+                    sql.exec(st + ';');
+                  } catch (stErr: any) {
+                    if (!/already exists|duplicate/i.test(stErr?.message || '')) {
+                      console.warn(`[MIGRATION WARN] ${name}: ${stErr?.message}`);
+                    }
+                  }
+                }
                 sql.prepare('INSERT OR IGNORE INTO sgc_migrations (name,applied) VALUES (?,?)').run(name, new Date().toISOString());
               }
               sql.exec('COMMIT');

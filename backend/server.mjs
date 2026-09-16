@@ -1090,6 +1090,7 @@ function message(e) {
   return /SQL|D1|binding|syntax|database|fetch failed/i.test(m) ? "Kho d\u1EEF li\u1EC7u t\u1EA1m th\u1EDDi kh\xF4ng s\u1EB5n s\xE0ng. Vui l\xF2ng th\u1EED l\u1EA1i." : m || "C\xF3 l\u1ED7i x\u1EA3y ra. Vui l\xF2ng th\u1EED l\u1EA1i.";
 }
 async function ensureSlidesTableSchema(db2) {
+  if (db2.source === "postgresql") return;
   try {
     const row = await db2.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='tournament_slides'").first();
     if (row?.sql && (row.sql.includes("FOREIGN KEY") || row.sql.includes("`tournament_id` text NOT NULL") || row.sql.includes("tournament_id TEXT NOT NULL"))) {
@@ -1307,6 +1308,7 @@ async function migrateLocalImagesToPermanent(db2) {
   }
 }
 async function ensureSyncLogsTableSchema(db2) {
+  if (db2.source === "postgresql") return;
   try {
     await db2.prepare(`
       CREATE TABLE IF NOT EXISTS sync_logs (
@@ -1467,13 +1469,18 @@ function createApi(db2, sourceParam = {}) {
     try {
       const u = new URL(req.url);
       const path = u.pathname.replace(/\/+$/, "") || "/";
+      const dbSourceLog = db2.source || (process.env.DATABASE_URL ? "postgresql" : "sqlite");
+      console.log(`[API REQUEST] ${req.method} ${path} db_source=${dbSourceLog}`);
       if (req.method === "GET") {
         if (path === "/api/tournaments") return json({ tournaments: await list() }, 200, {}, req);
         if (path === "/api/banners") {
           try {
             const r = await db2.prepare("SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC").all();
-            return json({ banners: r.results }, 200, {}, req);
-          } catch {
+            const banners = r.results || [];
+            console.log(`[API /api/banners] db_source=${dbSourceLog} count=${banners.length}`);
+            return json({ banners }, 200, {}, req);
+          } catch (e) {
+            console.error("[API /api/banners ERROR]", e);
             return json({ banners: [] }, 200, {}, req);
           }
         }
@@ -1485,8 +1492,9 @@ function createApi(db2, sourceParam = {}) {
           let slidesList = [];
           let syncLogsList = [];
           try {
-            bannersList = (await db2.prepare("SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC").all()).results;
-          } catch {
+            bannersList = (await db2.prepare("SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC").all()).results || [];
+          } catch (e) {
+            console.error("[API /api/admin ERROR fetching banners]", e);
           }
           try {
             const tList = await list(true);
@@ -1496,7 +1504,8 @@ function createApi(db2, sourceParam = {}) {
               ...p,
               tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
             }));
-          } catch {
+          } catch (e) {
+            console.error("[API /api/admin ERROR fetching prizes]", e);
           }
           try {
             const tList = await list(true);
@@ -1506,15 +1515,19 @@ function createApi(db2, sourceParam = {}) {
               ...item,
               tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
             }));
-          } catch {
+          } catch (e) {
+            console.error("[API /api/admin ERROR fetching slides]", e);
           }
           try {
             await ensureSyncLogsTableSchema(db2);
             const r = await db2.prepare("SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50").all();
             syncLogsList = r.results || [];
-          } catch {
+          } catch (e) {
+            console.error("[API /api/admin ERROR fetching sync_logs]", e);
           }
-          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results }, 200, {}, req);
+          const tourList = await list(true);
+          console.log(`[ADMIN DATA INIT] db_source=${dbSourceLog} tournaments=${tourList.length} banners=${bannersList.length} prizes=${prizesList.length} slides=${slidesList.length} syncLogs=${syncLogsList.length}`);
+          return json({ admin: true, username: "admin", csrf: s2.csrf, tournaments: tourList, banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db2.prepare("SELECT * FROM logs ORDER BY created DESC LIMIT 30").all()).results || [] }, 200, {}, req);
         }
         if (path === "/api/slides" || path === "/api/slides/home" || path === "/api/home/slides") {
           await ensureSlidesTableSchema(db2);
@@ -2619,7 +2632,17 @@ function openDatabase(connectionStringOrFile, migrations) {
             sql.exec("BEGIN IMMEDIATE");
             try {
               if (!sql.prepare("SELECT name FROM sgc_migrations WHERE name = ?").get(name)) {
-                sql.exec(readFileSync2(resolve2(migrations, name), "utf8"));
+                const content = readFileSync2(resolve2(migrations, name), "utf8");
+                const stmts = content.split(";").map((s) => s.trim()).filter(Boolean);
+                for (const st of stmts) {
+                  try {
+                    sql.exec(st + ";");
+                  } catch (stErr) {
+                    if (!/already exists|duplicate/i.test(stErr?.message || "")) {
+                      console.warn(`[MIGRATION WARN] ${name}: ${stErr?.message}`);
+                    }
+                  }
+                }
                 sql.prepare("INSERT OR IGNORE INTO sgc_migrations (name,applied) VALUES (?,?)").run(name, (/* @__PURE__ */ new Date()).toISOString());
               }
               sql.exec("COMMIT");
@@ -2687,7 +2710,10 @@ var root = resolve3(dirname2(fileURLToPath(import.meta.url)), "..");
 var port = Number(process.env.PORT || 3e3);
 var host = process.env.HOST || "0.0.0.0";
 var publicOrigin = process.env.PUBLIC_ORIGIN ? new URL(process.env.PUBLIC_ORIGIN).origin : null;
-var db = openDatabase(resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite"), resolve3(root, "migrations"));
+var dbUrl = process.env.DATABASE_URL;
+var dbPath = dbUrl || resolve3(root, process.env.DATA_DIR || "data", "chess.sqlite");
+var db = openDatabase(dbPath, resolve3(root, "migrations"));
+console.log(`[DB INIT] db_source=${db.source || (dbUrl ? "postgresql" : "sqlite")} (${dbUrl ? "Supabase PostgreSQL" : "SQLite Local"})`);
 var api = createApi(db);
 var web = resolve3(root, "web");
 var types = {

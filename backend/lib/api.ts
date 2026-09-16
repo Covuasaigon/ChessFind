@@ -54,6 +54,7 @@ export function json(data: unknown, status = 200, headers: Record<string, string
 function message(e: unknown) { const m = e instanceof Error ? e.message : ''; return /SQL|D1|binding|syntax|database|fetch failed/i.test(m) ? 'Kho dữ liệu tạm thời không sẵn sàng. Vui lòng thử lại.' : m || 'Có lỗi xảy ra. Vui lòng thử lại.' }
 
 async function ensureSlidesTableSchema(db: Database) {
+  if (db.source === 'postgresql') return;
   try {
     const row = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='tournament_slides'").first<{ sql: string }>();
     if (row?.sql && (row.sql.includes('FOREIGN KEY') || row.sql.includes('`tournament_id` text NOT NULL') || row.sql.includes('tournament_id TEXT NOT NULL'))) {
@@ -283,6 +284,7 @@ async function migrateLocalImagesToPermanent(db: Database) {
 }
 
 async function ensureSyncLogsTableSchema(db: Database) {
+  if (db.source === 'postgresql') return;
   try {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS sync_logs (
@@ -456,13 +458,19 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
   return async function handle(req: Request, ip = 'unknown'): Promise<Response> {
     let action = ''; let authorized = false; let b: any = {}; try {
       const u = new URL(req.url); const path = u.pathname.replace(/\/+$/, '') || '/';
+      const dbSourceLog = db.source || (process.env.DATABASE_URL ? 'postgresql' : 'sqlite');
+      console.log(`[API REQUEST] ${req.method} ${path} db_source=${dbSourceLog}`);
+
       if (req.method === 'GET') {
         if (path === '/api/tournaments') return json({ tournaments: await list() }, 200, {}, req);
         if (path === '/api/banners') {
           try {
             const r = await db.prepare('SELECT * FROM home_banners WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC').all();
-            return json({ banners: r.results }, 200, {}, req);
-          } catch {
+            const banners = r.results || [];
+            console.log(`[API /api/banners] db_source=${dbSourceLog} count=${banners.length}`);
+            return json({ banners }, 200, {}, req);
+          } catch (e) {
+            console.error('[API /api/banners ERROR]', e);
             return json({ banners: [] }, 200, {}, req);
           }
         }
@@ -474,8 +482,10 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           let slidesList: any[] = [];
           let syncLogsList: any[] = [];
           try {
-            bannersList = (await db.prepare('SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC').all()).results;
-          } catch {}
+            bannersList = (await db.prepare('SELECT * FROM home_banners ORDER BY sort_order ASC, created_at DESC').all()).results || [];
+          } catch (e) {
+            console.error('[API /api/admin ERROR fetching banners]', e);
+          }
           try {
             const tList: Tournament[] = await list(true);
             const tourMap = new Map<string, string>(tList.map((t: Tournament) => [t.id, t.name]));
@@ -484,7 +494,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
               ...p,
               tournament_name: tourMap.get(p.tournament_id) || p.tournament_id
             }));
-          } catch {}
+          } catch (e) {
+            console.error('[API /api/admin ERROR fetching prizes]', e);
+          }
           try {
             const tList: Tournament[] = await list(true);
             const tourMap = new Map<string, string>(tList.map((t: Tournament) => [t.id, t.name]));
@@ -493,13 +505,21 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
               ...item,
               tournament_name: tourMap.get(item.tournament_id) || item.tournament_id
             }));
-          } catch {}
+          } catch (e) {
+            console.error('[API /api/admin ERROR fetching slides]', e);
+          }
           try {
             await ensureSyncLogsTableSchema(db);
             const r = await db.prepare('SELECT * FROM sync_logs ORDER BY created_at DESC LIMIT 50').all<any>();
             syncLogsList = r.results || [];
-          } catch {}
-          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: await list(true), banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results }, 200, {}, req);
+          } catch (e) {
+            console.error('[API /api/admin ERROR fetching sync_logs]', e);
+          }
+
+          const tourList = await list(true);
+          console.log(`[ADMIN DATA INIT] db_source=${dbSourceLog} tournaments=${tourList.length} banners=${bannersList.length} prizes=${prizesList.length} slides=${slidesList.length} syncLogs=${syncLogsList.length}`);
+
+          return json({ admin: true, username: 'admin', csrf: s.csrf, tournaments: tourList, banners: bannersList, prizes: prizesList, slides: slidesList, syncLogs: syncLogsList, logs: (await db.prepare('SELECT * FROM logs ORDER BY created DESC LIMIT 30').all()).results || [] }, 200, {}, req);
         }
         if (path === '/api/slides' || path === '/api/slides/home' || path === '/api/home/slides') {
           await ensureSlidesTableSchema(db);
