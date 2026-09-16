@@ -274,7 +274,9 @@ export default function ChessApp() {
             (current.categories && player.categoryId ? current.categories.find(c => c.id === player.categoryId)?.name : null) ||
             current.group ||
             (player.ageGroup ? (player.ageGroup.toLowerCase().includes('bảng') ? player.ageGroup : 'Bảng ' + player.ageGroup) : null);
-          const medal = player.medalPrediction || getMedal(currentRank, currentDivision, current.prizes);
+          const medal = (player.detailsLoaded || player.medalPrediction !== undefined)
+            ? player.medalPrediction
+            : getMedal(currentRank, currentDivision, current.prizes);
 
           let isNextWhite = false;
           let isNextBlack = false;

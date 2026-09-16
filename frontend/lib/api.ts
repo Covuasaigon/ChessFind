@@ -723,7 +723,15 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             matchedRuleRange = `${rF}-${rT}`;
           }
 
-          console.log(`[PRIZE PREDICTION DEBUG]\nTournament ID: ${id}\nPlayer ID: ${pid}\nPlayer Rank: ${rank}\nPlayer Group: ${t.group || 'None'}\nPlayer Category: ${userCategory || 'None'}\n\nDanh sách prize lấy từ database:\n${JSON.stringify((t.prizes || []).map(p => ({ rank_from: p.rank_from ?? p.rankFrom, rank_to: p.rank_to ?? p.rankTo, group_name: p.group_name ?? p.group, prize_name: p.prize_name ?? p.prizeName, medal: p.medal })), null, 2)}\n\nRule được match:\n${medalPrediction?.matchedRule ? JSON.stringify(medalPrediction.matchedRule, null, 2) : 'None'}\n\nKết quả cuối:\nmedalPrediction: ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : 'None'}\n`);
+          console.log(`PLAYER:\nrank: ${rank}\ngroup_name: ${userCategory || t.group || 'None'}\ntournament_id: ${id}\n`);
+          console.log(`PRIZE RULES FOUND:\n${JSON.stringify((t.prizes || []).map(p => ({
+            tournament_id: p.tournament_id ?? p.tournamentId,
+            group_name: p.group_name ?? p.group,
+            rank_from: p.rank_from ?? p.rankFrom,
+            rank_to: p.rank_to ?? p.rankTo,
+            prize_name: p.prize_name ?? p.prizeName
+          })), null, 2)}\n`);
+          console.log(`MATCH RESULT:\n${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : 'None'}\n`);
 
           const fullPlayer = {
             ...playerObj,

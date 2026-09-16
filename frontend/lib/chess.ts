@@ -314,47 +314,43 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
   if (!rank || rank <= 0) return null;
   if (prizes && prizes.length > 0) {
     const matching = prizes.filter(p => {
-      const rf = p.rankFrom ?? p.rank_from ?? p.rank;
-      const rt = p.rankTo ?? p.rank_to ?? p.rank ?? rf;
+      const rf = p.rank_from ?? p.rankFrom ?? p.rank;
+      const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
       const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
       const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
       const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
 
-      let rankMatches = false;
-      if (rfNum !== null && rtNum !== null) {
-        rankMatches = rank >= rfNum && rank <= rtNum;
-      } else if (rfNum !== null) {
-        rankMatches = rank === rfNum;
-      } else if (rNum !== null) {
-        rankMatches = rank === rNum;
-      }
+      const fromVal = rfNum !== null ? rfNum : rNum;
+      const toVal = rtNum !== null ? rtNum : (rNum !== null ? rNum : fromVal);
 
+      if (fromVal === null || toVal === null) return false;
+      const rankMatches = rank >= fromVal && rank <= toVal;
       if (!rankMatches) return false;
 
-      const ruleGrp = p.group || p.group_name;
+      const ruleGrp = p.group_name || p.group;
       return matchCategoryGroup(ruleGrp, group);
     });
 
     if (matching.length > 0) {
       // Prioritize specific category match over 'tat ca'
       const specificMatch = group ? matching.find(p => {
-        const ruleGrp = p.group || p.group_name;
+        const ruleGrp = p.group_name || p.group;
         if (!ruleGrp) return false;
         const norm = normalize(ruleGrp);
         return !norm.includes('tat ca') && norm !== 'all';
       }) : null;
 
       const match = specificMatch || matching[0];
-      const label = match.prizeName || match.prize_name || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
+      const label = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
       let medalIcon = '🏆';
       const mStr = (match.medal || '').toLowerCase();
       const pNameLower = label.toLowerCase();
 
-      if (mStr.includes('gold') || mStr.includes('vang') || pNameLower.includes('gold') || pNameLower.includes('vàng') || pNameLower.includes('vang') || (rank === 1 && !pNameLower.includes('khuyen khich'))) {
+      if (mStr.includes('gold') || mStr.includes('vang') || pNameLower.includes('gold') || pNameLower.includes('vàng') || pNameLower.includes('vang')) {
         medalIcon = '🥇';
-      } else if (mStr.includes('silver') || mStr.includes('bac') || pNameLower.includes('silver') || pNameLower.includes('bạc') || pNameLower.includes('bac') || (rank === 2 && !pNameLower.includes('khuyen khich'))) {
+      } else if (mStr.includes('silver') || mStr.includes('bac') || pNameLower.includes('silver') || pNameLower.includes('bạc') || pNameLower.includes('bac')) {
         medalIcon = '🥈';
-      } else if (mStr.includes('bronze') || mStr.includes('dong') || pNameLower.includes('bronze') || pNameLower.includes('đồng') || pNameLower.includes('dong') || (rank === 3 && !pNameLower.includes('khuyen khich'))) {
+      } else if (mStr.includes('bronze') || mStr.includes('dong') || pNameLower.includes('bronze') || pNameLower.includes('đồng') || pNameLower.includes('dong')) {
         medalIcon = '🥉';
       } else if (mStr.includes('certificate') || mStr.includes('consolation') || mStr.includes('khuyen khich') || mStr.includes('top') || mStr.includes('khen') || mStr.includes('bang') || pNameLower.includes('khuyen khich') || pNameLower.includes('khuyến khích') || pNameLower.includes('khen') || rank >= 4) {
         medalIcon = '🎖';
@@ -367,10 +363,6 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
     return null;
   }
 
-  // Fallback for unconfigured tournaments
-  if (rank === 1) return { medal: '🥇', label: 'Huy chương Vàng' };
-  if (rank === 2) return { medal: '🥈', label: 'Huy chương Bạc' };
-  if (rank === 3) return { medal: '🥉', label: 'Huy chương Đồng' };
   return null;
 }
 
