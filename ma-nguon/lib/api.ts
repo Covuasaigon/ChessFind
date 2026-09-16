@@ -648,8 +648,10 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
                 if (existingIdx >= 0) {
                   const existingRd = playerObj.rounds[existingIdx];
                   const isPlayed = existingRd.status === 'played' || existingRd.result != null || existingRd.score != null || existingRd.opponent != null || existingRd.color != null;
+                  if (sch.board != null && (existingRd.board == null || !isPlayed)) {
+                    existingRd.board = sch.board;
+                  }
                   if (!isPlayed) {
-                    if (sch.board != null) existingRd.board = sch.board;
                     if (sch.playerWhite && !existingRd.playerWhite) existingRd.playerWhite = sch.playerWhite;
                     if (sch.playerBlack && !existingRd.playerBlack) existingRd.playerBlack = sch.playerBlack;
                   }
