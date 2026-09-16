@@ -120,7 +120,17 @@ export default function ChessApp() {
       return d;
     }).then(d => {
       if (!dead && selected?.t === reqTourId && selected?.p === reqPlayerId) {
-        setTourneys(ts => ts.map(t => t.id === reqTourId ? { ...t, players: t.players.map(p => p.id === reqPlayerId ? { ...p, ...d.player, detailsLoaded: true } : p) } : t));
+        setTourneys(ts => ts.map(t => {
+          const masterReqId = reqTourId.split('-')[0];
+          const masterTId = t.id.split('-')[0];
+          if (t.id === reqTourId || masterTId === masterReqId || reqTourId.startsWith(t.id + '-')) {
+            return {
+              ...t,
+              players: t.players.map(p => p.id === reqPlayerId ? { ...p, ...d.player, detailsLoaded: true } : p)
+            };
+          }
+          return t;
+        }));
       }
     }).catch(e => {
       if (!dead) setDetailError(e.message);

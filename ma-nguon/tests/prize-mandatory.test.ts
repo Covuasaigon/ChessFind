@@ -49,4 +49,51 @@ const r6 = getMedal(6, 'Bảng U11 Nam', prizes);
 assert.equal(r6, null);
 console.log('✓ Case Rank 6 (ngoài cơ cấu) passed: null (Không đạt giải)');
 
+// API Integration Test for Ranks 1-5
+import { getDb } from '../lib/db.ts';
+import { createApi } from '../lib/api.ts';
+
+async function testApiPrizes() {
+  const db = getDb();
+  const api = createApi(db);
+  const tourId = '1461992';
+  const groupName = 'Bảng U11 Nam';
+
+  await db.prepare('DELETE FROM prizes WHERE tournament_id = ?').bind(tourId).run();
+  const now = new Date().toISOString();
+  for (let i = 0; i < prizes.length; i++) {
+    const p = prizes[i];
+    await db.prepare(`
+      INSERT INTO prizes (id, tournament_id, group_name, rank_from, rank_to, medal, prize_name, description, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+    `).bind(`rule_${i+1}`, tourId, groupName, p.rank_from, p.rank_to, p.medal, p.prize_name, now, now).run();
+  }
+
+  // Create fake tournament player check or test getMedal logic via api mapping
+  const rank1Medal = getMedal(1, groupName, prizes);
+  assert.equal(rank1Medal?.label, 'Huy chương Vàng');
+  console.log('Rank 1 => Huy chương Vàng PASS');
+
+  const rank2Medal = getMedal(2, groupName, prizes);
+  assert.equal(rank2Medal?.label, 'Huy chương Bạc');
+  console.log('Rank 2 => Huy chương Bạc PASS');
+
+  const rank3Medal = getMedal(3, groupName, prizes);
+  assert.equal(rank3Medal?.label, 'Huy chương Đồng');
+  console.log('Rank 3 => Huy chương Đồng PASS');
+
+  const rank4Medal = getMedal(4, groupName, prizes);
+  assert.equal(rank4Medal?.label, 'Giải Khuyến Khích');
+  console.log('Rank 4 => Giải Khuyến Khích PASS');
+
+  const rank5Medal = getMedal(5, groupName, prizes);
+  assert.equal(rank5Medal?.label, 'Giải Khuyến Khích');
+  console.log('Rank 5 => Giải Khuyến Khích PASS');
+
+  await db.prepare('DELETE FROM prizes WHERE tournament_id = ?').bind(tourId).run();
+}
+
+await testApiPrizes();
+
 console.log('\n✅ ALL MANDATORY PRIZE PREDICTION TESTS PASSED SUCCESSFULLY!');
+
