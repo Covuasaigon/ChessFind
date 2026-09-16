@@ -107,8 +107,15 @@ export default function ChessApp() {
   function go(v: View) { setView(v); setSelected(null); history.pushState({}, '', v === 'home' ? '/' : v === 'admin' ? '/admin' : `/?view=${v}`); window.scrollTo(0, 0) }
   function open(t: Tournament, p: Player) { setSelected({ t: t.id, p: p.id }); setTab('overview'); setDetailError(''); setView('player'); history.pushState({}, '', `/?t=${encodeURIComponent(t.id)}&p=${encodeURIComponent(p.id)}`); window.scrollTo(0, 0) }
 
+  const isFullDetailsLoaded = Boolean(
+    player &&
+    player.medalPrediction !== undefined &&
+    player.rounds &&
+    (player.rounds.length === 0 || player.rounds.some(r => r.board != null))
+  );
+
   useEffect(() => {
-    if (!current || !player || player.detailsLoaded || current.demo) return;
+    if (!current || !player || isFullDetailsLoaded || current.demo) return;
     let dead = false;
     const reqTourId = current.id;
     const reqPlayerId = player.id;
@@ -138,7 +145,7 @@ export default function ChessApp() {
       if (!dead) setDetailLoading(false);
     });
     return () => { dead = true };
-  }, [selected?.t, selected?.p, tourneys.length]);
+  }, [selected?.t, selected?.p, tourneys.length, isFullDetailsLoaded]);
 
   function bookmark(t: Tournament, p: Player) {
     const key = t.id + ':' + p.id, n = saved.includes(key) ? saved.filter(x => x !== key) : [...saved, key];
@@ -285,7 +292,7 @@ export default function ChessApp() {
             current.group ||
             (player.ageGroup ? (player.ageGroup.toLowerCase().includes('bảng') ? player.ageGroup : 'Bảng ' + player.ageGroup) : null);
           let medal = player.medalPrediction;
-          if (!medal && player.detailsLoaded !== true && !detailError) {
+          if (!medal && (detailLoading || !isFullDetailsLoaded) && !detailError) {
             medal = {
               medal: '⏳',
               label: 'Đang xác định giải thưởng...',
