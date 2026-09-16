@@ -459,40 +459,7 @@ export default function ChessApp() {
                 )}
               </div>
 
-              {/* 4. PHẦN 2: THÀNH TÍCH GIẢI ĐẤU CARD */}
-              <div style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E2E8F0', padding: 18, marginTop: 16, boxShadow: '0 2px 8px rgba(6,43,79,0.04)' }}>
-                <h3 style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', marginTop: 0, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Trophy size={18} style={{ color: '#D4AF37' }} />
-                  <span>THÀNH TÍCH GIẢI ĐẤU</span>
-                </h3>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-                  <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #E2E8F0' }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B', display: 'block', marginBottom: 4 }}>
-                      🏆 Xếp hạng hiện tại
-                    </span>
-                    <strong style={{ fontSize: 18, fontWeight: 800, color: '#062B4F' }}>
-                      Hạng {currentRank ? currentRank : '—'} / {totalCount} kỳ thủ
-                    </strong>
-                    <small style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 2 }}>
-                      bảng {currentDivision}{player.ageGroup && player.ageGroup !== currentDivision ? ` (Nhóm tuổi: ${player.ageGroup})` : ''}
-                    </small>
-                  </div>
-
-                  <div style={{ background: '#F8FAFC', padding: 14, borderRadius: 12, border: '1px solid #E2E8F0' }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B', display: 'block', marginBottom: 4 }}>
-                      🥇 Dự kiến đạt
-                    </span>
-                    <strong style={{ fontSize: 17, fontWeight: 800, color: medal ? '#B45309' : '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{medal ? medal.medal : '🎖️'}</span>
-                      <span>{medal ? medal.label : 'Chưa đạt giải'}</span>
-                    </strong>
-                    <small style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 2 }}>
-                      theo cơ cấu giải thưởng ban tổ chức
-                    </small>
-                  </div>
-                </div>
-              </div>
             </>
           );
         })()}
