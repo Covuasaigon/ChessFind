@@ -30,7 +30,7 @@ export function getBoardText(r?: { board?: number | null; status?: string; oppon
   if (!r) return 'Bàn: Chưa công bố';
   const isBye = r.status === 'bye' || /bye|miễn đấu|spielfrei|not paired|unpaired|u0\.5|u1\.0|u0\.0/i.test(r.opponent || '');
   if (isBye) return 'Miễn đấu';
-  if (r.board != null && r.board > 0) return `Bàn ${r.board}`;
+  if (r.board != null && Number(r.board) > 0) return `Bàn ${r.board}`;
   return 'Bàn: Chưa công bố';
 }
 
@@ -133,7 +133,25 @@ export default function ChessApp() {
           if (t.id === reqTourId || masterTId === masterReqId || reqTourId.startsWith(t.id + '-')) {
             return {
               ...t,
-              players: t.players.map(p => p.id === reqPlayerId ? { ...p, ...d.player, detailsLoaded: true } : p)
+              players: t.players.map(p => {
+                if (p.id !== reqPlayerId) return p;
+                const newRounds = d.player?.rounds || [];
+                const mergedRounds = newRounds.length > 0
+                  ? newRounds.map((newRd: any) => {
+                      const oldRd = p.rounds?.find((r: any) => r.round === newRd.round);
+                      const board = (newRd.board != null && Number(newRd.board) > 0)
+                        ? newRd.board
+                        : (oldRd?.board != null && Number(oldRd.board) > 0 ? oldRd.board : null);
+                      return { ...newRd, board };
+                    })
+                  : (p.rounds || []);
+                return {
+                  ...p,
+                  ...d.player,
+                  rounds: mergedRounds,
+                  detailsLoaded: true
+                };
+              })
             };
           }
           return t;
