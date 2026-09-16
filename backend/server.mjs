@@ -193,7 +193,7 @@ function getMedal(rank, group, prizes) {
         medalIcon = "\u{1F948}";
       } else if (mStr.includes("bronze") || mStr.includes("dong") || pNameLower.includes("bronze") || pNameLower.includes("\u0111\u1ED3ng") || pNameLower.includes("dong") || rank === 3 && !pNameLower.includes("khuyen khich")) {
         medalIcon = "\u{1F949}";
-      } else if (mStr.includes("certificate") || mStr.includes("consolation") || mStr.includes("khuyen khich") || mStr.includes("top") || pNameLower.includes("khuyen khich") || pNameLower.includes("khuy\u1EBFn kh\xEDch")) {
+      } else if (mStr.includes("certificate") || mStr.includes("consolation") || mStr.includes("khuyen khich") || mStr.includes("top") || mStr.includes("khen") || mStr.includes("bang") || pNameLower.includes("khuyen khich") || pNameLower.includes("khuy\u1EBFn kh\xEDch") || pNameLower.includes("khen") || rank >= 4) {
         medalIcon = "\u{1F396}";
       }
       return { medal: medalIcon, label, matchedRule: match };
@@ -1698,7 +1698,7 @@ function createApi(db2, sourceParam = {}) {
           const playedRoundsCount = playerObj.rounds ? playerObj.rounds.filter((r) => r.status === "played" || r.result != null || r.score != null || r.opponent != null).length : 0;
           console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || "none"} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
-          const userCategory = playerObj.categoryName || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || (p.ageGroup ? p.ageGroup.toLowerCase().includes("b\u1EA3ng") ? p.ageGroup : "B\u1EA3ng " + p.ageGroup : null) || (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) || t.group || void 0;
+          const userCategory = playerObj.categoryName || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || t.group || (p.ageGroup ? p.ageGroup.toLowerCase().includes("b\u1EA3ng") ? p.ageGroup : "B\u1EA3ng " + p.ageGroup : null) || (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) || void 0;
           const medalPrediction = getMedal(rank, userCategory, t.prizes);
           let matchedRuleRange = "none";
           if (medalPrediction && medalPrediction.matchedRule) {

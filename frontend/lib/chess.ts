@@ -356,7 +356,7 @@ export function getMedal(rank: number | null, group?: string, prizes?: PrizeRule
         medalIcon = '🥈';
       } else if (mStr.includes('bronze') || mStr.includes('dong') || pNameLower.includes('bronze') || pNameLower.includes('đồng') || pNameLower.includes('dong') || (rank === 3 && !pNameLower.includes('khuyen khich'))) {
         medalIcon = '🥉';
-      } else if (mStr.includes('certificate') || mStr.includes('consolation') || mStr.includes('khuyen khich') || mStr.includes('top') || pNameLower.includes('khuyen khich') || pNameLower.includes('khuyến khích')) {
+      } else if (mStr.includes('certificate') || mStr.includes('consolation') || mStr.includes('khuyen khich') || mStr.includes('top') || mStr.includes('khen') || mStr.includes('bang') || pNameLower.includes('khuyen khich') || pNameLower.includes('khuyến khích') || pNameLower.includes('khen') || rank >= 4) {
         medalIcon = '🎖';
       }
 

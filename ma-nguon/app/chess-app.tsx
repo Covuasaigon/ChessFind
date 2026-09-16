@@ -272,8 +272,8 @@ export default function ChessApp() {
           const totalCount = player.totalPlayers || (current?.players ? current.players.length : 0);
           const currentDivision = (player as any).categoryName ||
             (current.categories && player.categoryId ? current.categories.find(c => c.id === player.categoryId)?.name : null) ||
-            (player.ageGroup ? (player.ageGroup.toLowerCase().includes('bảng') ? player.ageGroup : 'Bảng ' + player.ageGroup) : null) ||
-            current.group;
+            current.group ||
+            (player.ageGroup ? (player.ageGroup.toLowerCase().includes('bảng') ? player.ageGroup : 'Bảng ' + player.ageGroup) : null);
           const medal = player.medalPrediction || getMedal(currentRank, currentDivision, current.prizes);
 
           let isNextWhite = false;
@@ -301,7 +301,7 @@ export default function ChessApp() {
                     <div>
                       <h2>Hồ sơ kỳ thủ · {player.name}</h2>
                       <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 600 }}>
-                        SBD: <b>{player.snr}</b> · Bảng: <b>{currentDivision}</b>{player.ageGroup && player.ageGroup !== currentDivision ? <> · Nhóm tuổi: <b>{player.ageGroup}</b></> : null} · Dự kiến: <b>{medal ? medal.label : 'Chưa đạt giải'}</b>
+                        SBD: <b>{player.snr}</b> · Bảng: <b>{currentDivision}</b>{player.ageGroup && player.ageGroup !== currentDivision ? <> · Nhóm tuổi: <b>{player.ageGroup}</b></> : null} · Dự kiến: <b>{medal ? `${medal.medal} ${medal.label}` : 'Chưa đạt giải'}</b>
                       </span>
                     </div>
                   </div>

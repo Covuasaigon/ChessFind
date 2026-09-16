@@ -708,9 +708,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           const nextMatch = getNextMatch(playerObj);
           const userCategory = (playerObj as any).categoryName ||
             (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) ||
+            t.group ||
             (p.ageGroup ? (p.ageGroup.toLowerCase().includes('bảng') ? p.ageGroup : 'Bảng ' + p.ageGroup) : null) ||
             (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) ||
-            t.group ||
             undefined;
 
           const medalPrediction = getMedal(rank, userCategory, t.prizes);
