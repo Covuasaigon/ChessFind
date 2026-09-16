@@ -1949,8 +1949,29 @@ ${medalPrediction ? JSON.stringify(medalPrediction, null, 2) : "None"}
         await log(true, `T\u1EA1o slide m\u1EDBi: ${title}`);
         return json({ message: "\u0110\xE3 t\u1EA1o slide gi\u1EA3i \u0111\u1EA5u th\xE0nh c\xF4ng.", id }, 200, {}, req);
       }
-      if (path === "/api/admin/prizes" || path.startsWith("/api/admin/prizes/")) {
-        const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, "");
+      if (path === "/api/admin/prizes" || path.startsWith("/api/admin/prizes/") || path === "/api/prizes" || path.startsWith("/api/prizes/")) {
+        const prizeId = path.replace(/^\/api\/(?:admin\/)?prizes\/?/, "");
+        if (path === "/api/prizes/bulk-delete" || path === "/api/admin/prizes/bulk-delete" || prizeId === "bulk-delete" || b.action === "prize_bulk_delete") {
+          const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x).trim()).filter(Boolean) : [];
+          if (ids.length === 0) {
+            return json({ error: "Vui l\xF2ng ch\u1ECDn \xEDt nh\u1EA5t 1 quy t\u1EAFc gi\u1EA3i th\u01B0\u1EDFng \u0111\u1EC3 x\xF3a." }, 400, {}, req);
+          }
+          let deletedCount = 0;
+          for (const id2 of ids) {
+            const res = await db2.prepare("DELETE FROM prizes WHERE id = ?").bind(id2).run();
+            if (res && res.meta && res.meta.changes) {
+              deletedCount += res.meta.changes;
+            } else {
+              deletedCount++;
+            }
+          }
+          await log(true, `\u0110\xE3 x\xF3a h\xE0ng lo\u1EA1t ${ids.length} c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng.`);
+          return json({
+            message: `\u0110\xE3 x\xF3a th\xE0nh c\xF4ng ${ids.length} c\u01A1 c\u1EA5u gi\u1EA3i th\u01B0\u1EDFng!`,
+            deletedCount: ids.length,
+            ids
+          }, 200, {}, req);
+        }
         if (path === "/api/admin/prizes/bulk" || prizeId === "bulk" || b.action === "prize_bulk_apply") {
           const targets = Array.isArray(b.targets) ? b.targets : [];
           const rules = Array.isArray(b.rules) ? b.rules : [];

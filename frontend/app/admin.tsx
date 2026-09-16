@@ -179,6 +179,8 @@ export default function Admin({ onChanged }: AdminProps) {
   const [confirmName, setConfirmName] = useState('');
   const [selectedTournamentIds, setSelectedTournamentIds] = useState<string[]>([]);
   const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+  const [selectedPrizeIds, setSelectedPrizeIds] = useState<string[]>([]);
+  const [bulkDeletePrizesModalOpen, setBulkDeletePrizesModalOpen] = useState(false);
   const [q, setQ] = useState('');
 
   async function handleBulkDelete() {
@@ -205,6 +207,35 @@ export default function Admin({ onChanged }: AdminProps) {
     } catch (e) {
       setError((e as Error).message);
       toast.error((e as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function handleBulkDeletePrizes() {
+    if (selectedPrizeIds.length === 0) return;
+    setBusy('bulk_delete_prizes');
+    setError('');
+    try {
+      const r = await apiFetch('/api/prizes/bulk-delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(state?.csrf ? { 'X-CSRF-Token': state.csrf } : {})
+        },
+        body: JSON.stringify({ ids: selectedPrizeIds })
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error || 'Lỗi xóa cơ cấu giải thưởng');
+
+      toast.success(d.message || `Đã xóa ${selectedPrizeIds.length} cơ cấu giải thưởng thành công!`);
+      setSelectedPrizeIds([]);
+      setBulkDeletePrizesModalOpen(false);
+      await load();
+      onChanged();
+    } catch (e: any) {
+      setError(e.message || 'Không thể xóa các cơ cấu giải thưởng đã chọn.');
+      toast.error(e.message || 'Không thể xóa các cơ cấu giải thưởng đã chọn.');
     } finally {
       setBusy('');
     }
@@ -2160,7 +2191,20 @@ export default function Admin({ onChanged }: AdminProps) {
                   </button>
                 )}
 
+                {selectedPrizeIds.length > 0 && (
+                  <button
+                    type="button"
+                    className="outline danger-btn"
+                    style={{ padding: '6px 14px', fontSize: 13, fontWeight: 700, borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FCA5A5' }}
+                    onClick={() => setBulkDeletePrizesModalOpen(true)}
+                  >
+                    <Trash2 size={15} />
+                    <span>🗑 Xóa mục đã chọn ({selectedPrizeIds.length})</span>
+                  </button>
+                )}
+
                 <span style={{ marginLeft: 'auto', fontSize: 13, color: '#64748B', fontWeight: 600 }}>
+                  {selectedPrizeIds.length > 0 ? <b>Đã chọn {selectedPrizeIds.length} mục · </b> : null}
                   Hiển thị {filteredSavedPrizes.length} / {state?.prizes?.length || 0} quy tắc
                 </span>
               </div>
@@ -2170,6 +2214,23 @@ export default function Admin({ onChanged }: AdminProps) {
                 <table className="saas-table">
                   <thead>
                     <tr>
+                      <th style={{ width: 45, textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={filteredSavedPrizes.length > 0 && filteredSavedPrizes.every(pz => pz.id && selectedPrizeIds.includes(pz.id))}
+                          onChange={() => {
+                            const allFilteredIds = filteredSavedPrizes.map(pz => pz.id).filter((id): id is string => !!id);
+                            const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedPrizeIds.includes(id));
+                            if (isAllSelected) {
+                              setSelectedPrizeIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+                            } else {
+                              setSelectedPrizeIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
+                            }
+                          }}
+                          style={{ width: 16, height: 16, cursor: 'pointer' }}
+                          title="Chọn tất cả"
+                        />
+                      </th>
                       <th>Giải đấu (Tournament)</th>
                       <th>Bảng đấu (Group)</th>
                       <th style={{ textAlign: 'center' }}>Khung hạng (Rank Range)</th>
@@ -2184,9 +2245,21 @@ export default function Admin({ onChanged }: AdminProps) {
                         : pz.medal === 'Silver Medal' || pz.medal === 'silver' ? '🥈 Silver Medal'
                         : pz.medal === 'Bronze Medal' || pz.medal === 'bronze' ? '🥉 Bronze Medal'
                         : pz.medal === 'Certificate' ? '📜 Certificate' : '🏆 Other';
+                      const isSelected = !!pz.id && selectedPrizeIds.includes(pz.id);
 
                       return (
-                        <tr key={pz.id}>
+                        <tr key={pz.id} style={{ background: isSelected ? '#FEF2F2' : undefined }}>
+                          <td style={{ textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                if (!pz.id) return;
+                                setSelectedPrizeIds(prev => prev.includes(pz.id!) ? prev.filter(x => x !== pz.id) : [...prev, pz.id!]);
+                              }}
+                              style={{ width: 16, height: 16, cursor: 'pointer' }}
+                            />
+                          </td>
                           <td>
                             <b style={{ color: '#062B4F', fontSize: 14, display: 'block' }}>{pz.tournament_name || pz.tournament_id}</b>
                           </td>
@@ -3082,6 +3155,39 @@ export default function Admin({ onChanged }: AdminProps) {
           )}
         </DialogContent>
       </Dialog>
+      {/* BULK DELETE PRIZES CONFIRMATION MODAL */}
+      <AlertDialog open={bulkDeletePrizesModalOpen} onOpenChange={setBulkDeletePrizesModalOpen}>
+        <AlertDialogContent style={{ maxWidth: 450, borderRadius: 16, padding: 24 }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle style={{ fontSize: 18, fontWeight: 800, color: '#991B1B', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={22} className="text-red-600" />
+              Xác nhận xóa hàng loạt
+            </AlertDialogTitle>
+            <AlertDialogDescription style={{ fontSize: 14, color: '#475569', marginTop: 10, lineHeight: 1.5 }}>
+              Bạn có chắc muốn xóa <b>{selectedPrizeIds.length}</b> cơ cấu giải thưởng?
+              <br />
+              Dữ liệu sau khi xóa không thể khôi phục.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <AlertDialogCancel
+              onClick={() => setBulkDeletePrizesModalOpen(false)}
+              style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
+            >
+              Hủy
+            </AlertDialogCancel>
+            <button
+              type="button"
+              className="saas-btn-danger"
+              style={{ padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 800, background: '#DC2626', color: '#FFFFFF', border: 'none', cursor: 'pointer' }}
+              disabled={busy === 'bulk_delete_prizes'}
+              onClick={handleBulkDeletePrizes}
+            >
+              {busy === 'bulk_delete_prizes' ? 'Đang xóa...' : 'Xác nhận xóa'}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

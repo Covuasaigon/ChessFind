@@ -1001,8 +1001,33 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
         return json({ message: 'Đã tạo slide giải đấu thành công.', id }, 200, {}, req);
       }
 
-      if (path === '/api/admin/prizes' || path.startsWith('/api/admin/prizes/')) {
-        const prizeId = path.replace(/^\/api\/admin\/prizes\/?/, '');
+      if (path === '/api/admin/prizes' || path.startsWith('/api/admin/prizes/') || path === '/api/prizes' || path.startsWith('/api/prizes/')) {
+        const prizeId = path.replace(/^\/api\/(?:admin\/)?prizes\/?/, '');
+
+        if (path === '/api/prizes/bulk-delete' || path === '/api/admin/prizes/bulk-delete' || prizeId === 'bulk-delete' || b.action === 'prize_bulk_delete') {
+          const ids = Array.isArray(b.ids) ? b.ids.map((x: any) => String(x).trim()).filter(Boolean) : [];
+          if (ids.length === 0) {
+            return json({ error: 'Vui lòng chọn ít nhất 1 quy tắc giải thưởng để xóa.' }, 400, {}, req);
+          }
+
+          let deletedCount = 0;
+          for (const id of ids) {
+            const res = await db.prepare('DELETE FROM prizes WHERE id = ?').bind(id).run();
+            if (res && res.meta && res.meta.changes) {
+              deletedCount += res.meta.changes;
+            } else {
+              deletedCount++;
+            }
+          }
+
+          await log(true, `Đã xóa hàng loạt ${ids.length} cơ cấu giải thưởng.`);
+
+          return json({
+            message: `Đã xóa thành công ${ids.length} cơ cấu giải thưởng!`,
+            deletedCount: ids.length,
+            ids
+          }, 200, {}, req);
+        }
 
         if (path === '/api/admin/prizes/bulk' || prizeId === 'bulk' || b.action === 'prize_bulk_apply') {
           const targets = Array.isArray(b.targets) ? b.targets : [];
