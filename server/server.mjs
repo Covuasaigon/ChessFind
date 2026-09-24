@@ -161,6 +161,91 @@ function matchCategoryGroup(ruleGrp, userGrp) {
   }
   return false;
 }
+function normalizeGender(gender) {
+  if (!gender) return "unknown";
+  const s = gender.trim().toLowerCase();
+  if (s === "female" || s === "f" || s === "w" || s === "n\u1EEF" || s === "nu") return "female";
+  if (s === "male" || s === "m" || s === "nam") return "male";
+  return "unknown";
+}
+function calculateCategoryPrizes(players, prizes, groupName, options) {
+  const resultMap = /* @__PURE__ */ new Map();
+  if (!players || players.length === 0) return resultMap;
+  const sortedPlayers = [...players].sort((a, b) => {
+    const rA = a.rank != null && !isNaN(Number(a.rank)) && Number(a.rank) > 0 ? Number(a.rank) : 999999;
+    const rB = b.rank != null && !isNaN(Number(b.rank)) && Number(b.rank) > 0 ? Number(b.rank) : 999999;
+    return rA - rB;
+  });
+  const hasMale = sortedPlayers.some((p) => normalizeGender(p.gender) === "male");
+  const hasFemale = sortedPlayers.some((p) => normalizeGender(p.gender) === "female");
+  const isMixed = hasMale && hasFemale;
+  const awardedPlayerIds = /* @__PURE__ */ new Set();
+  const getRuleForRank = (rankPos) => {
+    return getMedal(rankPos, groupName, prizes, options);
+  };
+  const hasPrizesConfigured = prizes && prizes.length > 0;
+  let currentPrizeRankSlot = 1;
+  const champion = sortedPlayers[0];
+  if (champion) {
+    const champRule = getRuleForRank(1);
+    let champLabel = champRule.label;
+    if (champRule.status === "no_rules") {
+      champLabel = "Nh\u1EA5t b\u1EA3ng";
+    }
+    resultMap.set(champion.id, {
+      ...champRule,
+      label: champLabel,
+      type: "champion"
+    });
+    awardedPlayerIds.add(champion.id);
+    currentPrizeRankSlot = 2;
+  }
+  if (isMixed) {
+    const femaleWinner = sortedPlayers.find((p) => normalizeGender(p.gender) === "female" && !awardedPlayerIds.has(p.id));
+    if (femaleWinner) {
+      const specificFemaleRule = prizes?.find((p) => {
+        const name = (p.prize_name || p.prizeName || "").toLowerCase();
+        const ruleGrp = p.group_name || p.group;
+        return name.includes("nh\u1EA5t n\u1EEF") || name.includes("nhat nu") || ruleGrp && (ruleGrp.toLowerCase().includes("n\u1EEF") || ruleGrp.toLowerCase().includes("nu"));
+      });
+      let medalIcon = "\u{1F947}";
+      let femaleLabel = "Nh\u1EA5t N\u1EEF";
+      if (specificFemaleRule) {
+        femaleLabel = specificFemaleRule.prize_name || specificFemaleRule.prizeName || "Nh\u1EA5t N\u1EEF";
+        const mStr = (specificFemaleRule.medal || "").toLowerCase();
+        if (mStr.includes("gold") || mStr.includes("vang")) medalIcon = "\u{1F947}";
+        else if (mStr.includes("silver") || mStr.includes("bac")) medalIcon = "\u{1F948}";
+        else if (mStr.includes("bronze") || mStr.includes("dong")) medalIcon = "\u{1F949}";
+        else medalIcon = "\u{1F3C6}";
+      }
+      resultMap.set(femaleWinner.id, {
+        medal: medalIcon,
+        label: femaleLabel,
+        status: "matched",
+        matchedRule: specificFemaleRule,
+        type: "female_winner"
+      });
+      awardedPlayerIds.add(femaleWinner.id);
+    }
+  }
+  for (const player of sortedPlayers) {
+    if (awardedPlayerIds.has(player.id)) continue;
+    const rankRule = getRuleForRank(currentPrizeRankSlot);
+    if (rankRule.status === "matched") {
+      resultMap.set(player.id, {
+        ...rankRule,
+        type: currentPrizeRankSlot === 2 ? "runner_up" : currentPrizeRankSlot === 3 ? "third_place" : "consolation"
+      });
+      awardedPlayerIds.add(player.id);
+      currentPrizeRankSlot++;
+    } else if (hasPrizesConfigured) {
+      resultMap.set(player.id, rankRule);
+    } else {
+      resultMap.set(player.id, rankRule);
+    }
+  }
+  return resultMap;
+}
 function getMedal(rank, group, prizes, options) {
   if (options?.loadError) {
     return {
@@ -168,6 +253,18 @@ function getMedal(rank, group, prizes, options) {
       label: "Ch\u01B0a t\u1EA3i \u0111\u01B0\u1EE3c th\xF4ng tin gi\u1EA3i th\u01B0\u1EDFng",
       status: "error"
     };
+  }
+  if (options?.players && options.players.length > 0) {
+    const categoryMap = calculateCategoryPrizes(options.players, prizes, group, options);
+    let targetPlayer;
+    if (options.playerId) {
+      targetPlayer = options.players.find((p) => p.id === options.playerId);
+    } else if (rank != null) {
+      targetPlayer = options.players.find((p) => p.rank === rank);
+    }
+    if (targetPlayer && categoryMap.has(targetPlayer.id)) {
+      return categoryMap.get(targetPlayer.id);
+    }
   }
   if (rank == null || rank <= 0 || isNaN(rank)) {
     return {
@@ -462,8 +559,20 @@ function parseRanking(html, source, group) {
     const hs5 = tieBreakArray[4] ?? null;
     const parsedRank = ri >= 0 ? num(row[ri]?.text || "") : null;
     const finalRank = parsedRank ?? players.length + 1;
-    const rowSex = sexCol >= 0 ? row[sexCol]?.text : "";
-    const gender = /f|w|nữ|nu|female/i.test(rowSex) || /nữ/i.test(group) ? "N\u1EEF" : "Nam";
+    const rowSex = (sexCol >= 0 ? row[sexCol]?.text : "")?.trim() || "";
+    let parsedGender = "unknown";
+    if (rowSex) {
+      if (/^(w|f|female|nữ|nu)$/i.test(rowSex) || /f|w|female|nữ|nu/i.test(rowSex)) {
+        parsedGender = "female";
+      } else if (/^(m|male|nam)$/i.test(rowSex) || /m|male|nam/i.test(rowSex)) {
+        parsedGender = "male";
+      }
+    } else if (/nữ|female/i.test(group)) {
+      parsedGender = "female";
+    } else if (/nam|male/i.test(group) && !/nữ/i.test(group)) {
+      parsedGender = "male";
+    }
+    const gender = parsedGender;
     const rowTyp = typCol >= 0 ? row[typCol]?.text : "";
     const ageGroupMatch = group.match(/(?:U\d+|Trẻ|Nhi|Tiểu học|THCS|THPT)/i)?.[0] || rowTyp || "To\xE0n gi\u1EA3i";
     const rawFed = fedCol >= 0 ? row[fedCol]?.text || null : null;
@@ -1729,7 +1838,7 @@ function createApi(db2, sourceParam = {}) {
           console.log(`[API /api/player] db_source=${dbSource} tid=${id} pid=${pid} details_found=${detailsFound} revision_selected=${revisionSelected || "none"} rounds_count=${roundsCount} played_rounds_count=${playedRoundsCount}`);
           const nextMatch = getNextMatch(playerObj);
           const userCategory = playerObj.categoryName || (t.categories && p.categoryId ? t.categories.find((c) => c.id === p.categoryId)?.name : null) || t.group || (p.ageGroup ? p.ageGroup.toLowerCase().includes("b\u1EA3ng") ? p.ageGroup : "B\u1EA3ng " + p.ageGroup : null) || (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) || void 0;
-          const medalPrediction = getMedal(rank, userCategory, t.prizes, { tournamentId: id });
+          const medalPrediction = getMedal(rank, userCategory, t.prizes, { tournamentId: id, players: t.players, playerId: p.id });
           let matchedRuleRange = "none";
           if (medalPrediction && medalPrediction.matchedRule) {
             const mR = medalPrediction.matchedRule;

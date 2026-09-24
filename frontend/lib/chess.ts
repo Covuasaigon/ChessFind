@@ -320,19 +320,127 @@ export function matchCategoryGroup(ruleGrp?: string, userGrp?: string): boolean 
   return false;
 }
 
+export function normalizeGender(gender?: string | null): 'male' | 'female' | 'unknown' {
+  if (!gender) return 'unknown';
+  const s = gender.trim().toLowerCase();
+  if (s === 'female' || s === 'f' || s === 'w' || s === 'nữ' || s === 'nu') return 'female';
+  if (s === 'male' || s === 'm' || s === 'nam') return 'male';
+  return 'unknown';
+}
+
+export function calculateCategoryPrizes(
+  players: Player[],
+  prizes?: PrizeRule[],
+  groupName?: string
+): Map<string, MedalPredictionResult> {
+  const resultMap = new Map<string, MedalPredictionResult>();
+  if (!players || players.length === 0) return resultMap;
+
+  const sortedPlayers = [...players].sort((a, b) => {
+    const rA = a.rank != null && !isNaN(Number(a.rank)) && Number(a.rank) > 0 ? Number(a.rank) : 999999;
+    const rB = b.rank != null && !isNaN(Number(b.rank)) && Number(b.rank) > 0 ? Number(b.rank) : 999999;
+    return rA - rB;
+  });
+
+  const hasMale = sortedPlayers.some(p => normalizeGender(p.gender) === 'male');
+  const hasFemale = sortedPlayers.some(p => normalizeGender(p.gender) === 'female');
+  const isMixed = hasMale && hasFemale;
+
+  const awardedPlayerIds = new Set<string>();
+
+  const getRuleForRank = (rankPos: number): MedalPredictionResult => {
+    return getMedal(rankPos, groupName, prizes);
+  };
+
+  const hasPrizesConfigured = prizes && prizes.length > 0;
+  let currentPrizeRankSlot = 1;
+
+  // A. NHẤT BẢNG (Champion)
+  const champion = sortedPlayers[0];
+  if (champion) {
+    const champRule = getRuleForRank(1);
+    let champLabel = champRule.label;
+    if (champRule.status === 'no_rules') {
+      champLabel = 'Nhất bảng';
+    }
+    resultMap.set(champion.id, {
+      ...champRule,
+      label: champLabel,
+      type: 'champion'
+    });
+    awardedPlayerIds.add(champion.id);
+    currentPrizeRankSlot = 2;
+  }
+
+  // B. NHẤT NỮ (Best Female) - Only if isMixed is true
+  if (isMixed) {
+    const femaleWinner = sortedPlayers.find(p => normalizeGender(p.gender) === 'female' && !awardedPlayerIds.has(p.id));
+    if (femaleWinner) {
+      const specificFemaleRule = prizes?.find(p => {
+        const name = (p.prize_name || p.prizeName || '').toLowerCase();
+        const ruleGrp = p.group_name || p.group;
+        return name.includes('nhất nữ') || name.includes('nhat nu') || (ruleGrp && (ruleGrp.toLowerCase().includes('nữ') || ruleGrp.toLowerCase().includes('nu')));
+      });
+
+      let medalIcon = '🥇';
+      let femaleLabel = 'Nhất Nữ';
+
+      if (specificFemaleRule) {
+        femaleLabel = specificFemaleRule.prize_name || specificFemaleRule.prizeName || 'Nhất Nữ';
+        const mStr = (specificFemaleRule.medal || '').toLowerCase();
+        if (mStr.includes('gold') || mStr.includes('vang')) medalIcon = '🥇';
+        else if (mStr.includes('silver') || mStr.includes('bac')) medalIcon = '🥈';
+        else if (mStr.includes('bronze') || mStr.includes('dong')) medalIcon = '🥉';
+        else medalIcon = '🏆';
+      }
+
+      resultMap.set(femaleWinner.id, {
+        medal: medalIcon,
+        label: femaleLabel,
+        status: 'matched',
+        matchedRule: specificFemaleRule,
+        type: 'female_winner'
+      });
+      awardedPlayerIds.add(femaleWinner.id);
+    }
+  }
+
+  // C & D & E: NHÌ BẢNG (2nd), BA BẢNG (3rd), KHUYẾN KHÍCH (Consolation)
+  for (const player of sortedPlayers) {
+    if (awardedPlayerIds.has(player.id)) continue;
+
+    const rankRule = getRuleForRank(currentPrizeRankSlot);
+    if (rankRule.status === 'matched') {
+      resultMap.set(player.id, {
+        ...rankRule,
+        type: currentPrizeRankSlot === 2 ? 'runner_up' : (currentPrizeRankSlot === 3 ? 'third_place' : 'consolation')
+      });
+      awardedPlayerIds.add(player.id);
+      currentPrizeRankSlot++;
+    } else if (hasPrizesConfigured) {
+      resultMap.set(player.id, rankRule);
+    } else {
+      resultMap.set(player.id, rankRule);
+    }
+  }
+
+  return resultMap;
+}
+
 export type MedalPredictionResult = {
   medal: string;
   label: string;
   status: 'matched' | 'no_rules' | 'outside_range' | 'no_rank' | 'error';
   matchedRule?: PrizeRule;
   isOfficial?: boolean;
+  type?: 'champion' | 'female_winner' | 'runner_up' | 'third_place' | 'consolation' | string;
 };
 
 export function getMedal(
   rank: number | null,
   group?: string,
   prizes?: PrizeRule[],
-  options?: { loadError?: boolean }
+  options?: { loadError?: boolean; players?: Player[]; playerId?: string }
 ): MedalPredictionResult {
   if (options?.loadError) {
     return {
@@ -340,6 +448,19 @@ export function getMedal(
       label: 'Chưa tải được thông tin giải thưởng',
       status: 'error'
     };
+  }
+
+  if (options?.players && options.players.length > 0) {
+    const categoryMap = calculateCategoryPrizes(options.players, prizes, group);
+    let targetPlayer: Player | undefined;
+    if (options.playerId) {
+      targetPlayer = options.players.find(p => p.id === options.playerId);
+    } else if (rank != null) {
+      targetPlayer = options.players.find(p => p.rank === rank);
+    }
+    if (targetPlayer && categoryMap.has(targetPlayer.id)) {
+      return categoryMap.get(targetPlayer.id)!;
+    }
   }
 
   if (rank == null || rank <= 0 || isNaN(rank)) {

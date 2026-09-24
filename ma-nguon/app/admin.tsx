@@ -2557,7 +2557,7 @@ export default function Admin({ onChanged }: AdminProps) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                   <div>
                     <span style={{ fontSize: 15, fontWeight: 800, color: '#062B4F', display: 'block' }}>🏆 Cơ Cấu Giải Thưởng & Huy Chương Từng Bảng Đấu</span>
-                    <span style={{ fontSize: 12, color: '#64748B' }}>Thiết lập huy chương (🥇 Vàng, 🥈 Bạc, 🥉 Đồng, 🏆 Khuyến khích) và phần thưởng từ Hạng đến Hạng cho từng bảng đấu.</span>
+                    <span style={{ fontSize: 12, color: '#64748B' }}>Thiết lập huy chương (🥇 Vàng, 🥈 Bạc, 🥉 Đồng, 🏆 Khuyến khích). Với bảng đấu hỗn hợp Nam & Nữ, hệ thống tự động xét giải Nhất Nữ cho kỳ thủ Nữ xuất sắc nhất.</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button type="button" className="outline" style={{ height: 32, padding: '0 10px', fontSize: 11, fontWeight: 700 }} onClick={() => {
