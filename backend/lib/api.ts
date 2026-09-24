@@ -709,7 +709,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             (p.categoryId && p.categoryId !== id && !/^\d{4,}$/.test(p.categoryId) ? p.categoryId : null) ||
             undefined;
 
-          const medalPrediction = getMedal(rank, userCategory, t.prizes, { tournamentId: id, players: t.players, playerId: p.id });
+          const medalPrediction = getMedal(rank, userCategory, t.prizes, { tournamentId: id });
 
           let matchedRuleRange = 'none';
           if (medalPrediction && (medalPrediction as any).matchedRule) {

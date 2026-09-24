@@ -210,20 +210,8 @@ export function parseRanking(html: string, source: string, group: string): Tourn
     const parsedRank = ri >= 0 ? num(row[ri]?.text || '') : null;
     const finalRank = parsedRank ?? (players.length + 1);
 
-    const rowSex = (sexCol >= 0 ? row[sexCol]?.text : '')?.trim() || '';
-    let parsedGender = 'unknown';
-    if (rowSex) {
-      if (/^(w|f|female|nữ|nu)$/i.test(rowSex) || /f|w|female|nữ|nu/i.test(rowSex)) {
-        parsedGender = 'female';
-      } else if (/^(m|male|nam)$/i.test(rowSex) || /m|male|nam/i.test(rowSex)) {
-        parsedGender = 'male';
-      }
-    } else if (/nữ|female/i.test(group)) {
-      parsedGender = 'female';
-    } else if (/nam|male/i.test(group) && !/nữ/i.test(group)) {
-      parsedGender = 'male';
-    }
-    const gender = parsedGender;
+    const rowSex = sexCol >= 0 ? row[sexCol]?.text : '';
+    const gender = /f|w|nữ|nu|female/i.test(rowSex) || /nữ/i.test(group) ? 'Nữ' : 'Nam';
 
     const rowTyp = typCol >= 0 ? row[typCol]?.text : '';
     const ageGroupMatch = group.match(/(?:U\d+|Trẻ|Nhi|Tiểu học|THCS|THPT)/i)?.[0] || rowTyp || 'Toàn giải';

@@ -319,7 +319,7 @@ export default function ChessApp() {
           } else if (!medal) {
             medal = detailError
               ? getMedal(null, currentDivision, current?.prizes, { loadError: true })
-              : (current?.prizes && current.prizes.length > 0 ? getMedal(currentRank, currentDivision, current.prizes, { players: current?.players, playerId: player.id }) : { medal: 'ℹ️', label: 'Chưa cấu hình giải thưởng', status: 'no_rules' });
+              : (current?.prizes && current.prizes.length > 0 ? getMedal(currentRank, currentDivision, current.prizes) : { medal: 'ℹ️', label: 'Chưa cấu hình giải thưởng', status: 'no_rules' });
           }
 
           let isNextWhite = false;
