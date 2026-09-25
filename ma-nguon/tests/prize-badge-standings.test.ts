@@ -130,5 +130,40 @@ console.log('\nTest Case 6: Rank Outside All Rules');
 assert.equal(getPrizeBadge(99, 'U8', case5Prizes), null);
 console.log('  ✓ Case 6 passed: Rank outside any rule returns null');
 
+// -------------------------------------------------------------
+// TEST CASE 7: Prompt Section 11 Exact Expected Rules & Ranks
+// 1-1 Gold, 2-2 Silver, 3-4 Bronze, 5-10 KK
+// -------------------------------------------------------------
+console.log('\nTest Case 7: Prompt Section 11 Exact Expected Ranges (1..11)');
+const section11Prizes: PrizeRule[] = [
+  { rank_from: 1, rank_to: 1, group_name: 'Tất cả', medal: 'Gold Medal', prize_name: 'Cúp Vô Địch + Huy Chương Vàng' },
+  { rank_from: 2, rank_to: 2, group_name: 'Tất cả', medal: 'Silver Medal', prize_name: 'Huy Chương Bạc' },
+  { rank_from: 3, rank_to: 4, group_name: 'Tất cả', medal: 'Bronze Medal', prize_name: 'Huy Chương Đồng' },
+  { rank_from: 5, rank_to: 10, group_name: 'Tất cả', medal: 'Other', prize_name: 'Khuyến khích' }
+];
 
-console.log('\n✅ ALL 6 MANDATORY TEST CASES PASSED SUCCESSFULLY!');
+assert.equal(getPrizeBadge(1, 'U5', section11Prizes)?.shortLabel, 'HCV');
+assert.equal(getPrizeBadge(2, 'U5', section11Prizes)?.shortLabel, 'HCB');
+assert.equal(getPrizeBadge(3, 'U5', section11Prizes)?.shortLabel, 'HCĐ');
+assert.equal(getPrizeBadge(4, 'U5', section11Prizes)?.shortLabel, 'HCĐ');
+assert.equal(getPrizeBadge(5, 'U5', section11Prizes)?.shortLabel, 'KK');
+assert.equal(getPrizeBadge(6, 'U5', section11Prizes)?.shortLabel, 'KK');
+assert.equal(getPrizeBadge(7, 'U5', section11Prizes)?.shortLabel, 'KK');
+assert.equal(getPrizeBadge(8, 'U5', section11Prizes)?.shortLabel, 'KK');
+assert.equal(getPrizeBadge(9, 'U5', section11Prizes)?.shortLabel, 'KK');
+assert.equal(getPrizeBadge(10, 'U5', section11Prizes)?.shortLabel, 'KK');
+assert.equal(getPrizeBadge(11, 'U5', section11Prizes), null);
+console.log('  ✓ Case 7 passed: 1=HCV, 2=HCB, 3=HCĐ, 4=HCĐ, 5-10=KK, 11=null');
+
+// -------------------------------------------------------------
+// TEST CASE 8: String rank and string rankFrom/rankTo inputs
+// -------------------------------------------------------------
+console.log('\nTest Case 8: String rank and rankFrom/rankTo conversion');
+const stringPrizes: any[] = [
+  { rankFrom: "3", rankTo: "4", group_name: 'Tất cả', medal: 'Bronze Medal', prize_name: 'Huy Chương Đồng' }
+];
+assert.equal(getPrizeBadge("3", 'U5', stringPrizes)?.shortLabel, 'HCĐ');
+console.log('  ✓ Case 8 passed: rank="3", rankFrom="3", rankTo="4" -> HCĐ');
+
+console.log('\n✅ ALL 8 TEST CASES PASSED SUCCESSFULLY!');
+

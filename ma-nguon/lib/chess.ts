@@ -456,56 +456,92 @@ export type PrizeBadge = {
   type: 'gold' | 'silver' | 'bronze' | 'encouragement' | 'custom';
 };
 
-export function getPrizeBadge(
-  rank: number | null | undefined,
+export function getPredictedPrizeFromRank(
+  rank: number | string | null | undefined,
   group?: string,
-  prizes?: PrizeRule[]
+  rules?: PrizeRule[]
 ): PrizeBadge | null {
-  if (rank == null || rank <= 0 || !prizes || prizes.length === 0) {
+  if (rank == null || !rules || rules.length === 0) {
+    return null;
+  }
+  const rNum = Number(rank);
+  if (isNaN(rNum) || rNum <= 0) {
     return null;
   }
 
-  const medalResult = getMedal(rank, group, prizes);
-  if (medalResult.status !== 'matched' || !medalResult.matchedRule) {
+  const matchingRules = rules.filter(r => {
+    const rf = r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank ?? (r as any).startRank ?? (r as any).start_rank ?? r.rank;
+    const rt = r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank ?? (r as any).endRank ?? (r as any).end_rank ?? r.rank ?? rf;
+
+    if (rf == null || rt == null) return false;
+    const rfNum = Number(rf);
+    const rtNum = Number(rt);
+
+    if (isNaN(rfNum) || isNaN(rtNum)) return false;
+    const inRange = rNum >= rfNum && rNum <= rtNum;
+    if (!inRange) return false;
+
+    const ruleGrp = r.group_name || r.group || (r as any).groupName || (r as any).category;
+    return matchCategoryGroup(ruleGrp, group);
+  });
+
+  if (matchingRules.length === 0) {
     return null;
   }
 
-  const match = medalResult.matchedRule;
-  const fullTitle =
-    medalResult.label ||
-    match.prize_name ||
-    match.prizeName ||
-    (match as any).name ||
-    (match as any).title ||
-    `Hạng ${rank}`;
+  const specificMatch = group ? matchingRules.find(r => {
+    const ruleGrp = r.group_name || r.group || (r as any).groupName || (r as any).category;
+    if (!ruleGrp) return false;
+    const norm = normalizeCategoryGroup(ruleGrp);
+    return !norm.includes('tat ca') && norm !== 'all' && !norm.includes('toan gia') && !norm.includes('toan bang');
+  }) : null;
 
-  const icon = medalResult.medal || '🏆';
+  const match = specificMatch || matchingRules[0];
+  const fullTitle = match.prize_name || match.prizeName || (match as any).name || (match as any).title || (match.gift ? `${match.gift}` : `Hạng ${rNum}`);
+  const medalRaw = String(match.medal || (match as any).medalType || (match as any).medal_type || (match as any).type || '').toLowerCase();
+  const nameNorm = normalize(fullTitle);
+  const nameLower = fullTitle.toLowerCase();
 
-  if (icon === '🥇') {
-    return { icon, shortLabel: 'HCV', fullTitle, type: 'gold' };
+  const isKK =
+    nameNorm.includes('khuyen khich') ||
+    nameLower.includes('khuyến khích') ||
+    /\bkk\b/i.test(fullTitle) ||
+    medalRaw.includes('consolation') ||
+    medalRaw.includes('khuyen khich') ||
+    medalRaw.includes('other');
+
+  if (isKK) {
+    return { icon: '🎖', shortLabel: 'KK', fullTitle, type: 'encouragement' };
   }
-  if (icon === '🥈') {
-    return { icon, shortLabel: 'HCB', fullTitle, type: 'silver' };
+  if (medalRaw.includes('gold') || medalRaw.includes('vang') || nameNorm.includes('gold') || nameNorm.includes('vang') || nameLower.includes('vàng')) {
+    return { icon: '🥇', shortLabel: 'HCV', fullTitle, type: 'gold' };
   }
-  if (icon === '🥉') {
-    return { icon, shortLabel: 'HCĐ', fullTitle, type: 'bronze' };
+  if (medalRaw.includes('silver') || medalRaw.includes('bac') || nameNorm.includes('silver') || nameNorm.includes('bac') || nameLower.includes('bạc')) {
+    return { icon: '🥈', shortLabel: 'HCB', fullTitle, type: 'silver' };
   }
-  if (icon === '🎖') {
-    return { icon, shortLabel: 'KK', fullTitle, type: 'encouragement' };
+  if (medalRaw.includes('bronze') || medalRaw.includes('dong') || nameNorm.includes('bronze') || nameNorm.includes('dong') || nameLower.includes('đồng')) {
+    return { icon: '🥉', shortLabel: 'HCĐ', fullTitle, type: 'bronze' };
   }
 
   return {
-    icon,
+    icon: '🏆',
     shortLabel: fullTitle,
     fullTitle,
     type: 'custom'
   };
 }
 
-export const getStandingPrizeBadge = getPrizeBadge;
+export function getPrizeBadge(
+  rank: number | null | undefined,
+  group?: string,
+  prizes?: PrizeRule[]
+): PrizeBadge | null {
+  return getPredictedPrizeFromRank(rank, group, prizes);
+}
 
+export const getStandingPrizeBadge = getPredictedPrizeFromRank;
+export const getPredictedPrizeForRank = getPredictedPrizeFromRank;
 export type StandingPredictedPrize = PrizeBadge;
-export const getPredictedPrizeForRank = getPrizeBadge;
 
 export function getNextMatch(p: Player): Round | null {
   if (!p.rounds || !p.rounds.length) return null;
