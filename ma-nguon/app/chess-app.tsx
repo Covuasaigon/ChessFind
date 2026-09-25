@@ -929,7 +929,15 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected?: string; on
               (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) ||
               t.group ||
               (p.ageGroup ? (p.ageGroup.toLowerCase().includes('bảng') ? p.ageGroup : 'Bảng ' + p.ageGroup) : null);
-            const prizeBadge = getPrizeBadge(rankVal, playerCategory, t.prizes);
+            const profileMedal = (p as any).medalPrediction;
+            const prizeBadge = (profileMedal && profileMedal.status === 'matched')
+              ? {
+                  icon: profileMedal.medal || '🏆',
+                  shortLabel: profileMedal.medal === '🥇' ? 'HCV' : (profileMedal.medal === '🥈' ? 'HCB' : (profileMedal.medal === '🥉' ? 'HCĐ' : (profileMedal.label?.includes('Khuyến') || profileMedal.label?.includes('KK') ? 'KK' : 'HCV'))),
+                  fullTitle: profileMedal.label,
+                  type: profileMedal.medal === '🥇' ? 'gold' : (profileMedal.medal === '🥈' ? 'silver' : (profileMedal.medal === '🥉' ? 'bronze' : 'encouragement'))
+                } as any
+              : getPrizeBadge(rankVal, playerCategory, t.prizes);
 
             return (
               <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
