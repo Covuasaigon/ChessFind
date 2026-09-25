@@ -492,10 +492,17 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             prizesMap.get(cleanTourId) ||
             (tour.prizes && tour.prizes.length > 0 ? tour.prizes : null);
 
-          if (directPrizes && directPrizes.length > 0) {
-            tour.prizes = directPrizes;
-          } else if (globalPrizes.length > 0) {
-            tour.prizes = globalPrizes;
+          const finalPrizes: any[] = directPrizes ? [...directPrizes] : [];
+          if (globalPrizes.length > 0) {
+            for (const gP of globalPrizes) {
+              if (!finalPrizes.some(p => p.id === gP.id)) {
+                finalPrizes.push(gP);
+              }
+            }
+          }
+
+          if (finalPrizes.length > 0) {
+            tour.prizes = finalPrizes;
           }
         }
       }
