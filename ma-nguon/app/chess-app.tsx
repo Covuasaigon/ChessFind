@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Toaster, toast } from 'sonner';
-import { Tournament, Player, Round, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getPrizeBadge, getNextMatch, formatClubName } from '@/lib/chess';
+import { Tournament, Player, Round, PrizeRule, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getPrizeBadge, getStandingPrizeBadge, getNextMatch, formatClubName } from '@/lib/chess';
 import { apiFetch } from '@/lib/api-client';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell } from 'recharts';
 import Admin from './admin';
@@ -522,7 +522,7 @@ export default function ChessApp() {
           </TabsContent>
 
           <TabsContent value="ranking">
-            <Ranking t={current} selected={player.id} onOpen={p => open(current, p)} />
+            <Ranking t={current} prizes={current?.prizes || tourneys.find(x => x.prizes && x.prizes.length > 0)?.prizes} selected={player.id} onOpen={p => open(current, p)} />
           </TabsContent>
 
           <TabsContent value="charts">
@@ -822,9 +822,10 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
   );
 }
 
-function Ranking({ t, selected, onOpen }: { t: Tournament; selected?: string; onOpen: (p: Player) => void }) {
+function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: PrizeRule[]; selected?: string; onOpen: (p: Player) => void }) {
   const [q, setQ] = useState('');
   const [activeHsInfo, setActiveHsInfo] = useState<number | null>(null);
+  const effectivePrizes = (t.prizes && t.prizes.length > 0) ? t.prizes : (prizes || []);
   const ps = (t.players || [])
     .filter(p => matchPlayer(p, t.group, q))
     .sort((a, b) => {
@@ -929,15 +930,7 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected?: string; on
               (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) ||
               t.group ||
               (p.ageGroup ? (p.ageGroup.toLowerCase().includes('bảng') ? p.ageGroup : 'Bảng ' + p.ageGroup) : null);
-            const profileMedal = (p as any).medalPrediction;
-            const prizeBadge = (profileMedal && profileMedal.status === 'matched')
-              ? {
-                  icon: profileMedal.medal || '🏆',
-                  shortLabel: profileMedal.medal === '🥇' ? 'HCV' : (profileMedal.medal === '🥈' ? 'HCB' : (profileMedal.medal === '🥉' ? 'HCĐ' : (profileMedal.label?.includes('Khuyến') || profileMedal.label?.includes('KK') ? 'KK' : 'HCV'))),
-                  fullTitle: profileMedal.label,
-                  type: profileMedal.medal === '🥇' ? 'gold' : (profileMedal.medal === '🥈' ? 'silver' : (profileMedal.medal === '🥉' ? 'bronze' : 'encouragement'))
-                } as any
-              : getPrizeBadge(rankVal, playerCategory, t.prizes);
+            const prizeBadge = getStandingPrizeBadge(rankVal, playerCategory, effectivePrizes);
 
             return (
               <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
