@@ -482,6 +482,22 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
           }
         }
 
+        const allDbPrizes = (prizesRes.results || []).map((row: any) => ({
+          id: row.id,
+          tournamentId: row.tournament_id,
+          tournament_id: row.tournament_id,
+          group: row.group_name,
+          group_name: row.group_name,
+          rankFrom: Number(row.rank_from),
+          rank_from: Number(row.rank_from),
+          rankTo: Number(row.rank_to),
+          rank_to: Number(row.rank_to),
+          medal: row.medal,
+          prizeName: row.prize_name,
+          prize_name: row.prize_name,
+          description: row.description || ''
+        }));
+
         for (const tour of tours) {
           const masterId = tour.id.split('-')[0];
           const cleanTourId = tour.id.replace(/^tnr/i, '').split('-')[0];
@@ -501,7 +517,9 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             }
           }
 
-          if (finalPrizes.length > 0) {
+          if (finalPrizes.length === 0 && allDbPrizes.length > 0) {
+            tour.prizes = allDbPrizes;
+          } else if (finalPrizes.length > 0) {
             tour.prizes = finalPrizes;
           }
         }
