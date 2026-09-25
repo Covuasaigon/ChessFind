@@ -287,7 +287,14 @@ export function matchCategoryGroup(ruleGrp?: string, userGrp?: string): boolean 
   const rNorm = normalizeCategoryGroup(ruleGrp);
   const uNorm = normalizeCategoryGroup(userGrp);
 
-  if (rNorm === 'tat ca' || rNorm.includes('tat ca') || rNorm === 'all' || rNorm === '') return true;
+  if (
+    rNorm === 'tat ca' || rNorm.includes('tat ca') ||
+    rNorm === 'toan gia' || rNorm.includes('toan gia') ||
+    rNorm === 'toan bang' || rNorm.includes('toan bang') ||
+    rNorm === 'all' || rNorm === ''
+  ) {
+    return true;
+  }
   if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
 
   // Check gender conflict
@@ -359,8 +366,8 @@ export function getMedal(
   }
 
   const matching = prizes.filter(p => {
-    const rf = p.rank_from ?? p.rankFrom ?? p.rank;
-    const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
+    const rf = p.rank_from ?? p.rankFrom ?? (p as any).fromRank ?? (p as any).from_rank ?? (p as any).startRank ?? (p as any).start_rank ?? p.rank;
+    const rt = p.rank_to ?? p.rankTo ?? (p as any).toRank ?? (p as any).to_rank ?? (p as any).endRank ?? (p as any).end_rank ?? p.rank ?? rf;
     const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
     const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
     const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
@@ -372,23 +379,24 @@ export function getMedal(
     const rankMatches = rank >= fromVal && rank <= toVal;
     if (!rankMatches) return false;
 
-    const ruleGrp = p.group_name || p.group;
+    const ruleGrp = p.group_name || p.group || (p as any).groupName || (p as any).category;
     return matchCategoryGroup(ruleGrp, group);
   });
 
   if (matching.length > 0) {
     // Prioritize specific category match over 'tat ca'
     const specificMatch = group ? matching.find(p => {
-      const ruleGrp = p.group_name || p.group;
+      const ruleGrp = p.group_name || p.group || (p as any).groupName || (p as any).category;
       if (!ruleGrp) return false;
       const norm = normalizeCategoryGroup(ruleGrp);
-      return !norm.includes('tat ca') && norm !== 'all';
+      return !norm.includes('tat ca') && norm !== 'all' && !norm.includes('toan gia') && !norm.includes('toan bang');
     }) : null;
 
     const match = specificMatch || matching[0];
-    const label = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
+    const label = match.prize_name || match.prizeName || (match as any).name || (match as any).title || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
     let medalIcon = '🏆';
-    const mStr = (match.medal || '').toLowerCase();
+    const medalRaw = match.medal || (match as any).medalType || (match as any).medal_type || (match as any).type || '';
+    const mStr = String(medalRaw).toLowerCase();
     const pNameLower = label.toLowerCase();
     const pNameNorm = normalize(label);
 
@@ -441,8 +449,8 @@ export function getPrizeBadge(
   }
 
   const matching = prizes.filter(p => {
-    const rf = p.rank_from ?? p.rankFrom ?? p.rank;
-    const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
+    const rf = p.rank_from ?? p.rankFrom ?? (p as any).fromRank ?? (p as any).from_rank ?? (p as any).startRank ?? (p as any).start_rank ?? p.rank;
+    const rt = p.rank_to ?? p.rankTo ?? (p as any).toRank ?? (p as any).to_rank ?? (p as any).endRank ?? (p as any).end_rank ?? p.rank ?? rf;
     const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
     const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
     const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
@@ -454,7 +462,7 @@ export function getPrizeBadge(
     const rankMatches = rank >= fromVal && rank <= toVal;
     if (!rankMatches) return false;
 
-    const ruleGrp = p.group_name || p.group;
+    const ruleGrp = p.group_name || p.group || (p as any).groupName || (p as any).category;
     return matchCategoryGroup(ruleGrp, group);
   });
 
@@ -463,16 +471,33 @@ export function getPrizeBadge(
   }
 
   const specificMatch = group ? matching.find(p => {
-    const ruleGrp = p.group_name || p.group;
+    const ruleGrp = p.group_name || p.group || (p as any).groupName || (p as any).category;
     if (!ruleGrp) return false;
     const norm = normalizeCategoryGroup(ruleGrp);
-    return !norm.includes('tat ca') && norm !== 'all';
+    return !norm.includes('tat ca') && norm !== 'all' && !norm.includes('toan gia') && !norm.includes('toan bang');
   }) : null;
 
   const match = specificMatch || matching[0];
-  const fullTitle = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
 
-  const mStr = (match.medal || '').toLowerCase();
+  const fullTitle =
+    match.prize_name ||
+    match.prizeName ||
+    (match as any).name ||
+    (match as any).title ||
+    (match as any).awardName ||
+    (match as any).award_name ||
+    (match.gift ? `${match.gift}` : `Hạng ${rank}`);
+
+  const medalRaw =
+    match.medal ||
+    (match as any).medalType ||
+    (match as any).medal_type ||
+    (match as any).type ||
+    (match as any).prizeType ||
+    (match as any).prize_type ||
+    '';
+
+  const mStr = String(medalRaw).toLowerCase();
   const titleLower = fullTitle.toLowerCase();
   const titleNorm = normalize(fullTitle);
 
