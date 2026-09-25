@@ -440,7 +440,41 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
     } catch {
       res = await db.prepare(admin ? 'SELECT payload,published FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<any>();
     }
-    return res.results.map(formatTourObj).filter((x: any): x is Tournament => x !== null);
+    const tours = res.results.map(formatTourObj).filter((x: any): x is Tournament => x !== null);
+    try {
+      const prizesRes = await db.prepare('SELECT * FROM prizes ORDER BY rank_from ASC').all<any>();
+      if (prizesRes && prizesRes.results && prizesRes.results.length > 0) {
+        const prizesMap = new Map<string, any[]>();
+        for (const row of prizesRes.results) {
+          const tId = String(row.tournament_id);
+          const item = {
+            id: row.id,
+            tournamentId: row.tournament_id,
+            tournament_id: row.tournament_id,
+            group: row.group_name,
+            group_name: row.group_name,
+            rankFrom: Number(row.rank_from),
+            rank_from: Number(row.rank_from),
+            rankTo: Number(row.rank_to),
+            rank_to: Number(row.rank_to),
+            medal: row.medal,
+            prizeName: row.prize_name,
+            prize_name: row.prize_name,
+            description: row.description || ''
+          };
+          if (!prizesMap.has(tId)) prizesMap.set(tId, []);
+          prizesMap.get(tId)!.push(item);
+        }
+        for (const tour of tours) {
+          const masterId = tour.id.split('-')[0];
+          const matchedPrizes = prizesMap.get(tour.id) || prizesMap.get(masterId);
+          if (matchedPrizes && matchedPrizes.length > 0) {
+            tour.prizes = matchedPrizes;
+          }
+        }
+      }
+    } catch {}
+    return tours;
   };
 
   async function session(req: Request) {

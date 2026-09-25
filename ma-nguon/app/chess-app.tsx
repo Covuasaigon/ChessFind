@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Toaster, toast } from 'sonner';
-import { Tournament, Player, Round, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getNextMatch, formatClubName } from '@/lib/chess';
+import { Tournament, Player, Round, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getPrizeBadge, getNextMatch, formatClubName } from '@/lib/chess';
 import { apiFetch } from '@/lib/api-client';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell } from 'recharts';
 import Admin from './admin';
@@ -882,6 +882,7 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected?: string; on
         <TableHeader>
           <TableRow>
             <TableHead style={{ textAlign: 'center', width: 60 }}>Hạng</TableHead>
+            <TableHead style={{ textAlign: 'center', width: 90 }}>Giải</TableHead>
             <TableHead>Họ và tên kỳ thủ</TableHead>
             <TableHead>CLB / Tỉnh</TableHead>
             <TableHead style={{ textAlign: 'center', width: 70 }}>SBD</TableHead>
@@ -924,10 +925,27 @@ function Ranking({ t, selected, onOpen }: { t: Tournament; selected?: string; on
             const rankVal = p.rank ?? (idx + 1);
             const gamesCount = p.detailsLoaded ? `${stats(p).played} ván` : (t.rounds ? `${t.rounds} ván` : '—');
             const clubName = p.club || formatClubName(p.federation || '');
+            const playerCategory = (p as any).categoryName ||
+              (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) ||
+              t.group ||
+              (p.ageGroup ? (p.ageGroup.toLowerCase().includes('bảng') ? p.ageGroup : 'Bảng ' + p.ageGroup) : null);
+            const prizeBadge = getPrizeBadge(rankVal, playerCategory, t.prizes);
 
             return (
               <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
                 <TableCell style={{ textAlign: 'center' }}><span className={rankVal <= 3 ? 'rank-medal' : 'rank-number'}>{rankVal}</span></TableCell>
+                <TableCell style={{ textAlign: 'center' }}>
+                  {prizeBadge ? (
+                    <span
+                      className={`prize-badge prize-badge-${prizeBadge.type}`}
+                      title={prizeBadge.fullTitle}
+                      aria-label={prizeBadge.fullTitle}
+                    >
+                      <span className="prize-icon">{prizeBadge.icon}</span>
+                      <span className="prize-text">{prizeBadge.shortLabel}</span>
+                    </span>
+                  ) : null}
+                </TableCell>
                 <TableCell>
                   <button className="rank-player" onClick={() => onOpen(p)}>
                     <b>{p.name}</b>

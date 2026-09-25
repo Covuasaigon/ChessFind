@@ -2166,6 +2166,65 @@ svg {
   font-weight: 600;
 }
 
+/* Prize Badges in Standings Table */
+.prize-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.2;
+  cursor: default;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.prize-badge:hover {
+  transform: translateY(-1px);
+}
+
+.prize-badge-gold {
+  background: linear-gradient(135deg, #FFF9E6 0%, #FEF3C7 100%);
+  color: #B45309;
+  border: 1px solid #FCD34D;
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.12);
+}
+
+.prize-badge-silver {
+  background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%);
+  color: #475569;
+  border: 1px solid #CBD5E1;
+  box-shadow: 0 1px 3px rgba(71, 85, 105, 0.1);
+}
+
+.prize-badge-bronze {
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  color: #C2410C;
+  border: 1px solid #FDBA74;
+  box-shadow: 0 1px 3px rgba(194, 65, 12, 0.1);
+}
+
+.prize-badge-encouragement {
+  background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
+  color: #15803D;
+  border: 1px solid #86EFAC;
+  box-shadow: 0 1px 3px rgba(21, 128, 61, 0.1);
+}
+
+.prize-icon {
+  font-size: 13px;
+  display: inline-block;
+}
+
+.prize-text {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
 .empty-text {
   padding: 32px 4px;
   color: #657b96;

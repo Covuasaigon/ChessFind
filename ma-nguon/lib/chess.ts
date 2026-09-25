@@ -390,14 +390,26 @@ export function getMedal(
     let medalIcon = '🏆';
     const mStr = (match.medal || '').toLowerCase();
     const pNameLower = label.toLowerCase();
+    const pNameNorm = normalize(label);
 
-    if (mStr.includes('gold') || mStr.includes('vang') || pNameLower.includes('gold') || pNameLower.includes('vàng') || pNameLower.includes('vang')) {
+    const isKK =
+      pNameNorm.includes('khuyen khich') ||
+      pNameLower.includes('khuyến khích') ||
+      pNameNorm.includes('bang khen') ||
+      pNameLower.includes('bằng khen') ||
+      /\bkk\b/i.test(label) ||
+      mStr.includes('consolation') ||
+      mStr.includes('khuyen khich');
+
+    if (isKK) {
+      medalIcon = '🎖';
+    } else if (mStr.includes('gold') || mStr.includes('vang') || pNameLower.includes('gold') || pNameLower.includes('vàng') || pNameLower.includes('vang')) {
       medalIcon = '🥇';
     } else if (mStr.includes('silver') || mStr.includes('bac') || pNameLower.includes('silver') || pNameLower.includes('bạc') || pNameLower.includes('bac')) {
       medalIcon = '🥈';
     } else if (mStr.includes('bronze') || mStr.includes('dong') || pNameLower.includes('bronze') || pNameLower.includes('đồng') || pNameLower.includes('dong')) {
       medalIcon = '🥉';
-    } else if (mStr.includes('certificate') || mStr.includes('consolation') || mStr.includes('khuyen khich') || mStr.includes('top') || mStr.includes('khen') || mStr.includes('bang') || pNameLower.includes('khuyen khich') || pNameLower.includes('khuyến khích') || pNameLower.includes('khen') || rank >= 4) {
+    } else if (mStr.includes('certificate') || mStr.includes('consolation') || mStr.includes('khuyen khich') || mStr.includes('top') || mStr.includes('khen') || mStr.includes('bang') || rank >= 4) {
       medalIcon = '🎖';
     }
 
@@ -410,6 +422,109 @@ export function getMedal(
     label: 'Ngoài phạm vi giải thưởng',
     status: 'outside_range'
   };
+}
+
+export type PrizeBadge = {
+  icon: string;
+  shortLabel: string;
+  fullTitle: string;
+  type: 'gold' | 'silver' | 'bronze' | 'encouragement' | 'custom';
+};
+
+export function getPrizeBadge(
+  rank: number | null | undefined,
+  group?: string,
+  prizes?: PrizeRule[]
+): PrizeBadge | null {
+  if (rank == null || rank <= 0 || !prizes || prizes.length === 0) {
+    return null;
+  }
+
+  const matching = prizes.filter(p => {
+    const rf = p.rank_from ?? p.rankFrom ?? p.rank;
+    const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
+    const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
+    const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
+    const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
+
+    const fromVal = rfNum !== null ? rfNum : rNum;
+    const toVal = rtNum !== null ? rtNum : (rNum !== null ? rNum : fromVal);
+
+    if (fromVal === null || toVal === null) return false;
+    const rankMatches = rank >= fromVal && rank <= toVal;
+    if (!rankMatches) return false;
+
+    const ruleGrp = p.group_name || p.group;
+    return matchCategoryGroup(ruleGrp, group);
+  });
+
+  if (!matching || matching.length === 0) {
+    return null;
+  }
+
+  const specificMatch = group ? matching.find(p => {
+    const ruleGrp = p.group_name || p.group;
+    if (!ruleGrp) return false;
+    const norm = normalizeCategoryGroup(ruleGrp);
+    return !norm.includes('tat ca') && norm !== 'all';
+  }) : null;
+
+  const match = specificMatch || matching[0];
+  const fullTitle = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `Hạng ${rank}`);
+
+  const mStr = (match.medal || '').toLowerCase();
+  const titleLower = fullTitle.toLowerCase();
+  const titleNorm = normalize(fullTitle);
+
+  // PRIORITY CHECK FOR "KHUYẾN KHÍCH"
+  const isKK =
+    titleNorm.includes('khuyen khich') ||
+    titleLower.includes('khuyến khích') ||
+    titleNorm.includes('bang khen') ||
+    titleLower.includes('bằng khen') ||
+    /\bkk\b/i.test(fullTitle) ||
+    mStr.includes('consolation') ||
+    mStr.includes('khuyen khich');
+
+  if (isKK) {
+    return { icon: '🎖', shortLabel: 'KK', fullTitle, type: 'encouragement' };
+  }
+
+  if (
+    mStr.includes('gold') ||
+    mStr.includes('vang') ||
+    titleNorm.includes('gold') ||
+    titleNorm.includes('huy chuong vang') ||
+    titleLower.includes('vàng')
+  ) {
+    return { icon: '🥇', shortLabel: 'HCV', fullTitle, type: 'gold' };
+  }
+
+  if (
+    mStr.includes('silver') ||
+    mStr.includes('bac') ||
+    titleNorm.includes('silver') ||
+    titleNorm.includes('huy chuong bac') ||
+    titleLower.includes('bạc')
+  ) {
+    return { icon: '🥈', shortLabel: 'HCB', fullTitle, type: 'silver' };
+  }
+
+  if (
+    mStr.includes('bronze') ||
+    mStr.includes('dong') ||
+    titleNorm.includes('bronze') ||
+    titleNorm.includes('huy chuong dong') ||
+    titleLower.includes('đồng')
+  ) {
+    return { icon: '🥉', shortLabel: 'HCĐ', fullTitle, type: 'bronze' };
+  }
+
+  if (rank === 1) return { icon: '🥇', shortLabel: 'HCV', fullTitle, type: 'gold' };
+  if (rank === 2) return { icon: '🥈', shortLabel: 'HCB', fullTitle, type: 'silver' };
+  if (rank === 3) return { icon: '🥉', shortLabel: 'HCĐ', fullTitle, type: 'bronze' };
+
+  return { icon: '🎖', shortLabel: 'KK', fullTitle, type: 'encouragement' };
 }
 
 export function getNextMatch(p: Player): Round | null {
