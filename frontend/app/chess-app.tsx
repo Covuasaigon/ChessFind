@@ -522,7 +522,7 @@ export default function ChessApp() {
           </TabsContent>
 
           <TabsContent value="ranking">
-            <Ranking t={current} prizes={current?.prizes || tourneys.find(x => x.prizes && x.prizes.length > 0)?.prizes} selected={player.id} onOpen={p => open(current, p)} />
+            <Ranking t={current} prizes={(current?.prizes && current.prizes.length > 0) ? current.prizes : (tourneys.find(x => (x.id === current.id.split('-')[0] || current.id.startsWith(x.id)) && x.prizes && x.prizes.length > 0)?.prizes || tourneys.find(x => x.prizes && x.prizes.length > 0)?.prizes)} selected={player.id} onOpen={p => open(current, p)} />
           </TabsContent>
 
           <TabsContent value="charts">
@@ -825,7 +825,7 @@ function Rounds({ p, loading, error, compact = false, onOpponent }: { p: Player;
 function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: PrizeRule[]; selected?: string; onOpen: (p: Player) => void }) {
   const [q, setQ] = useState('');
   const [activeHsInfo, setActiveHsInfo] = useState<number | null>(null);
-  const effectivePrizes = (t.prizes && t.prizes.length > 0) ? t.prizes : (prizes || []);
+  const effectivePrizes = (t.prizes && t.prizes.length > 0) ? t.prizes : ((prizes && prizes.length > 0) ? prizes : []);
   const ps = (t.players || [])
     .filter(p => matchPlayer(p, t.group, q))
     .sort((a, b) => {
