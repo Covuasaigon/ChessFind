@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Toaster, toast } from 'sonner';
-import { Tournament, Player, Round, PrizeRule, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getPrizeBadge, getStandingPrizeBadge, getNextMatch, formatClubName } from '@/lib/chess';
+import { Tournament, Player, Round, PrizeRule, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getPrizeBadge, getStandingPrizeBadge, getPredictedPrizeForRank, getNextMatch, formatClubName } from '@/lib/chess';
 import { apiFetch } from '@/lib/api-client';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell } from 'recharts';
 import Admin from './admin';
@@ -883,7 +883,7 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
         <TableHeader>
           <TableRow>
             <TableHead style={{ textAlign: 'center', width: 60 }}>Hạng</TableHead>
-            <TableHead style={{ textAlign: 'center', width: 90 }}>Giải</TableHead>
+            <TableHead style={{ textAlign: 'center', width: 110 }} title="Dự đoán giải thưởng theo thứ hạng hiện tại">Dự đoán giải</TableHead>
             <TableHead>Họ và tên kỳ thủ</TableHead>
             <TableHead>CLB / Tỉnh</TableHead>
             <TableHead style={{ textAlign: 'center', width: 70 }}>SBD</TableHead>
@@ -930,7 +930,7 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
               (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) ||
               t.group ||
               (p.ageGroup ? (p.ageGroup.toLowerCase().includes('bảng') ? p.ageGroup : 'Bảng ' + p.ageGroup) : null);
-            const prizeBadge = getStandingPrizeBadge(rankVal, playerCategory, effectivePrizes);
+            const prizeBadge = getPredictedPrizeForRank(rankVal, playerCategory, effectivePrizes);
 
             return (
               <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
@@ -945,7 +945,9 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
                       <span className="prize-icon">{prizeBadge.icon}</span>
                       <span className="prize-text">{prizeBadge.shortLabel}</span>
                     </span>
-                  ) : null}
+                  ) : (
+                    <span style={{ color: '#94A3B8', fontSize: 13 }} title="Ngoài phạm vi giải thưởng">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <button className="rank-player" onClick={() => onOpen(p)}>

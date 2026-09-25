@@ -487,6 +487,9 @@ export function getPrizeBadge(
 
 export const getStandingPrizeBadge = getPrizeBadge;
 
+export type StandingPredictedPrize = PrizeBadge;
+export const getPredictedPrizeForRank = getPrizeBadge;
+
 export function getNextMatch(p: Player): Round | null {
   if (!p.rounds || !p.rounds.length) return null;
   const match = p.rounds.find(r => r.status === 'scheduled' || r.status === 'pending');
