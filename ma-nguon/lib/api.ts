@@ -1,4 +1,4 @@
-import { formatClubName, stats, getNextMatch, getMedal, type Tournament, type Player } from './chess';
+import { formatClubName, stats, getNextMatch, getMedal, normalizeCategoryGroup, type Tournament, type Player } from './chess';
 import { importTournament, importPlayer, validateSource, detectCategories, type CategoryDetectResult } from './chess-source';
 import { DEFAULT_ADMIN } from './default-admin';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
@@ -445,8 +445,10 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
       const prizesRes = await db.prepare('SELECT * FROM prizes ORDER BY rank_from ASC').all<any>();
       if (prizesRes && prizesRes.results && prizesRes.results.length > 0) {
         const prizesMap = new Map<string, any[]>();
+        const globalPrizes: any[] = [];
+
         for (const row of prizesRes.results) {
-          const tId = String(row.tournament_id);
+          const tId = String(row.tournament_id || '').trim();
           const item = {
             id: row.id,
             tournamentId: row.tournament_id,
@@ -462,14 +464,38 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             prize_name: row.prize_name,
             description: row.description || ''
           };
-          if (!prizesMap.has(tId)) prizesMap.set(tId, []);
-          prizesMap.get(tId)!.push(item);
+
+          const gNorm = normalizeCategoryGroup(row.group_name);
+          if (tId === 'all' || tId === 'global' || tId === '' || gNorm === 'tat ca' || gNorm === 'toan gia' || gNorm === 'toan bang') {
+            globalPrizes.push(item);
+          }
+
+          if (tId) {
+            if (!prizesMap.has(tId)) prizesMap.set(tId, []);
+            prizesMap.get(tId)!.push(item);
+
+            const cleanTId = tId.replace(/^tnr/i, '').split('-')[0];
+            if (cleanTId && cleanTId !== tId) {
+              if (!prizesMap.has(cleanTId)) prizesMap.set(cleanTId, []);
+              prizesMap.get(cleanTId)!.push(item);
+            }
+          }
         }
+
         for (const tour of tours) {
           const masterId = tour.id.split('-')[0];
-          const matchedPrizes = prizesMap.get(tour.id) || prizesMap.get(masterId);
-          if (matchedPrizes && matchedPrizes.length > 0) {
-            tour.prizes = matchedPrizes;
+          const cleanTourId = tour.id.replace(/^tnr/i, '').split('-')[0];
+
+          const directPrizes =
+            prizesMap.get(tour.id) ||
+            prizesMap.get(masterId) ||
+            prizesMap.get(cleanTourId) ||
+            (tour.prizes && tour.prizes.length > 0 ? tour.prizes : null);
+
+          if (directPrizes && directPrizes.length > 0) {
+            tour.prizes = directPrizes;
+          } else if (globalPrizes.length > 0) {
+            tour.prizes = globalPrizes;
           }
         }
       }
