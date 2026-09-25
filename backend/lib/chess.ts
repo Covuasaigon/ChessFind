@@ -201,8 +201,25 @@ export function stats(p: Player) {
 
   for (const rd of uniqueRounds) {
     if (rd.status === 'played' || rd.status === 'bye' || rd.status === 'forfeit') {
-      if (rd.score != null) {
-        points += rd.score;
+      let score = rd.score;
+      if (score === null || score === undefined || isNaN(score)) {
+        if (rd.status === 'bye') {
+          const rawStr = String(rd.raw || rd.result || '');
+          if (rawStr.includes('0.5') || rawStr.includes('½') || rawStr.includes('1/2') || /u0\.5/i.test(rawStr)) {
+            score = 0.5;
+          } else if (rawStr.includes('0-1') || rawStr.includes('0.0') || /u0\.0/i.test(rawStr)) {
+            score = 0;
+          } else {
+            score = 1;
+          }
+        } else if (rd.result) {
+          if (rd.result.includes('1 - 0') || rd.result.includes('1-0')) score = (rd.color?.toLowerCase() === 'black' ? 0 : 1);
+          else if (rd.result.includes('0 - 1') || rd.result.includes('0-1')) score = (rd.color?.toLowerCase() === 'black' ? 1 : 0);
+          else if (rd.result.includes('½') || rd.result.includes('1/2')) score = 0.5;
+        }
+      }
+      if (score != null && !isNaN(score)) {
+        points += score;
       }
     }
   }

@@ -782,7 +782,17 @@ export function parsePlayer(html: string, p: Player, t: Tournament): Player {
     let status: Round['status'] = 'unknown', score: number | null = null;
 
     if (/bye|not paired|unpaired|spielfrei/i.test(opponent)) {
-      status = 'bye'; score = num(raw);
+      status = 'bye';
+      score = num(raw);
+      if (score === null || isNaN(score)) {
+        if (/0\.5|½|1\/2|u0\.5/i.test(raw)) {
+          score = 0.5;
+        } else if (/0\s*[-:]\s*1|0-1|0\.0|u0\.0/i.test(raw)) {
+          score = 0;
+        } else {
+          score = 1;
+        }
+      }
     } else if (/^[+−-]$|[kK]$|forfeit/i.test(raw)) {
       status = 'forfeit'; score = raw === '+' ? 1 : /^[−-]$/.test(raw) ? 0 : num(raw.replace(/[kK]/g, ''));
     } else if (raw === '' || raw === '*' || raw === '—') {
