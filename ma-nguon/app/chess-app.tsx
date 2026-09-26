@@ -949,71 +949,26 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
             );
 
             if (idx < 10) {
-              console.log("PLAYER_PRIZE_DEBUG", {
+              console.log("RENDER_PRIZE_COLUMN", {
+                playerName: p.name,
                 rank,
-                name: p.name,
-                predictedPrize
+                predictedPrize,
+                effectivePrizesLength: effectivePrizes?.length
               });
-            }
-
-            // BƯỚC 3: Tìm rule trực tiếp từ DB Admin đã lưu theo thứ hạng rank
-            const rule = (playerCategory ? effectivePrizes.find(r => {
-              const rFrom = Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank ?? r.rank);
-              const rTo = Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank ?? r.rank ?? rFrom);
-              if (isNaN(rFrom) || isNaN(rTo)) return false;
-              const inRange = Number(rank) >= rFrom && Number(rank) <= rTo;
-              if (!inRange) return false;
-              const ruleGrp = r.group_name || r.group || (r as any).groupName;
-              if (!ruleGrp || ruleGrp === 'Tất cả' || ruleGrp === 'tat ca' || ruleGrp === 'all') return true;
-              return matchCategoryGroup(ruleGrp, playerCategory);
-            }) : null) || effectivePrizes.find(r => {
-              const rFrom = Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank ?? r.rank);
-              const rTo = Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank ?? r.rank ?? rFrom);
-              if (isNaN(rFrom) || isNaN(rTo)) return false;
-              return Number(rank) >= rFrom && Number(rank) <= rTo;
-            });
-
-            // BƯỚC 4: Render
-            let prizeBadge: { icon: string; shortLabel: string; fullTitle: string; type: string } | null = null;
-            if (rule) {
-              const prizeName = rule.prize_name || rule.prizeName || (rule as any).name || (rule as any).title || `Hạng ${rank}`;
-              const medalRaw = String(rule.medal || (rule as any).medalType || (rule as any).medal_type || (rule as any).type || '').toLowerCase();
-              const nameNorm = normalize(prizeName);
-              const nameLower = prizeName.toLowerCase();
-
-              const isKK =
-                nameNorm.includes('khuyen khich') ||
-                nameLower.includes('khuyến khích') ||
-                /\bkk\b/i.test(prizeName) ||
-                medalRaw.includes('consolation') ||
-                medalRaw.includes('khuyen khich') ||
-                medalRaw.includes('other');
-
-              if (isKK) {
-                prizeBadge = { icon: '🎖', shortLabel: 'KK', fullTitle: prizeName, type: 'encouragement' };
-              } else if (medalRaw.includes('gold') || medalRaw.includes('vang') || nameNorm.includes('gold') || nameNorm.includes('vang') || nameLower.includes('vàng')) {
-                prizeBadge = { icon: '🥇', shortLabel: 'HCV', fullTitle: prizeName, type: 'gold' };
-              } else if (medalRaw.includes('silver') || medalRaw.includes('bac') || nameNorm.includes('silver') || nameNorm.includes('bac') || nameLower.includes('bạc')) {
-                prizeBadge = { icon: '🥈', shortLabel: 'HCB', fullTitle: prizeName, type: 'silver' };
-              } else if (medalRaw.includes('bronze') || medalRaw.includes('dong') || nameNorm.includes('bronze') || nameNorm.includes('dong') || nameLower.includes('đồng')) {
-                prizeBadge = { icon: '🥉', shortLabel: 'HCĐ', fullTitle: prizeName, type: 'bronze' };
-              } else {
-                prizeBadge = { icon: '🎖', shortLabel: 'KK', fullTitle: prizeName, type: 'encouragement' };
-              }
             }
 
             return (
               <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
                 <TableCell style={{ textAlign: 'center' }}><span className={rankVal <= 3 ? 'rank-medal' : 'rank-number'}>{rankVal}</span></TableCell>
                 <TableCell style={{ textAlign: 'center' }}>
-                  {prizeBadge ? (
+                  {predictedPrize ? (
                     <span
-                      className={`prize-badge prize-badge-${prizeBadge.type}`}
-                      title={prizeBadge.fullTitle}
-                      aria-label={prizeBadge.fullTitle}
+                      className={`prize-badge prize-badge-${predictedPrize.type}`}
+                      title={predictedPrize.fullTitle}
+                      aria-label={predictedPrize.fullTitle}
                     >
-                      <span className="prize-icon">{prizeBadge.icon}</span>
-                      <span className="prize-text">{prizeBadge.shortLabel}</span>
+                      <span className="prize-icon">{predictedPrize.icon}</span>
+                      <span className="prize-text">{predictedPrize.shortLabel}</span>
                     </span>
                   ) : (
                     <span style={{ color: '#94A3B8', fontSize: 13 }} title="Ngoài phạm vi giải thưởng">—</span>
