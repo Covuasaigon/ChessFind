@@ -434,7 +434,77 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
     } catch {
       res = await db.prepare(admin ? 'SELECT payload,published FROM tournaments ORDER BY updated DESC' : 'SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC').all<any>();
     }
-    return res.results.map(formatTourObj).filter((x: any): x is Tournament => x !== null);
+    const tours = res.results.map(formatTourObj).filter((x: any): x is Tournament => x !== null);
+    try {
+      const prizesRes = await db.prepare('SELECT * FROM prizes ORDER BY rank_from ASC').all<any>();
+      if (prizesRes && prizesRes.results && prizesRes.results.length > 0) {
+        const prizesMap = new Map<string, any[]>();
+        const globalPrizes: any[] = [];
+
+        for (const row of prizesRes.results) {
+          const tId = String(row.tournament_id || '').trim();
+          const item = {
+            id: row.id,
+            tournamentId: row.tournament_id,
+            tournament_id: row.tournament_id,
+            group: row.group_name,
+            group_name: row.group_name,
+            rankFrom: Number(row.rank_from),
+            rank_from: Number(row.rank_from),
+            rankTo: Number(row.rank_to),
+            rank_to: Number(row.rank_to),
+            medal: row.medal,
+            prizeName: row.prize_name,
+            prize_name: row.prize_name,
+            description: row.description || ''
+          };
+
+          if (tId === 'all' || tId === 'global' || tId === '') {
+            globalPrizes.push(item);
+          }
+
+          if (tId) {
+            if (!prizesMap.has(tId)) prizesMap.set(tId, []);
+            prizesMap.get(tId)!.push(item);
+
+            const cleanTId = tId.replace(/^tnr/i, '').split('-')[0];
+            if (cleanTId && cleanTId !== tId) {
+              if (!prizesMap.has(cleanTId)) prizesMap.set(cleanTId, []);
+              prizesMap.get(cleanTId)!.push(item);
+            }
+          }
+        }
+
+        for (const tour of tours) {
+          const masterId = tour.id.split('-')[0];
+          const cleanTourId = tour.id.replace(/^tnr/i, '').split('-')[0];
+
+          const directPrizes =
+            prizesMap.get(tour.id) ||
+            prizesMap.get(masterId) ||
+            prizesMap.get(cleanTourId) ||
+            (tour.prizes && tour.prizes.length > 0 ? tour.prizes : null);
+
+          const finalPrizes: any[] = directPrizes ? [...directPrizes] : [];
+          if (globalPrizes.length > 0) {
+            for (const gP of globalPrizes) {
+              if (!finalPrizes.some(p => p.id === gP.id)) {
+                finalPrizes.push(gP);
+              }
+            }
+          }
+
+          tour.prizes = finalPrizes;
+        }
+      } else {
+        for (const tour of tours) {
+          tour.prizes = tour.prizes || [];
+        }
+      }
+    } catch (err) {
+      console.error('[API list prizes mapping error]', err);
+    }
+    return tours;
   };
 
   async function session(req: Request) {

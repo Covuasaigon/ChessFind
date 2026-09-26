@@ -465,8 +465,7 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             description: row.description || ''
           };
 
-          const gNorm = normalizeCategoryGroup(row.group_name);
-          if (tId === 'all' || tId === 'global' || tId === '' || gNorm === 'tat ca' || gNorm === 'toan gia' || gNorm === 'toan bang') {
+          if (tId === 'all' || tId === 'global' || tId === '') {
             globalPrizes.push(item);
           }
 
@@ -517,11 +516,11 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             }
           }
 
-          if (finalPrizes.length === 0 && allDbPrizes.length > 0) {
-            tour.prizes = allDbPrizes;
-          } else if (finalPrizes.length > 0) {
-            tour.prizes = finalPrizes;
-          }
+          tour.prizes = finalPrizes;
+        }
+      } else {
+        for (const tour of tours) {
+          tour.prizes = tour.prizes || [];
         }
       }
     } catch {}
