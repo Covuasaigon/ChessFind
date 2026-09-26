@@ -469,36 +469,33 @@ export function getPredictedPrizeFromRank(
     return null;
   }
 
-  const matchingRules = rules.filter(r => {
+  const matchingRule = (group ? rules.find(r => {
     const rf = r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank ?? (r as any).startRank ?? (r as any).start_rank ?? r.rank;
     const rt = r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank ?? (r as any).endRank ?? (r as any).end_rank ?? r.rank ?? rf;
-
     if (rf == null || rt == null) return false;
     const rfNum = Number(rf);
     const rtNum = Number(rt);
-
     if (isNaN(rfNum) || isNaN(rtNum)) return false;
-    const inRange = rNum >= rfNum && rNum <= rtNum;
-    if (!inRange) return false;
-
+    if (rNum < rfNum || rNum > rtNum) return false;
     const ruleGrp = r.group_name || r.group || (r as any).groupName || (r as any).category;
+    if (!ruleGrp || ruleGrp === 'Tất cả' || ruleGrp === 'tat ca' || ruleGrp === 'all') return true;
     return matchCategoryGroup(ruleGrp, group);
+  }) : null) || rules.find(r => {
+    const rf = r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank ?? (r as any).startRank ?? (r as any).start_rank ?? r.rank;
+    const rt = r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank ?? (r as any).endRank ?? (r as any).end_rank ?? r.rank ?? rf;
+    if (rf == null || rt == null) return false;
+    const rfNum = Number(rf);
+    const rtNum = Number(rt);
+    if (isNaN(rfNum) || isNaN(rtNum)) return false;
+    return rNum >= rfNum && rNum <= rtNum;
   });
 
-  if (matchingRules.length === 0) {
+  if (!matchingRule) {
     return null;
   }
 
-  const specificMatch = group ? matchingRules.find(r => {
-    const ruleGrp = r.group_name || r.group || (r as any).groupName || (r as any).category;
-    if (!ruleGrp) return false;
-    const norm = normalizeCategoryGroup(ruleGrp);
-    return !norm.includes('tat ca') && norm !== 'all' && !norm.includes('toan gia') && !norm.includes('toan bang');
-  }) : null;
-
-  const match = specificMatch || matchingRules[0];
-  const fullTitle = match.prize_name || match.prizeName || (match as any).name || (match as any).title || (match.gift ? `${match.gift}` : `Hạng ${rNum}`);
-  const medalRaw = String(match.medal || (match as any).medalType || (match as any).medal_type || (match as any).type || '').toLowerCase();
+  const fullTitle = matchingRule.prize_name || matchingRule.prizeName || (matchingRule as any).name || (matchingRule as any).title || (matchingRule.gift ? `${matchingRule.gift}` : `Hạng ${rNum}`);
+  const medalRaw = String(matchingRule.medal || (matchingRule as any).medalType || (matchingRule as any).medal_type || (matchingRule as any).type || '').toLowerCase();
   const nameNorm = normalize(fullTitle);
   const nameLower = fullTitle.toLowerCase();
 
@@ -524,10 +521,10 @@ export function getPredictedPrizeFromRank(
   }
 
   return {
-    icon: '🏆',
-    shortLabel: fullTitle,
+    icon: '🎖',
+    shortLabel: 'KK',
     fullTitle,
-    type: 'custom'
+    type: 'encouragement'
   };
 }
 

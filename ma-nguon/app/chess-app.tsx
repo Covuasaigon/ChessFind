@@ -826,6 +826,17 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
   const [q, setQ] = useState('');
   const [activeHsInfo, setActiveHsInfo] = useState<number | null>(null);
   const effectivePrizes = (t.prizes && t.prizes.length > 0) ? t.prizes : ((prizes && prizes.length > 0) ? prizes : []);
+
+  // BƯỚC 5: Debug runtime
+  const ruleRank1 = effectivePrizes.find(r => 1 >= Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank) && 1 <= Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank));
+  const ruleRank2 = effectivePrizes.find(r => 2 >= Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank) && 2 <= Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank));
+  const ruleRank3 = effectivePrizes.find(r => 3 >= Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank) && 3 <= Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank));
+
+  console.log('prizes.length:', effectivePrizes.length);
+  console.log('rule rank1:', ruleRank1 ? (ruleRank1.medal || ruleRank1.prize_name || ruleRank1.prizeName) : null);
+  console.log('rule rank2:', ruleRank2 ? (ruleRank2.medal || ruleRank2.prize_name || ruleRank2.prizeName) : null);
+  console.log('rule rank3:', ruleRank3 ? (ruleRank3.medal || ruleRank3.prize_name || ruleRank3.prizeName) : null);
+
   const ps = (t.players || [])
     .filter(p => matchPlayer(p, t.group, q))
     .sort((a, b) => {
@@ -924,13 +935,59 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
         <TableBody>
           {ps.map((p, idx) => {
             const rankVal = p.rank ?? (idx + 1);
+            const rank = rankVal;
             const gamesCount = p.detailsLoaded ? `${stats(p).played} ván` : (t.rounds ? `${t.rounds} ván` : '—');
             const clubName = p.club || formatClubName(p.federation || '');
             const playerCategory = (p as any).categoryName ||
               (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) ||
               t.group ||
               (p.ageGroup ? (p.ageGroup.toLowerCase().includes('bảng') ? p.ageGroup : 'Bảng ' + p.ageGroup) : null);
-            const prizeBadge = getPredictedPrizeForRank(rankVal, playerCategory, effectivePrizes);
+
+            // BƯỚC 3: Tìm rule trực tiếp từ DB Admin đã lưu theo thứ hạng rank
+            const rule = (playerCategory ? effectivePrizes.find(r => {
+              const rFrom = Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank ?? r.rank);
+              const rTo = Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank ?? r.rank ?? rFrom);
+              if (isNaN(rFrom) || isNaN(rTo)) return false;
+              const inRange = Number(rank) >= rFrom && Number(rank) <= rTo;
+              if (!inRange) return false;
+              const ruleGrp = r.group_name || r.group || (r as any).groupName;
+              if (!ruleGrp || ruleGrp === 'Tất cả' || ruleGrp === 'tat ca' || ruleGrp === 'all') return true;
+              return matchCategoryGroup(ruleGrp, playerCategory);
+            }) : null) || effectivePrizes.find(r => {
+              const rFrom = Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank ?? r.rank);
+              const rTo = Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank ?? r.rank ?? rFrom);
+              if (isNaN(rFrom) || isNaN(rTo)) return false;
+              return Number(rank) >= rFrom && Number(rank) <= rTo;
+            });
+
+            // BƯỚC 4: Render
+            let prizeBadge: { icon: string; shortLabel: string; fullTitle: string; type: string } | null = null;
+            if (rule) {
+              const prizeName = rule.prize_name || rule.prizeName || (rule as any).name || (rule as any).title || `Hạng ${rank}`;
+              const medalRaw = String(rule.medal || (rule as any).medalType || (rule as any).medal_type || (rule as any).type || '').toLowerCase();
+              const nameNorm = normalize(prizeName);
+              const nameLower = prizeName.toLowerCase();
+
+              const isKK =
+                nameNorm.includes('khuyen khich') ||
+                nameLower.includes('khuyến khích') ||
+                /\bkk\b/i.test(prizeName) ||
+                medalRaw.includes('consolation') ||
+                medalRaw.includes('khuyen khich') ||
+                medalRaw.includes('other');
+
+              if (isKK) {
+                prizeBadge = { icon: '🎖', shortLabel: 'KK', fullTitle: prizeName, type: 'encouragement' };
+              } else if (medalRaw.includes('gold') || medalRaw.includes('vang') || nameNorm.includes('gold') || nameNorm.includes('vang') || nameLower.includes('vàng')) {
+                prizeBadge = { icon: '🥇', shortLabel: 'HCV', fullTitle: prizeName, type: 'gold' };
+              } else if (medalRaw.includes('silver') || medalRaw.includes('bac') || nameNorm.includes('silver') || nameNorm.includes('bac') || nameLower.includes('bạc')) {
+                prizeBadge = { icon: '🥈', shortLabel: 'HCB', fullTitle: prizeName, type: 'silver' };
+              } else if (medalRaw.includes('bronze') || medalRaw.includes('dong') || nameNorm.includes('bronze') || nameNorm.includes('dong') || nameLower.includes('đồng')) {
+                prizeBadge = { icon: '🥉', shortLabel: 'HCĐ', fullTitle: prizeName, type: 'bronze' };
+              } else {
+                prizeBadge = { icon: '🎖', shortLabel: 'KK', fullTitle: prizeName, type: 'encouragement' };
+              }
+            }
 
             return (
               <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
