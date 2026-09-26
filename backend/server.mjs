@@ -1035,6 +1035,7 @@ async function importPlayer(t, p) {
     const s2 = stats(existingPlayer);
     return {
       ...existingPlayer,
+      points: s2.points,
       detailsLoaded: true,
       games: s2.played,
       totalGames: s2.played,
@@ -1078,6 +1079,7 @@ async function importPlayer(t, p) {
   const s = stats(fetchedP);
   return {
     ...fetchedP,
+    points: s.points,
     detailsLoaded: true,
     games: s.played,
     totalGames: s.played,
@@ -1419,6 +1421,19 @@ function createApi(db2, sourceParam = {}) {
       t = JSON.parse(r.payload);
     } catch {
       return null;
+    }
+    if (t.players && Array.isArray(t.players)) {
+      t.players = t.players.map((p) => {
+        const hasDetailedRounds = Boolean(p.detailsLoaded || Array.isArray(p.rounds) && p.rounds.length > 0);
+        if (hasDetailedRounds) {
+          const s = stats(p);
+          return {
+            ...p,
+            points: s.points
+          };
+        }
+        return p;
+      });
     }
     const autoSync = r.auto_sync !== void 0 && r.auto_sync !== null ? !!r.auto_sync : t.autoSync ?? t.auto_sync ?? true;
     const syncInterval = r.sync_interval ? Number(r.sync_interval) : t.syncInterval ?? t.sync_interval ?? 5;
@@ -1831,8 +1846,11 @@ Danh s\xE1ch tournament_id \u0111ang l\u1EA5y: ${tourIdsList.join(", ")}
 FILTER BY TOURNAMENT RESULT: ${filteredByTour.length} rows
 Matched rule: ${medalPrediction && medalPrediction.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : "None"}
 Final result: ${JSON.stringify(medalPrediction)}`);
+          const hasDetailedRounds = Boolean(playerObj.detailsLoaded || Array.isArray(playerObj.rounds) && playerObj.rounds.length > 0);
+          const calculatedPoints = hasDetailedRounds ? s2.points : playerObj.points ?? p.points ?? 0;
           const fullPlayer = {
             ...playerObj,
+            points: calculatedPoints,
             medalPrediction,
             categoryName: userCategory || t.group || playerObj.categoryName || null,
             hs1: p.hs1 ?? playerObj.hs1 ?? null,

@@ -345,6 +345,19 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
     if (!r) return null;
     let t: Tournament;
     try { t = JSON.parse(r.payload); } catch { return null; }
+    if (t.players && Array.isArray(t.players)) {
+      t.players = t.players.map(p => {
+        const hasDetailedRounds = Boolean(p.detailsLoaded || (Array.isArray(p.rounds) && p.rounds.length > 0));
+        if (hasDetailedRounds) {
+          const s = stats(p);
+          return {
+            ...p,
+            points: s.points
+          };
+        }
+        return p;
+      });
+    }
     const autoSync = r.auto_sync !== undefined && r.auto_sync !== null ? !!r.auto_sync : (t.autoSync ?? t.auto_sync ?? true);
     const syncInterval = r.sync_interval ? Number(r.sync_interval) : (t.syncInterval ?? t.sync_interval ?? 5);
     const lastSync = r.last_sync || t.lastSync || t.last_sync || null;
@@ -798,8 +811,12 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
 
           console.log(`[PRIZE MATCH DEBUG]\nPlayer tournament_id: ${id}\nPlayer rank: ${rank}\nPlayer category: ${userCategory || t.group || 'None'}\nALL PRIZES BEFORE FILTER: ${t.prizes ? t.prizes.length : 0} rows\nDanh sách tournament_id đang lấy: ${tourIdsList.join(', ')}\nFILTER BY TOURNAMENT RESULT: ${filteredByTour.length} rows\nMatched rule: ${medalPrediction && medalPrediction.matchedRule ? JSON.stringify(medalPrediction.matchedRule) : 'None'}\nFinal result: ${JSON.stringify(medalPrediction)}`);
 
+          const hasDetailedRounds = Boolean(playerObj.detailsLoaded || (Array.isArray(playerObj.rounds) && playerObj.rounds.length > 0));
+          const calculatedPoints = hasDetailedRounds ? s.points : (playerObj.points ?? p.points ?? 0);
+
           const fullPlayer = {
             ...playerObj,
+            points: calculatedPoints,
             medalPrediction,
             categoryName: userCategory || t.group || (playerObj as any).categoryName || null,
             hs1: p.hs1 ?? playerObj.hs1 ?? null,

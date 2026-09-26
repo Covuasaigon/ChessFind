@@ -870,6 +870,7 @@ export async function importPlayer(t: Tournament, p: Player) {
     const s = stats(existingPlayer);
     return {
       ...existingPlayer,
+      points: s.points,
       detailsLoaded: true,
       games: s.played,
       totalGames: s.played,
@@ -916,6 +917,7 @@ export async function importPlayer(t: Tournament, p: Player) {
   const s = stats(fetchedP);
   return {
     ...fetchedP,
+    points: s.points,
     detailsLoaded: true,
     games: s.played,
     totalGames: s.played,
