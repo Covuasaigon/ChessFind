@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Toaster, toast } from 'sonner';
-import { Tournament, Player, Round, PrizeRule, makeDemo, normalize, matchPlayer, fmt, stats, getMedal, getPrizeBadge, getStandingPrizeBadge, getPredictedPrizeForRank, getNextMatch, formatClubName } from '@/lib/chess';
+import { Tournament, Player, Round, PrizeRule, makeDemo, normalize, matchPlayer, matchCategoryGroup, fmt, stats, getMedal, getPrizeBadge, getStandingPrizeBadge, getPredictedPrizeForRank, getNextMatch, formatClubName } from '@/lib/chess';
 import { apiFetch } from '@/lib/api-client';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell } from 'recharts';
 import Admin from './admin';
