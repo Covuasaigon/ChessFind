@@ -827,15 +827,6 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
   const [activeHsInfo, setActiveHsInfo] = useState<number | null>(null);
   const effectivePrizes = (t.prizes && t.prizes.length > 0) ? t.prizes : ((prizes && prizes.length > 0) ? prizes : []);
 
-  console.log("RANKING_PRIZE_DEBUG", {
-    tournamentId: t?.id,
-    tournamentName: t?.name,
-    groupName: t?.group,
-    prizes,
-    effectivePrizes,
-    effectivePrizesLength: effectivePrizes?.length
-  });
-
   const ps = (t.players || [])
     .filter(p => matchPlayer(p, t.group, q))
     .sort((a, b) => {
@@ -948,15 +939,6 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
               effectivePrizes
             );
 
-            if (idx < 10) {
-              console.log("RENDER_PRIZE_COLUMN", {
-                playerName: p.name,
-                rank,
-                predictedPrize,
-                effectivePrizesLength: effectivePrizes?.length
-              });
-            }
-
             return (
               <TableRow key={p.id} id={p.id === selected ? 'selected-player' : undefined} className={p.id === selected ? 'selected-row' : ''}>
                 <TableCell style={{ textAlign: 'center' }}><span className={rankVal <= 3 ? 'rank-medal' : 'rank-number'}>{rankVal}</span></TableCell>
@@ -965,7 +947,6 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
                     <span
                       className={`prize-badge prize-badge-${predictedPrize.type}`}
                       title={predictedPrize.fullTitle}
-                      aria-label={predictedPrize.fullTitle}
                     >
                       <span className="prize-icon">{predictedPrize.icon}</span>
                       <span className="prize-text">{predictedPrize.shortLabel}</span>
