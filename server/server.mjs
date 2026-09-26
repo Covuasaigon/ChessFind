@@ -71,7 +71,7 @@ function stats(p) {
   for (const rd of uniqueRounds) {
     if (rd.status === "played" || rd.status === "bye" || rd.status === "forfeit") {
       let score = rd.score;
-      if (score === null || score === undefined || isNaN(score)) {
+      if (score === null || score === void 0 || isNaN(score)) {
         if (rd.status === "bye") {
           const rawStr = String(rd.raw || rd.result || "");
           if (rawStr.includes("0.5") || rawStr.includes("\xBD") || rawStr.includes("1/2") || /u0\.5/i.test(rawStr)) {
@@ -155,7 +155,9 @@ function matchCategoryGroup(ruleGrp, userGrp) {
   if (!userGrp || !ruleGrp) return true;
   const rNorm = normalizeCategoryGroup(ruleGrp);
   const uNorm = normalizeCategoryGroup(userGrp);
-  if (rNorm === "tat ca" || rNorm.includes("tat ca") || rNorm === "all" || rNorm === "") return true;
+  if (rNorm === "tat ca" || rNorm.includes("tat ca") || rNorm === "toan gia" || rNorm.includes("toan gia") || rNorm === "toan bang" || rNorm.includes("toan bang") || rNorm === "all" || rNorm === "") {
+    return true;
+  }
   if (rNorm === uNorm || uNorm.includes(rNorm) || rNorm.includes(uNorm)) return true;
   const isRuleMale = rNorm.includes("nam");
   const isRuleFemale = rNorm.includes("nu") && !rNorm.includes("nam");
@@ -193,28 +195,16 @@ function getMedal(rank, group, prizes, options) {
       status: "no_rank"
     };
   }
-  let filteredPrizes = prizes || [];
-  if (options?.tournamentId && filteredPrizes.length > 0) {
-    const tourId = String(options.tournamentId).trim();
-    const masterId = tourId.split("-")[0];
-    const exactMatches = filteredPrizes.filter((p) => {
-      const tId = String(p.tournament_id || p.tournamentId || "").trim();
-      return tId === tourId || tId === masterId || tId.startsWith(masterId + "-");
-    });
-    if (exactMatches.length > 0) {
-      filteredPrizes = exactMatches;
-    }
-  }
-  if (!filteredPrizes || filteredPrizes.length === 0) {
+  if (!prizes || prizes.length === 0) {
     return {
       medal: "\u2139\uFE0F",
       label: "Ch\u01B0a c\u1EA5u h\xECnh gi\u1EA3i th\u01B0\u1EDFng",
       status: "no_rules"
     };
   }
-  const matching = filteredPrizes.filter((p) => {
-    const rf = p.rank_from ?? p.rankFrom ?? p.rank;
-    const rt = p.rank_to ?? p.rankTo ?? p.rank ?? rf;
+  const matching = prizes.filter((p) => {
+    const rf = p.rank_from ?? p.rankFrom ?? p.fromRank ?? p.from_rank ?? p.startRank ?? p.start_rank ?? p.rank;
+    const rt = p.rank_to ?? p.rankTo ?? p.toRank ?? p.to_rank ?? p.endRank ?? p.end_rank ?? p.rank ?? rf;
     const rNum = p.rank != null && !isNaN(Number(p.rank)) ? Number(p.rank) : null;
     const rfNum = rf != null && !isNaN(Number(rf)) ? Number(rf) : null;
     const rtNum = rt != null && !isNaN(Number(rt)) ? Number(rt) : null;
@@ -223,28 +213,33 @@ function getMedal(rank, group, prizes, options) {
     if (fromVal === null || toVal === null) return false;
     const rankMatches = rank >= fromVal && rank <= toVal;
     if (!rankMatches) return false;
-    const ruleGrp = p.group_name || p.group;
+    const ruleGrp = p.group_name || p.group || p.groupName || p.category;
     return matchCategoryGroup(ruleGrp, group);
   });
   if (matching.length > 0) {
     const specificMatch = group ? matching.find((p) => {
-      const ruleGrp = p.group_name || p.group;
+      const ruleGrp = p.group_name || p.group || p.groupName || p.category;
       if (!ruleGrp) return false;
       const norm = normalizeCategoryGroup(ruleGrp);
-      return !norm.includes("tat ca") && norm !== "all";
+      return !norm.includes("tat ca") && norm !== "all" && !norm.includes("toan gia") && !norm.includes("toan bang");
     }) : null;
     const match = specificMatch || matching[0];
-    const label = match.prize_name || match.prizeName || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
+    const label = match.prize_name || match.prizeName || match.name || match.title || (match.gift ? `${match.gift}` : `H\u1EA1ng ${rank}`);
     let medalIcon = "\u{1F3C6}";
-    const mStr = (match.medal || "").toLowerCase();
+    const medalRaw = match.medal || match.medalType || match.medal_type || match.type || "";
+    const mStr = String(medalRaw).toLowerCase();
     const pNameLower = label.toLowerCase();
-    if (mStr.includes("gold") || mStr.includes("vang") || pNameLower.includes("gold") || pNameLower.includes("v\xE0ng") || pNameLower.includes("vang")) {
+    const pNameNorm = normalize(label);
+    const isKK = pNameNorm.includes("khuyen khich") || pNameLower.includes("khuy\u1EBFn kh\xEDch") || pNameNorm.includes("bang khen") || pNameLower.includes("b\u1EB1ng khen") || /\bkk\b/i.test(label) || mStr.includes("consolation") || mStr.includes("khuyen khich");
+    if (isKK) {
+      medalIcon = "\u{1F396}";
+    } else if (mStr.includes("gold") || mStr.includes("vang") || pNameLower.includes("gold") || pNameLower.includes("v\xE0ng") || pNameLower.includes("vang")) {
       medalIcon = "\u{1F947}";
     } else if (mStr.includes("silver") || mStr.includes("bac") || pNameLower.includes("silver") || pNameLower.includes("b\u1EA1c") || pNameLower.includes("bac")) {
       medalIcon = "\u{1F948}";
     } else if (mStr.includes("bronze") || mStr.includes("dong") || pNameLower.includes("bronze") || pNameLower.includes("\u0111\u1ED3ng") || pNameLower.includes("dong")) {
       medalIcon = "\u{1F949}";
-    } else if (mStr.includes("certificate") || mStr.includes("consolation") || mStr.includes("khuyen khich") || mStr.includes("top") || mStr.includes("khen") || mStr.includes("bang") || pNameLower.includes("khuyen khich") || pNameLower.includes("khuy\u1EBFn kh\xEDch") || pNameLower.includes("khen") || rank >= 4) {
+    } else if (mStr.includes("certificate") || mStr.includes("consolation") || mStr.includes("khuyen khich") || mStr.includes("top") || mStr.includes("khen") || mStr.includes("bang") || rank >= 4) {
       medalIcon = "\u{1F396}";
     }
     return { medal: medalIcon, label, status: "matched", matchedRule: match };
@@ -1506,7 +1501,65 @@ function createApi(db2, sourceParam = {}) {
     } catch {
       res = await db2.prepare(admin ? "SELECT payload,published FROM tournaments ORDER BY updated DESC" : "SELECT payload,published FROM tournaments WHERE published = 1 ORDER BY updated DESC").all();
     }
-    return res.results.map(formatTourObj).filter((x) => x !== null);
+    const tours = res.results.map(formatTourObj).filter((x) => x !== null);
+    try {
+      const prizesRes = await db2.prepare("SELECT * FROM prizes ORDER BY rank_from ASC").all();
+      if (prizesRes && prizesRes.results && prizesRes.results.length > 0) {
+        const prizesMap = /* @__PURE__ */ new Map();
+        const globalPrizes = [];
+        for (const row of prizesRes.results) {
+          const tId = String(row.tournament_id || "").trim();
+          const item = {
+            id: row.id,
+            tournamentId: row.tournament_id,
+            tournament_id: row.tournament_id,
+            group: row.group_name,
+            group_name: row.group_name,
+            rankFrom: Number(row.rank_from),
+            rank_from: Number(row.rank_from),
+            rankTo: Number(row.rank_to),
+            rank_to: Number(row.rank_to),
+            medal: row.medal,
+            prizeName: row.prize_name,
+            prize_name: row.prize_name,
+            description: row.description || ""
+          };
+          if (tId === "all" || tId === "global" || tId === "") {
+            globalPrizes.push(item);
+          }
+          if (tId) {
+            if (!prizesMap.has(tId)) prizesMap.set(tId, []);
+            prizesMap.get(tId).push(item);
+            const cleanTId = tId.replace(/^tnr/i, "").split("-")[0];
+            if (cleanTId && cleanTId !== tId) {
+              if (!prizesMap.has(cleanTId)) prizesMap.set(cleanTId, []);
+              prizesMap.get(cleanTId).push(item);
+            }
+          }
+        }
+        for (const tour of tours) {
+          const masterId = tour.id.split("-")[0];
+          const cleanTourId = tour.id.replace(/^tnr/i, "").split("-")[0];
+          const directPrizes = prizesMap.get(tour.id) || prizesMap.get(masterId) || prizesMap.get(cleanTourId) || (tour.prizes && tour.prizes.length > 0 ? tour.prizes : null);
+          const finalPrizes = directPrizes ? [...directPrizes] : [];
+          if (globalPrizes.length > 0) {
+            for (const gP of globalPrizes) {
+              if (!finalPrizes.some((p) => p.id === gP.id)) {
+                finalPrizes.push(gP);
+              }
+            }
+          }
+          tour.prizes = finalPrizes;
+        }
+      } else {
+        for (const tour of tours) {
+          tour.prizes = tour.prizes || [];
+        }
+      }
+    } catch (err) {
+      console.error("[API list prizes mapping error]", err);
+    }
+    return tours;
   };
   async function session(req) {
     const token = req.headers.get("cookie")?.match(/(?:^|;\s*)sgc_session=([a-f0-9]{64})(?:;|$)/)?.[1] || req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || req.headers.get("x-admin-token")?.trim();
@@ -2091,32 +2144,33 @@ ${JSON.stringify({
           for (const tgt of targets) {
             const tId = String(tgt.tournament_id || tgt.tournamentId).trim();
             const gName = String(tgt.group_name || tgt.groupName).trim();
-            const existingRes = await db2.prepare("SELECT * FROM prizes WHERE tournament_id = ? AND group_name = ?").bind(tId, gName).all();
+            const existingRes = await db2.prepare("SELECT * FROM prizes WHERE tournament_id = ? AND (group_name = ? OR group_name = ? OR ? = ?)").bind(tId, gName, "T\u1EA5t c\u1EA3", gName, "T\u1EA5t c\u1EA3").all();
             const existingList = existingRes.results || [];
+            if (conflictStrategy === "overwrite" && existingList.length > 0) {
+              await db2.prepare("DELETE FROM prizes WHERE tournament_id = ? AND (group_name = ? OR group_name = ? OR ? = ?)").bind(tId, gName, "T\u1EA5t c\u1EA3", gName, "T\u1EA5t c\u1EA3").run();
+              overwrittenCount += existingList.length;
+            }
             for (const r of rules) {
               const rFrom = Number(r.rank_from ?? r.rankFrom);
               const rTo = Number(r.rank_to ?? r.rankTo);
               const medal2 = String(r.medal || "Gold Medal").trim();
               const prize_name2 = String(r.prize_name || r.prizeName).trim();
               const description2 = String(r.description || "").trim();
-              const exactMatch = existingList.find(
-                (e) => e.rank_from === rFrom && e.rank_to === rTo && (e.medal || "") === medal2 && e.prize_name === prize_name2
-              );
-              const rangeConflicts = existingList.filter(
-                (e) => rFrom <= e.rank_to && rTo >= e.rank_from
-              );
-              if (exactMatch && conflictStrategy !== "keep_all") {
-                skippedCount++;
-                continue;
-              }
-              if (rangeConflicts.length > 0 && conflictStrategy === "overwrite") {
-                for (const conf of rangeConflicts) {
-                  await db2.prepare("DELETE FROM prizes WHERE id = ?").bind(conf.id).run();
-                  overwrittenCount++;
+              if (conflictStrategy !== "overwrite") {
+                const exactMatch = existingList.find(
+                  (e) => e.rank_from === rFrom && e.rank_to === rTo && (e.medal || "") === medal2 && e.prize_name === prize_name2
+                );
+                const rangeConflicts = existingList.filter(
+                  (e) => rFrom <= e.rank_to && rTo >= e.rank_from
+                );
+                if (exactMatch && conflictStrategy !== "keep_all") {
+                  skippedCount++;
+                  continue;
                 }
-              } else if (rangeConflicts.length > 0 && conflictStrategy === "skip" && !exactMatch) {
-                skippedCount++;
-                continue;
+                if (rangeConflicts.length > 0 && conflictStrategy === "skip" && !exactMatch) {
+                  skippedCount++;
+                  continue;
+                }
               }
               const id2 = crypto.randomUUID();
               await db2.prepare(`
