@@ -827,15 +827,14 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
   const [activeHsInfo, setActiveHsInfo] = useState<number | null>(null);
   const effectivePrizes = (t.prizes && t.prizes.length > 0) ? t.prizes : ((prizes && prizes.length > 0) ? prizes : []);
 
-  // BƯỚC 5: Debug runtime
-  const ruleRank1 = effectivePrizes.find(r => 1 >= Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank) && 1 <= Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank));
-  const ruleRank2 = effectivePrizes.find(r => 2 >= Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank) && 2 <= Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank));
-  const ruleRank3 = effectivePrizes.find(r => 3 >= Number(r.rankFrom ?? r.rank_from ?? (r as any).fromRank ?? (r as any).from_rank) && 3 <= Number(r.rankTo ?? r.rank_to ?? (r as any).toRank ?? (r as any).to_rank));
-
-  console.log('prizes.length:', effectivePrizes.length);
-  console.log('rule rank1:', ruleRank1 ? (ruleRank1.medal || ruleRank1.prize_name || ruleRank1.prizeName) : null);
-  console.log('rule rank2:', ruleRank2 ? (ruleRank2.medal || ruleRank2.prize_name || ruleRank2.prizeName) : null);
-  console.log('rule rank3:', ruleRank3 ? (ruleRank3.medal || ruleRank3.prize_name || ruleRank3.prizeName) : null);
+  console.log("RANKING_PRIZE_DEBUG", {
+    tournamentId: t?.id,
+    tournamentName: t?.name,
+    groupName: t?.group,
+    prizes,
+    effectivePrizes,
+    effectivePrizesLength: effectivePrizes?.length
+  });
 
   const ps = (t.players || [])
     .filter(p => matchPlayer(p, t.group, q))
@@ -942,6 +941,20 @@ function Ranking({ t, prizes, selected, onOpen }: { t: Tournament; prizes?: Priz
               (t.categories && p.categoryId ? t.categories.find(c => c.id === p.categoryId)?.name : null) ||
               t.group ||
               (p.ageGroup ? (p.ageGroup.toLowerCase().includes('bảng') ? p.ageGroup : 'Bảng ' + p.ageGroup) : null);
+
+            const predictedPrize = getPredictedPrizeForRank(
+              rank,
+              t?.group,
+              effectivePrizes
+            );
+
+            if (idx < 10) {
+              console.log("PLAYER_PRIZE_DEBUG", {
+                rank,
+                name: p.name,
+                predictedPrize
+              });
+            }
 
             // BƯỚC 3: Tìm rule trực tiếp từ DB Admin đã lưu theo thứ hạng rank
             const rule = (playerCategory ? effectivePrizes.find(r => {
