@@ -517,6 +517,40 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
     } catch (err) {
       console.error('[API list prizes mapping error]', err);
     }
+
+    try {
+      const detailsRes = await db.prepare('SELECT pid, payload FROM details').all<{ pid: string; payload: string }>();
+      if (detailsRes && detailsRes.results && detailsRes.results.length > 0) {
+        const detailsMap = new Map<string, any>();
+        for (const row of detailsRes.results) {
+          try {
+            const dObj = JSON.parse(row.payload);
+            if (dObj && (dObj.detailsLoaded || (Array.isArray(dObj.rounds) && dObj.rounds.length > 0))) {
+              detailsMap.set(row.pid, dObj);
+            }
+          } catch {}
+        }
+        for (const tour of tours) {
+          if (tour.players && Array.isArray(tour.players)) {
+            tour.players = tour.players.map((p: any) => {
+              const detailedObj = detailsMap.get(p.id) || p;
+              const hasDetailedRounds = Boolean(detailedObj.detailsLoaded || (Array.isArray(detailedObj.rounds) && detailedObj.rounds.length > 0));
+              if (hasDetailedRounds) {
+                const s = stats(detailedObj);
+                return {
+                  ...p,
+                  points: s.points
+                };
+              }
+              return p;
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[API list details points sync error]', err);
+    }
+
     return tours;
   };
 
@@ -843,6 +877,17 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             losses: s.losses,
             nextMatch
           };
+
+          if (hasDetailedRounds && t && t.players) {
+            const tourPlayer = t.players.find((x: any) => x.id === pid || x.snr === playerObj.snr);
+            if (tourPlayer && tourPlayer.points !== calculatedPoints) {
+              tourPlayer.points = calculatedPoints;
+              tourPlayer.detailsLoaded = true;
+              try {
+                await db.prepare('UPDATE tournaments SET payload = ? WHERE id = ?').bind(JSON.stringify(t), id).run();
+              } catch {}
+            }
+          }
 
           return json({
             player: fullPlayer,

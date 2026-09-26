@@ -1574,6 +1574,39 @@ function createApi(db2, sourceParam = {}) {
     } catch (err) {
       console.error("[API list prizes mapping error]", err);
     }
+    try {
+      const detailsRes = await db2.prepare("SELECT pid, payload FROM details").all();
+      if (detailsRes && detailsRes.results && detailsRes.results.length > 0) {
+        const detailsMap = /* @__PURE__ */ new Map();
+        for (const row of detailsRes.results) {
+          try {
+            const dObj = JSON.parse(row.payload);
+            if (dObj && (dObj.detailsLoaded || Array.isArray(dObj.rounds) && dObj.rounds.length > 0)) {
+              detailsMap.set(row.pid, dObj);
+            }
+          } catch {
+          }
+        }
+        for (const tour of tours) {
+          if (tour.players && Array.isArray(tour.players)) {
+            tour.players = tour.players.map((p) => {
+              const detailedObj = detailsMap.get(p.id) || p;
+              const hasDetailedRounds = Boolean(detailedObj.detailsLoaded || Array.isArray(detailedObj.rounds) && detailedObj.rounds.length > 0);
+              if (hasDetailedRounds) {
+                const s = stats(detailedObj);
+                return {
+                  ...p,
+                  points: s.points
+                };
+              }
+              return p;
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[API list details points sync error]", err);
+    }
     return tours;
   };
   async function session(req) {
@@ -1877,6 +1910,17 @@ Final result: ${JSON.stringify(medalPrediction)}`);
             losses: s2.losses,
             nextMatch
           };
+          if (hasDetailedRounds && t && t.players) {
+            const tourPlayer = t.players.find((x) => x.id === pid || x.snr === playerObj.snr);
+            if (tourPlayer && tourPlayer.points !== calculatedPoints) {
+              tourPlayer.points = calculatedPoints;
+              tourPlayer.detailsLoaded = true;
+              try {
+                await db2.prepare("UPDATE tournaments SET payload = ? WHERE id = ?").bind(JSON.stringify(t), id).run();
+              } catch {
+              }
+            }
+          }
           return json({
             player: fullPlayer,
             rank,
