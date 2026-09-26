@@ -347,16 +347,11 @@ export default function ChessApp() {
                     <div>
                       <h2>Hồ sơ kỳ thủ · {player.name}</h2>
                       <span style={{ fontSize: 12, color: '#D4AF37', fontWeight: 600 }}>
-                        SBD: <b>{player.snr}</b> · Bảng: <b>{currentDivision}</b>{player.ageGroup && player.ageGroup !== currentDivision ? <> · Nhóm tuổi: <b>{player.ageGroup}</b></> : null} · Dự kiến: <b>{medal ? (medal.status === 'matched' ? `${medal.medal} ${medal.label}` : medal.label) : 'Chưa cấu hình giải thưởng'}</b>
+                        SBD: <b>{player.snr}</b> · Bảng: <b>{currentDivision}</b>{player.ageGroup && player.ageGroup !== currentDivision ? <> · Nhóm tuổi: <b>{player.ageGroup}</b></> : null}
                       </span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {medal && (
-                      <span className="soft-badge" style={{ background: medal.status === 'matched' ? 'rgba(212, 175, 55, 0.25)' : 'rgba(100, 116, 139, 0.2)', color: medal.status === 'matched' ? '#D4AF37' : '#94A3B8', border: medal.status === 'matched' ? '1px solid rgba(212, 175, 55, 0.4)' : '1px solid rgba(148, 163, 184, 0.3)', fontWeight: 800 }}>
-                        {medal.medal} {medal.label}
-                      </span>
-                    )}
                     <span className="soft-badge" style={{ background: 'rgba(20, 93, 160, 0.85)', color: '#FFFFFF', border: '1px solid rgba(255, 255, 255, 0.3)', fontWeight: 700 }}>
                       CLB/Tỉnh: {player.club || formatClubName(player.federation || '')}
                     </span>
