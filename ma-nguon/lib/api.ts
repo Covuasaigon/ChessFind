@@ -1180,8 +1180,13 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
             const tId = String(tgt.tournament_id || tgt.tournamentId).trim();
             const gName = String(tgt.group_name || tgt.groupName).trim();
 
-            const existingRes = await db.prepare('SELECT * FROM prizes WHERE tournament_id = ? AND group_name = ?').bind(tId, gName).all<any>();
+            const existingRes = await db.prepare('SELECT * FROM prizes WHERE tournament_id = ? AND (group_name = ? OR group_name = ? OR ? = ?)').bind(tId, gName, 'Tất cả', gName, 'Tất cả').all<any>();
             const existingList = existingRes.results || [];
+
+            if (conflictStrategy === 'overwrite' && existingList.length > 0) {
+              await db.prepare('DELETE FROM prizes WHERE tournament_id = ? AND (group_name = ? OR group_name = ? OR ? = ?)').bind(tId, gName, 'Tất cả', gName, 'Tất cả').run();
+              overwrittenCount += existingList.length;
+            }
 
             for (const r of rules) {
               const rFrom = Number(r.rank_from ?? r.rankFrom);
@@ -1190,30 +1195,27 @@ export function createApi(db: Database, sourceParam: Partial<ApiSource> = {}) {
               const prize_name = String(r.prize_name || r.prizeName).trim();
               const description = String(r.description || '').trim();
 
-              const exactMatch = existingList.find((e: any) =>
-                e.rank_from === rFrom &&
-                e.rank_to === rTo &&
-                (e.medal || '') === medal &&
-                e.prize_name === prize_name
-              );
+              if (conflictStrategy !== 'overwrite') {
+                const exactMatch = existingList.find((e: any) =>
+                  e.rank_from === rFrom &&
+                  e.rank_to === rTo &&
+                  (e.medal || '') === medal &&
+                  e.prize_name === prize_name
+                );
 
-              const rangeConflicts = existingList.filter((e: any) =>
-                rFrom <= e.rank_to && rTo >= e.rank_from
-              );
+                const rangeConflicts = existingList.filter((e: any) =>
+                  rFrom <= e.rank_to && rTo >= e.rank_from
+                );
 
-              if (exactMatch && conflictStrategy !== 'keep_all') {
-                skippedCount++;
-                continue;
-              }
-
-              if (rangeConflicts.length > 0 && conflictStrategy === 'overwrite') {
-                for (const conf of rangeConflicts) {
-                  await db.prepare('DELETE FROM prizes WHERE id = ?').bind(conf.id).run();
-                  overwrittenCount++;
+                if (exactMatch && conflictStrategy !== 'keep_all') {
+                  skippedCount++;
+                  continue;
                 }
-              } else if (rangeConflicts.length > 0 && conflictStrategy === 'skip' && !exactMatch) {
-                skippedCount++;
-                continue;
+
+                if (rangeConflicts.length > 0 && conflictStrategy === 'skip' && !exactMatch) {
+                  skippedCount++;
+                  continue;
+                }
               }
 
               const id = crypto.randomUUID();
